@@ -3,7 +3,7 @@ FROM oven/bun:1-alpine AS builder
 WORKDIR /app
 
 COPY package.json bun.lockb* ./
-RUN bun install
+RUN bun install --production
 
 COPY . .
 
@@ -17,8 +17,15 @@ ENV VITE_BLYNK_AUTH_TOKEN=$VITE_BLYNK_AUTH_TOKEN
 
 RUN bun run build
 
-FROM alpine:latest
-RUN apk add --no-cache busybox-extras
-COPY --from=builder /app/dist /srv
-EXPOSE 80
-CMD ["httpd", "-f", "-h", "/srv", "-p", "80"]
+FROM oven/bun:1-alpine
+WORKDIR /app
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/serve.ts ./serve.ts
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+EXPOSE 3000
+
+CMD ["bun", "run", "serve.ts"]
