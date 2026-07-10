@@ -5,7 +5,7 @@ import { Bell, Zap, Thermometer, Shield, Activity } from "lucide-react";
 import { useAuth } from "@/services/auth";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
-const POLL_INTERVAL = 60_000; // Poll every 60 seconds
+const POLL_INTERVAL = 60_000;
 
 interface Notification {
   id: string;
@@ -56,13 +56,8 @@ export function NotificationBell() {
 
   useEffect(() => {
     if (!token) return;
-
-    // Fetch immediately on mount
     fetchNotifications();
-
-    // Then poll every 60 seconds
     intervalRef.current = setInterval(fetchNotifications, POLL_INTERVAL);
-
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };

@@ -1,4 +1,4 @@
-// [apps/frontend] src/pages/Analytics.tsx
+// apps/frontend/src/pages/Analytics.tsx
 import { useState, useRef, useEffect } from "react";
 import * as Plot from "@observablehq/plot";
 import {
@@ -211,6 +211,31 @@ function PieTooltip({
           {val} ({pct}%)
         </span>
       </p>
+    </div>
+  );
+}
+
+// Custom membership tooltip
+function MembershipTooltip({ active, payload, label }: TooltipBase) {
+  if (!active || !payload?.length || !label) return null;
+  return (
+    <div className={TOOLTIP_CLASS}>
+      <p className="text-gray-400 dark:text-gray-400 mb-1">
+        Value:{" "}
+        <span className="text-gray-700 dark:text-gray-200 font-medium">
+          {label}
+        </span>
+      </p>
+      {payload.map((entry: any) => (
+        <p key={entry.name} className="text-gray-400 dark:text-gray-400">
+          {entry.name}:{" "}
+          <span className="text-gray-900 dark:text-white font-semibold">
+            {typeof entry.value === "number"
+              ? entry.value.toFixed(3)
+              : entry.value}
+          </span>
+        </p>
+      ))}
     </div>
   );
 }
@@ -581,7 +606,7 @@ export function Analytics() {
           <div className="grid lg:grid-cols-2 gap-4">
             <ChartCard title="Power Distribution" chartId="chart-power-dist">
               {history.length === 0 ? (
-                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
               ) : (
@@ -621,7 +646,7 @@ export function Analytics() {
             </ChartCard>
             <ChartCard title="Peak Usage Hours" chartId="chart-peak-hours">
               {peakData.length === 0 ? (
-                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
               ) : (
@@ -778,7 +803,7 @@ export function Analytics() {
               chartId="chart-hourly-climate"
             >
               {hourlyClimate.length === 0 ? (
-                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
               ) : (
@@ -845,7 +870,7 @@ export function Analytics() {
               chartId="chart-comfort-dist"
             >
               {comfortData.length === 0 ? (
-                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
               ) : (
@@ -996,7 +1021,7 @@ export function Analytics() {
               chartId="chart-fuzzy-pie"
             >
               {pieData.length === 0 ? (
-                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
               ) : (
@@ -1036,7 +1061,7 @@ export function Analytics() {
               chartId="chart-fuzzy-scatter"
             >
               {!fuzzy?.scatterData?.length ? (
-                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
               ) : (
@@ -1050,7 +1075,7 @@ export function Analytics() {
               chartId="chart-voltage-mf"
             >
               {!membership ? (
-                <div className="flex h-[250px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+                <div className="flex h-[250px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   Loading...
                 </div>
               ) : (
@@ -1059,7 +1084,7 @@ export function Analytics() {
                     <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
                     <XAxis dataKey="x" tick={CHART_FONT} />
                     <YAxis domain={[0, 1]} tick={CHART_FONT} />
-                    <Tooltip />
+                    <Tooltip content={<MembershipTooltip />} />
                     <Legend
                       wrapperStyle={{
                         fontSize: 11,
@@ -1099,7 +1124,7 @@ export function Analytics() {
               chartId="chart-power-mf"
             >
               {!membership ? (
-                <div className="flex h-[250px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+                <div className="flex h-[250px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   Loading...
                 </div>
               ) : (
@@ -1108,7 +1133,7 @@ export function Analytics() {
                     <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
                     <XAxis dataKey="x" tick={CHART_FONT} />
                     <YAxis domain={[0, 1]} tick={CHART_FONT} />
-                    <Tooltip />
+                    <Tooltip content={<MembershipTooltip />} />
                     <Legend
                       wrapperStyle={{
                         fontSize: 11,
@@ -1149,7 +1174,7 @@ export function Analytics() {
             chartId="chart-decision-surface"
           >
             {!decisionSurface || !fuzzy?.scatterData ? (
-              <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+              <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
                 Loading...
               </div>
             ) : (
@@ -1164,7 +1189,7 @@ export function Analytics() {
             chartId="chart-box-plot"
           >
             {!fuzzy?.results?.length ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+              <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                 No data
               </div>
             ) : (
@@ -1181,7 +1206,7 @@ export function Analytics() {
             chartId="chart-bland-altman"
           >
             {!blandAltmanData ? (
-              <div className="flex h-[300px] items-center justify-center text-sm text-gray-900 dark:text-white font-medium">
+              <div className="flex h-[300px] items-center justify-center text-sm text-gray-900 dark:text-white">
                 No data
               </div>
             ) : (

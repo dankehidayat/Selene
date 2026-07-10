@@ -39,7 +39,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     const token = generateToken({ userId: user.id, email: user.email });
 
-    // Create welcome notification
+    // Welcome notification
     await prisma.notification.create({
       data: {
         userId: user.id,
@@ -82,37 +82,44 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       request.ip || String(request.headers["x-forwarded-for"] || "unknown");
     const userAgent = String(request.headers["user-agent"] || "unknown");
 
-    const loginEntry = await prisma.loginHistory.create({
+    await prisma.loginHistory.create({
       data: { userId: user.id, ip, userAgent },
     });
 
     const token = generateToken({ userId: user.id, email: user.email });
 
-    // Get login count for this user
-    const loginCount = await prisma.loginHistory.count({
-      where: { userId: user.id },
-    });
-
-    // Create login notification
-    const browser = userAgent.includes("Firefox")
-      ? "Firefox"
-      : userAgent.includes("Chrome")
-        ? "Chrome"
-        : userAgent.includes("Safari")
-          ? "Safari"
-          : "a browser";
-
-    await prisma.notification.create({
-      data: {
+    // Check if login notification was already sent in the last 6 hours
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+    const recentNotification = await prisma.notification.findFirst({
+      where: {
         userId: user.id,
         type: "security",
-        title: loginCount === 1 ? "First login" : "New login detected",
-        message:
-          loginCount === 1
-            ? `Welcome! You signed in from ${browser}.`
-            : `New sign-in from ${browser}. If this wasn't you, change your password.`,
+        title: "New login detected",
+        createdAt: { gte: sixHoursAgo },
       },
     });
+
+    // Only create notification if none in last 6 hours
+    if (!recentNotification) {
+      const browser = userAgent.includes("Firefox")
+        ? "Firefox"
+        : userAgent.includes("Edg")
+          ? "Edge"
+          : userAgent.includes("Chrome")
+            ? "Chrome"
+            : userAgent.includes("Safari")
+              ? "Safari"
+              : "a browser";
+
+      await prisma.notification.create({
+        data: {
+          userId: user.id,
+          type: "security",
+          title: "New login detected",
+          message: `New sign-in from ${browser}. If this wasn't you, change your password.`,
+        },
+      });
+    }
 
     return {
       token,

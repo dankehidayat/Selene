@@ -70,3 +70,8 @@
 .animate-slideUp {
   animation: slideUp 0.2s ease-in;
 }
+
+.recharts-pie-label-text {
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif !important;
+  font-size: 12px !important;
+}
