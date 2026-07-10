@@ -1,4 +1,4 @@
-// [apps/frontend] src/pages/Dashboard.tsx
+// apps/frontend/src/pages/Dashboard.tsx
 import { useState } from "react";
 import {
   ResponsiveContainer,
@@ -124,8 +124,8 @@ function DualAxisTooltip({
             {entry.value}{" "}
             {entry.name === "Power"
               ? "W"
-              : entry.name === "Voltage"
-                ? "V"
+              : entry.name === "Current"
+                ? "A"
                 : "°C"}
           </span>
         </p>
@@ -334,11 +334,11 @@ export function Dashboard() {
                 <Line
                   yAxisId="right"
                   type="monotone"
-                  dataKey="voltage"
+                  dataKey="current"
                   stroke="#F59E0B"
                   strokeWidth={2.5}
                   dot={false}
-                  name="Voltage"
+                  name="Current"
                 />
               </LineChart>
             </ResponsiveContainer>

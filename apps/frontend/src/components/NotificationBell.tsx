@@ -1,15 +1,9 @@
 // apps/frontend/src/components/NotificationBell.tsx
-import { useState, useEffect, useRef } from "react";
+// Change the fetchNotifications function to use React Query or add a simple cache:
+
+import { useState, useEffect } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import {
-  Bell,
-  Zap,
-  Thermometer,
-  Droplets,
-  Shield,
-  Activity,
-  Check,
-} from "lucide-react";
+import { Bell, Zap, Thermometer, Shield, Activity } from "lucide-react";
 import { useAuth } from "@/services/auth";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -37,16 +31,25 @@ const typeColors: Record<string, string> = {
   system: "text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30",
 };
 
+// Global cache to persist across page navigations
+let notificationCache: Notification[] = [];
+let unreadCache = 0;
+let lastFetchTime = 0;
+
 export function NotificationBell() {
   const { token } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] =
+    useState<Notification[]>(notificationCache);
   const [open, setOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(unreadCache);
 
   useEffect(() => {
     if (!token) return;
 
-    const fetchNotifications = () => {
+    // Only fetch if cache is older than 30 seconds
+    const shouldFetch = Date.now() - lastFetchTime > 30000;
+
+    if (shouldFetch) {
       fetch(`${API_BASE}/notifications`, {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -55,15 +58,17 @@ export function NotificationBell() {
           if (data.notifications) {
             setNotifications(data.notifications);
             setUnreadCount(
-              data.notifications.filter((n: Notification) => !n.read).length,
+              data.unreadCount ??
+                data.notifications.filter((n: Notification) => !n.read).length,
             );
+            notificationCache = data.notifications;
+            unreadCache =
+              data.unreadCount ??
+              data.notifications.filter((n: Notification) => !n.read).length;
+            lastFetchTime = Date.now();
           }
         });
-    };
-
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    }
   }, [token]);
 
   const markAsRead = async (id: string) => {
@@ -75,6 +80,10 @@ export function NotificationBell() {
       prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
     );
     setUnreadCount((prev) => Math.max(0, prev - 1));
+    notificationCache = notificationCache.map((n) =>
+      n.id === id ? { ...n, read: true } : n,
+    );
+    unreadCache = Math.max(0, unreadCache - 1);
   };
 
   const markAllRead = async () => {
@@ -84,6 +93,8 @@ export function NotificationBell() {
     });
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     setUnreadCount(0);
+    notificationCache = notificationCache.map((n) => ({ ...n, read: true }));
+    unreadCache = 0;
   };
 
   const formatTime = (dateStr: string) => {

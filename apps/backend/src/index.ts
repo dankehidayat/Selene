@@ -266,6 +266,7 @@ app.get("/api/readings/history", async (request) => {
       timestamp: r.parsedTs!.toISOString(),
       voltage: r.acVoltage,
       power: r.acPower,
+      current: r.acCurrent,
       temperature: r.temperature,
       humidity: r.humidity,
     }));
@@ -274,6 +275,7 @@ app.get("/api/readings/history", async (request) => {
     {
       voltage: number;
       power: number;
+      current: number;
       temperature: number;
       humidity: number;
       count: number;
@@ -290,6 +292,7 @@ app.get("/api/readings/history", async (request) => {
     if (existing) {
       existing.voltage += row.acVoltage;
       existing.power += row.acPower;
+      existing.current += row.acCurrent;
       existing.temperature += row.temperature;
       existing.humidity += row.humidity;
       existing.count++;
@@ -302,6 +305,7 @@ app.get("/api/readings/history", async (request) => {
         timestamp: bucketTimestamp,
         voltage: row.acVoltage,
         power: row.acPower,
+        current: row.acCurrent,
         temperature: row.temperature,
         humidity: row.humidity,
         count: 1,
@@ -313,6 +317,7 @@ app.get("/api/readings/history", async (request) => {
       timestamp: b.timestamp,
       voltage: +(b.voltage / b.count).toFixed(2),
       power: +(b.power / b.count).toFixed(2),
+      current: +(b.current / b.count).toFixed(3),
       temperature: +(b.temperature / b.count).toFixed(2),
       humidity: +(b.humidity / b.count).toFixed(2),
     }))
