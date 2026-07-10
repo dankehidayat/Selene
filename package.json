@@ -6,6 +6,8 @@
     "packages/*"
   ],
   "scripts": {
-    "frontend:only": "npm run dev --workspace=@selene/frontend"
+    "frontend:only": "cd apps/frontend && bun run dev",
+    "dev:frontend": "cd apps/frontend && bun run dev",
+    "dev:backend": "cd apps/backend && bun run dev"
   }
 }
