@@ -14,7 +14,13 @@ import {
 
 const app = Fastify({ logger: true });
 
-await app.register(cors, { origin: true });
+await app.register(cors, {
+  origin: [
+    "http://localhost:5173",
+    "https://selene.dankehidayat.my.id",
+    "https://*.dankehidayat.my.id",
+  ],
+});
 await app.register(registerAuthRoutes);
 await app.register(registerGlossaryRoutes);
 
