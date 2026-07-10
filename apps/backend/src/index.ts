@@ -1,4 +1,4 @@
-// [apps/backend] src/index.ts
+// apps/backend/src/index.ts
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { prisma } from "./db";
@@ -24,13 +24,14 @@ await app.register(cors, {
 await app.register(registerAuthRoutes);
 await app.register(registerGlossaryRoutes);
 
-// ==================== GOOGLE SHEETS / BLYNK CODE ====================
-
 const SHEET_CSV_URL = process.env.SHEET_CSV_URL;
 if (!SHEET_CSV_URL) {
-  console.error("SHEET_CSV_URL is not set in .env");
+  console.error("SHEET_CSV_URL is not set");
   process.exit(1);
 }
+
+const BLYNK_SERVER_URL = process.env.BLYNK_SERVER_URL;
+const BLYNK_AUTH_TOKEN = process.env.BLYNK_AUTH_TOKEN;
 
 interface Reading {
   timestamp: string;
@@ -204,9 +205,23 @@ function getRangeConfig(range: string): {
   }
 }
 
-// ==================== API ROUTES ====================
+// Blynk proxy
+app.get("/api/blynk/:pin", async (request, reply) => {
+  const { pin } = request.params as { pin: string };
+  if (!BLYNK_SERVER_URL || !BLYNK_AUTH_TOKEN) {
+    return reply.code(500).send({ error: "Blynk not configured" });
+  }
+  try {
+    const response = await fetch(
+      `${BLYNK_SERVER_URL}/${BLYNK_AUTH_TOKEN}/get/v${pin}`,
+    );
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    return reply.code(500).send({ error: "Blynk fetch failed" });
+  }
+});
 
-// Latest reading
 app.get("/api/readings/latest", async (request, reply) => {
   const data = await fetchSheetData();
   if (data.length === 0)
@@ -233,19 +248,16 @@ app.get("/api/readings/latest", async (request, reply) => {
   };
 });
 
-// History for charts
 app.get("/api/readings/history", async (request) => {
   const query = request.query as { range?: string };
   const range = query.range ?? "24h";
   const data = await fetchSheetData();
   if (data.length === 0) return [];
-
   const valid = data.filter((r: Reading) => r.parsedTs);
   if (valid.length === 0) return [];
   valid.sort(
     (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
   );
-
   const { from, bucketSize } = getRangeConfig(range);
   const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
   if (filtered.length === 0) {
@@ -257,7 +269,6 @@ app.get("/api/readings/history", async (request) => {
       humidity: r.humidity,
     }));
   }
-
   const buckets = new Map<
     string,
     {
@@ -275,7 +286,6 @@ app.get("/api/readings/history", async (request) => {
     else if (bucketSize === "day")
       key = row.parsedTs!.toISOString().slice(0, 10);
     else key = row.parsedTs!.toISOString().slice(0, 13);
-
     const existing = buckets.get(key);
     if (existing) {
       existing.voltage += row.acVoltage;
@@ -298,7 +308,6 @@ app.get("/api/readings/history", async (request) => {
       });
     }
   }
-
   let result = Array.from(buckets.values())
     .map((b) => ({
       timestamp: b.timestamp,
@@ -311,16 +320,13 @@ app.get("/api/readings/history", async (request) => {
       (a, b) =>
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     );
-
   if (result.length > 2000) {
     const step = Math.ceil(result.length / 2000);
     result = result.filter((_, i) => i % step === 0);
   }
-
   return result;
 });
 
-// Recent readings (for Data Log)
 app.get("/api/readings/logs", async (request) => {
   const query = request.query as { pageSize?: string };
   const pageSize = Number(query.pageSize ?? "20");
@@ -347,14 +353,12 @@ app.get("/api/readings/logs", async (request) => {
     }));
 });
 
-// Export readings
 app.get("/api/readings/export", async (request, reply) => {
   const query = request.query as { format?: string };
   const format = query.format ?? "csv";
   const data = await fetchSheetData();
   if (data.length === 0)
     return reply.code(404).send({ error: "No data available" });
-
   const now = new Date();
   const ts = [
     now.getFullYear(),
@@ -365,7 +369,6 @@ app.get("/api/readings/export", async (request, reply) => {
     String(now.getMinutes()).padStart(2, "0"),
     String(now.getSeconds()).padStart(2, "0"),
   ].join("");
-
   const headers = [
     "Timestamp",
     "AC Voltage (V)",
@@ -396,7 +399,6 @@ app.get("/api/readings/export", async (request, reply) => {
     r.tempComfort,
     r.energyStatus,
   ]);
-
   const ext = format === "tsv" ? "tsv" : "csv";
   const filename = `sensor-data-${ts}.${ext}`;
   if (format === "tsv") {
@@ -415,7 +417,6 @@ app.get("/api/readings/export", async (request, reply) => {
     .send(csv);
 });
 
-// Analytics summary
 app.get("/api/analytics/summary", async (request) => {
   const query = request.query as { range?: string };
   const range = query.range ?? "7d";
@@ -429,7 +430,6 @@ app.get("/api/analytics/summary", async (request) => {
   const { from } = getRangeConfig(range);
   const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
   if (filtered.length === 0) return { error: "No data in range" };
-
   const powers = filtered.map((r: Reading) => r.acPower).sort((a, b) => a - b);
   const voltages = filtered.map((r: Reading) => r.acVoltage);
   const cosPhis = filtered.map((r: Reading) => r.cosPhi);
@@ -440,7 +440,6 @@ app.get("/api/analytics/summary", async (request) => {
   const avgVoltage = mean(voltages),
     avgCosPhi = mean(cosPhis),
     avgReactive = mean(reactivePowers);
-
   let totalEnergyKwh = 0;
   for (let i = 1; i < filtered.length; i++) {
     const dt =
@@ -449,7 +448,6 @@ app.get("/api/analytics/summary", async (request) => {
     totalEnergyKwh +=
       ((filtered[i].acPower + filtered[i - 1].acPower) / 2000) * dt;
   }
-
   const hourlyUsage = new Map<number, { power: number; count: number }>();
   for (const r of filtered) {
     const hour = r.parsedTs!.getHours();
@@ -465,7 +463,6 @@ app.get("/api/analytics/summary", async (request) => {
     }))
     .sort((a, b) => b.avgPower - a.avgPower)
     .slice(0, 3);
-
   return {
     range,
     dataPoints: filtered.length,
@@ -494,7 +491,6 @@ app.get("/api/analytics/summary", async (request) => {
   };
 });
 
-// Climate analytics
 app.get("/api/analytics/climate", async (request) => {
   const query = request.query as { range?: string };
   const range = query.range ?? "7d";
@@ -508,14 +504,12 @@ app.get("/api/analytics/climate", async (request) => {
   const { from } = getRangeConfig(range);
   const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
   if (filtered.length === 0) return { error: "No data in range" };
-
   const temps = filtered
     .map((r: Reading) => r.temperature)
     .sort((a, b) => a - b);
   const hums = filtered.map((r: Reading) => r.humidity).sort((a, b) => a - b);
   const avgTemp = mean(temps),
     avgHum = mean(hums);
-
   const dewPoints = filtered.map((r: Reading) => {
     const a = 17.27,
       b = 237.7;
@@ -524,7 +518,6 @@ app.get("/api/analytics/climate", async (request) => {
     return +((b * alpha) / (a - alpha)).toFixed(1);
   });
   const avgDewPoint = mean(dewPoints);
-
   let corrTempHum = 0;
   const n = filtered.length;
   const sumTemp = sum(temps),
@@ -540,7 +533,6 @@ app.get("/api/analytics/climate", async (request) => {
     (n * sumTempSq - sumTemp ** 2) * (n * sumHumSq - sumHum ** 2),
   );
   corrTempHum = den === 0 ? 0 : +(num / den).toFixed(3);
-
   let degreeHours = 0;
   for (let i = 1; i < filtered.length; i++) {
     const dt =
@@ -552,11 +544,9 @@ app.get("/api/analytics/climate", async (request) => {
         (filtered[i].temperature + filtered[i - 1].temperature) / 2 - 18,
       ) * dt;
   }
-
   const comfortDist: Record<string, number> = {};
   for (const r of filtered)
     comfortDist[r.tempComfort] = (comfortDist[r.tempComfort] || 0) + 1;
-
   const hourlyClimate = new Map<
     number,
     { temp: number; hum: number; count: number }
@@ -576,7 +566,6 @@ app.get("/api/analytics/climate", async (request) => {
       humidity: +(data.hum / data.count).toFixed(0),
     }))
     .sort((a, b) => a.hour - b.hour);
-
   return {
     range,
     dataPoints: filtered.length,
@@ -606,7 +595,6 @@ app.get("/api/analytics/climate", async (request) => {
   };
 });
 
-// Fuzzy distribution
 app.get("/api/analytics/fuzzy-distribution", async (request) => {
   const query = request.query as { range?: string };
   const range = query.range ?? "7d";
@@ -621,7 +609,6 @@ app.get("/api/analytics/fuzzy-distribution", async (request) => {
     const { from } = getRangeConfig(range);
     filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
   }
-
   const results = filtered.map((r: Reading) => ({
     ...classifyEnergyFuzzy(r.acVoltage, r.acPower, r.cosPhi, r.reactivePower),
     timestamp: r.parsedTs?.toISOString() || r.timestamp,
@@ -651,17 +638,11 @@ app.get("/api/analytics/fuzzy-distribution", async (request) => {
   return { distribution, total: filtered.length, scatterData, results };
 });
 
-// Membership data
-app.get("/api/analytics/membership", async () => {
-  return generateMembershipData();
-});
+app.get("/api/analytics/membership", async () => generateMembershipData());
+app.get("/api/analytics/decision-surface", async () =>
+  generateDecisionSurface(),
+);
 
-// Decision surface
-app.get("/api/analytics/decision-surface", async () => {
-  return generateDecisionSurface();
-});
-
-// Box plot
 app.get("/api/analytics/box-plot", async (request) => {
   const query = request.query as { range?: string };
   const range = query.range ?? "7d";
@@ -687,7 +668,6 @@ app.get("/api/analytics/box-plot", async (request) => {
   return generateBoxPlotData(categorized);
 });
 
-// Bland-Altman
 app.get("/api/analytics/bland-altman", async (request) => {
   const query = request.query as { range?: string };
   const range = query.range ?? "7d";
@@ -710,13 +690,10 @@ app.get("/api/analytics/bland-altman", async (request) => {
   return generateBlandAltmanData(input);
 });
 
-// Health check
 app.get("/health", async () => ({
   status: "ok",
   cachedRows: cachedData.length,
 }));
-
-// ==================== START SERVER ====================
 
 const port = Number(process.env.PORT ?? 8787);
 try {

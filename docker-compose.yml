@@ -1,4 +1,4 @@
-# docker-compose.yml (project root)
+# docker-compose.yml
 services:
   postgres:
     image: postgres:16-alpine
@@ -29,8 +29,6 @@ services:
     environment:
       - PORT=8787
       - DATABASE_URL=postgresql://selene_admin:x9Fm2KpR7vLq4WnB8cYt3Hj6DsA1Gf5d@postgres:5432/selene
-    ports:
-      - "8787:8787"
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,8 +41,6 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-        - VITE_BLYNK_SERVER_URL=${VITE_BLYNK_SERVER_URL}
-        - VITE_BLYNK_AUTH_TOKEN=${VITE_BLYNK_AUTH_TOKEN}
     container_name: selene-frontend
     restart: unless-stopped
     ports:

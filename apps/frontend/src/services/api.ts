@@ -1,12 +1,8 @@
-// [apps/frontend] src/services/api.ts
+// apps/frontend/src/services/api.ts
 import { useQuery } from "@tanstack/react-query";
 import type { EnergyReading } from "@/types/energy";
 
-const BLYNK_SERVER =
-  import.meta.env.VITE_BLYNK_SERVER_URL ?? "http://iot.serangkota.go.id:8080";
-const AUTH_TOKEN = import.meta.env.VITE_BLYNK_AUTH_TOKEN ?? "";
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 export interface AnalyticsSummary {
   range: string;
@@ -56,8 +52,61 @@ export interface ClimateSummary {
   hourlyData: Array<{ hour: number; temperature: number; humidity: number }>;
 }
 
+export interface FuzzyDistribution {
+  distribution: { ECONOMICAL: number; NORMAL: number; WASTEFUL: number };
+  total: number;
+  scatterData: Array<{ power: number; powerFactor: number; category: string }>;
+  results: Array<{
+    timestamp: string;
+    voltage: number;
+    power: number;
+    powerFactor: number;
+    reactivePower: number;
+    category: string;
+    confidence: number;
+    strengths: { economical: number; normal: number; wasteful: number };
+  }>;
+}
+
+export interface MembershipData {
+  voltageMembership: Array<{
+    x: number;
+    low: number;
+    normal: number;
+    high: number;
+  }>;
+  powerMembership: Array<{
+    x: number;
+    economical: number;
+    normal: number;
+    wasteful: number;
+  }>;
+}
+
+export interface DecisionSurfacePoint {
+  power: number;
+  pf: number;
+  category: string;
+}
+export interface BoxPlotData {
+  category: string;
+  min: number;
+  q1: number;
+  median: number;
+  q3: number;
+  max: number;
+  count: number;
+}
+export interface BlandAltmanResult {
+  data: Array<{ mean: number; difference: number }>;
+  meanDiff: number;
+  upperLoA: number;
+  lowerLoA: number;
+}
+
+// ── Blynk proxy through backend ────────────────────────────
 async function fetchPin(pin: number): Promise<number> {
-  const url = `${BLYNK_SERVER}/${AUTH_TOKEN}/get/v${pin}`;
+  const url = `${API_BASE}/blynk/${pin}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch v${pin}: ${res.status}`);
   const data = await res.json();
@@ -144,22 +193,48 @@ async function fetchHistory(range: string) {
   if (!res.ok) throw new Error("Failed to fetch history");
   return res.json();
 }
-
 async function fetchRecentReadings(limit: number) {
   const res = await fetch(`${API_BASE}/readings/logs?pageSize=${limit}`);
   if (!res.ok) throw new Error("Failed to fetch logs");
   return res.json();
 }
-
 async function fetchAnalyticsSummary(range: string): Promise<AnalyticsSummary> {
   const res = await fetch(`${API_BASE}/analytics/summary?range=${range}`);
   if (!res.ok) throw new Error("Failed to fetch analytics");
   return res.json();
 }
-
 async function fetchClimateSummary(range: string): Promise<ClimateSummary> {
   const res = await fetch(`${API_BASE}/analytics/climate?range=${range}`);
-  if (!res.ok) throw new Error("Failed to fetch climate analytics");
+  if (!res.ok) throw new Error("Failed to fetch climate");
+  return res.json();
+}
+async function fetchFuzzyDistribution(
+  range: string,
+): Promise<FuzzyDistribution> {
+  const res = await fetch(
+    `${API_BASE}/analytics/fuzzy-distribution?range=${range}`,
+  );
+  if (!res.ok) throw new Error("Failed to fetch fuzzy");
+  return res.json();
+}
+async function fetchMembershipData(): Promise<MembershipData> {
+  const res = await fetch(`${API_BASE}/analytics/membership`);
+  if (!res.ok) throw new Error("Failed to fetch membership");
+  return res.json();
+}
+async function fetchDecisionSurface(): Promise<DecisionSurfacePoint[]> {
+  const res = await fetch(`${API_BASE}/analytics/decision-surface`);
+  if (!res.ok) throw new Error("Failed to fetch decision surface");
+  return res.json();
+}
+async function fetchBoxPlot(range: string): Promise<BoxPlotData[]> {
+  const res = await fetch(`${API_BASE}/analytics/box-plot?range=${range}`);
+  if (!res.ok) throw new Error("Failed to fetch box plot");
+  return res.json();
+}
+async function fetchBlandAltman(range: string): Promise<BlandAltmanResult> {
+  const res = await fetch(`${API_BASE}/analytics/bland-altman?range=${range}`);
+  if (!res.ok) throw new Error("Failed to fetch Bland-Altman");
   return res.json();
 }
 
@@ -169,10 +244,8 @@ export function useLiveReading() {
     queryFn: fetchLiveReading,
     refetchInterval: 3000,
     staleTime: 0,
-    enabled: !!AUTH_TOKEN,
   });
 }
-
 export function useReadingHistory(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
 ) {
@@ -190,7 +263,6 @@ export function useReadingHistory(
     refetchInterval: 30_000,
   });
 }
-
 export function useRecentReadings(limit = 20) {
   return useQuery<EnergyReading[]>({
     queryKey: ["recent-readings", limit],
@@ -198,7 +270,6 @@ export function useRecentReadings(limit = 20) {
     refetchInterval: 10_000,
   });
 }
-
 export function useAnalyticsSummary(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
 ) {
@@ -208,7 +279,6 @@ export function useAnalyticsSummary(
     refetchInterval: 30_000,
   });
 }
-
 export function useClimateSummary(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
 ) {
@@ -218,70 +288,6 @@ export function useClimateSummary(
     refetchInterval: 30_000,
   });
 }
-
-export interface FuzzyDistribution {
-  distribution: { ECONOMICAL: number; NORMAL: number; WASTEFUL: number };
-  total: number;
-  scatterData: Array<{ power: number; powerFactor: number; category: string }>;
-  boxData: Array<{
-    category: string;
-    min: number;
-    q1: number;
-    median: number;
-    q3: number;
-    max: number;
-    count: number;
-  } | null>;
-  results: Array<{
-    timestamp: string;
-    voltage: number;
-    power: number;
-    powerFactor: number;
-    reactivePower: number;
-    category: string;
-    confidence: number;
-    strengths: { economical: number; normal: number; wasteful: number };
-  }>;
-}
-
-export interface MembershipData {
-  voltageMembership: Array<{
-    x: number;
-    low: number;
-    normal: number;
-    high: number;
-  }>;
-  powerMembership: Array<{
-    x: number;
-    economical: number;
-    normal: number;
-    wasteful: number;
-  }>;
-  pfMembership: Array<{ x: number; poor: number; fair: number; good: number }>;
-  reactiveMembership: Array<{
-    x: number;
-    low: number;
-    medium: number;
-    high: number;
-  }>;
-}
-
-async function fetchFuzzyDistribution(
-  range: string,
-): Promise<FuzzyDistribution> {
-  const res = await fetch(
-    `${API_BASE}/analytics/fuzzy-distribution?range=${range}`,
-  );
-  if (!res.ok) throw new Error("Failed to fetch fuzzy distribution");
-  return res.json();
-}
-
-async function fetchMembershipData(): Promise<MembershipData> {
-  const res = await fetch(`${API_BASE}/analytics/membership`);
-  if (!res.ok) throw new Error("Failed to fetch membership data");
-  return res.json();
-}
-
 export function useFuzzyDistribution(range: string) {
   return useQuery<FuzzyDistribution>({
     queryKey: ["fuzzy-distribution", range],
@@ -289,7 +295,6 @@ export function useFuzzyDistribution(range: string) {
     refetchInterval: 60_000,
   });
 }
-
 export function useMembershipData() {
   return useQuery<MembershipData>({
     queryKey: ["membership-data"],
@@ -297,48 +302,6 @@ export function useMembershipData() {
     staleTime: 5 * 60_000,
   });
 }
-
-export interface DecisionSurfacePoint {
-  power: number;
-  pf: number;
-  category: string;
-}
-
-export interface BoxPlotData {
-  category: string;
-  min: number;
-  q1: number;
-  median: number;
-  q3: number;
-  max: number;
-  count: number;
-}
-
-export interface BlandAltmanResult {
-  data: Array<{ mean: number; difference: number }>;
-  meanDiff: number;
-  upperLoA: number;
-  lowerLoA: number;
-}
-
-async function fetchDecisionSurface(): Promise<DecisionSurfacePoint[]> {
-  const res = await fetch(`${API_BASE}/analytics/decision-surface`);
-  if (!res.ok) throw new Error("Failed to fetch decision surface");
-  return res.json();
-}
-
-async function fetchBoxPlot(range: string): Promise<BoxPlotData[]> {
-  const res = await fetch(`${API_BASE}/analytics/box-plot?range=${range}`);
-  if (!res.ok) throw new Error("Failed to fetch box plot data");
-  return res.json();
-}
-
-async function fetchBlandAltman(range: string): Promise<BlandAltmanResult> {
-  const res = await fetch(`${API_BASE}/analytics/bland-altman?range=${range}`);
-  if (!res.ok) throw new Error("Failed to fetch Bland-Altman data");
-  return res.json();
-}
-
 export function useDecisionSurface() {
   return useQuery<DecisionSurfacePoint[]>({
     queryKey: ["decision-surface"],
@@ -346,7 +309,6 @@ export function useDecisionSurface() {
     staleTime: 5 * 60_000,
   });
 }
-
 export function useBoxPlot(range: string) {
   return useQuery<BoxPlotData[]>({
     queryKey: ["box-plot", range],
@@ -354,7 +316,6 @@ export function useBoxPlot(range: string) {
     refetchInterval: 60_000,
   });
 }
-
 export function useBlandAltman(range: string) {
   return useQuery<BlandAltmanResult>({
     queryKey: ["bland-altman", range],
