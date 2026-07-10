@@ -1,4 +1,4 @@
-// [apps/backend] src/routes/auth.ts - Full file with login history
+// apps/backend/src/routes/auth.ts
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db";
 import {
@@ -39,10 +39,24 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     const token = generateToken({ userId: user.id, email: user.email });
 
-    return { token, user: { id: user.id, email: user.email, name: user.name } };
+    // Create welcome notification
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        type: "system",
+        title: "Welcome to Selene",
+        message:
+          "Your account has been created. Start monitoring your energy usage.",
+      },
+    });
+
+    return {
+      token,
+      user: { id: user.id, email: user.email, name: user.name },
+    };
   });
 
-  // Login (with history recording)
+  // Login
   app.post("/api/auth/login", async (request, reply) => {
     const { email, password } = request.body as {
       email: string;
@@ -68,13 +82,42 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       request.ip || String(request.headers["x-forwarded-for"] || "unknown");
     const userAgent = String(request.headers["user-agent"] || "unknown");
 
-    await prisma.loginHistory.create({
+    const loginEntry = await prisma.loginHistory.create({
       data: { userId: user.id, ip, userAgent },
     });
 
     const token = generateToken({ userId: user.id, email: user.email });
 
-    return { token, user: { id: user.id, email: user.email, name: user.name } };
+    // Get login count for this user
+    const loginCount = await prisma.loginHistory.count({
+      where: { userId: user.id },
+    });
+
+    // Create login notification
+    const browser = userAgent.includes("Firefox")
+      ? "Firefox"
+      : userAgent.includes("Chrome")
+        ? "Chrome"
+        : userAgent.includes("Safari")
+          ? "Safari"
+          : "a browser";
+
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        type: "security",
+        title: loginCount === 1 ? "First login" : "New login detected",
+        message:
+          loginCount === 1
+            ? `Welcome! You signed in from ${browser}.`
+            : `New sign-in from ${browser}. If this wasn't you, change your password.`,
+      },
+    });
+
+    return {
+      token,
+      user: { id: user.id, email: user.email, name: user.name },
+    };
   });
 
   // Get current user
@@ -88,7 +131,9 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         where: { id: payload.userId },
         select: { id: true, email: true, name: true, createdAt: true },
       });
+
       if (!user) return reply.code(404).send({ error: "User not found" });
+
       return { user };
     } catch {
       return reply.code(401).send({ error: "Invalid token" });
@@ -105,12 +150,41 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const history = await prisma.loginHistory.findMany({
         where: { userId: payload.userId },
         orderBy: { createdAt: "desc" },
-        take: 10,
+        take: 20,
         select: { id: true, ip: true, userAgent: true, createdAt: true },
       });
       return { history };
     } catch {
       return reply.code(401).send({ error: "Invalid token" });
+    }
+  });
+
+  // Clear all sessions
+  app.delete("/api/auth/clear-sessions", async (request, reply) => {
+    const token = extractTokenFromHeader(request.headers.authorization);
+    if (!token) return reply.code(401).send({ error: "No token provided" });
+
+    try {
+      const payload = verifyToken(token);
+      await prisma.loginHistory.deleteMany({
+        where: { userId: payload.userId },
+      });
+
+      await prisma.notification.create({
+        data: {
+          userId: payload.userId,
+          type: "security",
+          title: "Sessions cleared",
+          message:
+            "All login sessions have been cleared. You'll need to sign in again.",
+        },
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      return reply
+        .code(500)
+        .send({ error: err.message || "Failed to clear sessions" });
     }
   });
 
@@ -122,11 +196,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     try {
       const payload = verifyToken(token);
       const { name } = request.body as { name?: string };
+
       const user = await prisma.user.update({
         where: { id: payload.userId },
         data: { name },
         select: { id: true, email: true, name: true },
       });
+
       return { user };
     } catch (err: any) {
       return reply.code(400).send({ error: err.message || "Update failed" });
@@ -167,6 +243,15 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       await prisma.user.update({
         where: { id: payload.userId },
         data: { password: hashedPassword },
+      });
+
+      await prisma.notification.create({
+        data: {
+          userId: payload.userId,
+          type: "security",
+          title: "Password changed",
+          message: "Your password has been updated successfully.",
+        },
       });
 
       return { message: "Password changed successfully" };

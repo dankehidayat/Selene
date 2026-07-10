@@ -4,6 +4,7 @@ import cors from "@fastify/cors";
 import { prisma } from "./db";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerGlossaryRoutes } from "./routes/glossary";
+import { registerNotificationRoutes } from "./routes/notifications";
 import {
   classifyEnergyFuzzy,
   generateMembershipData,
@@ -23,6 +24,7 @@ await app.register(cors, {
 });
 await app.register(registerAuthRoutes);
 await app.register(registerGlossaryRoutes);
+await app.register(registerNotificationRoutes);
 
 const SHEET_CSV_URL = process.env.SHEET_CSV_URL;
 if (!SHEET_CSV_URL) {
@@ -208,9 +210,8 @@ function getRangeConfig(range: string): {
 // Blynk proxy
 app.get("/api/blynk/:pin", async (request, reply) => {
   const { pin } = request.params as { pin: string };
-  if (!BLYNK_SERVER_URL || !BLYNK_AUTH_TOKEN) {
+  if (!BLYNK_SERVER_URL || !BLYNK_AUTH_TOKEN)
     return reply.code(500).send({ error: "Blynk not configured" });
-  }
   try {
     const response = await fetch(
       `${BLYNK_SERVER_URL}/${BLYNK_AUTH_TOKEN}/get/v${pin}`,
@@ -260,7 +261,7 @@ app.get("/api/readings/history", async (request) => {
   );
   const { from, bucketSize } = getRangeConfig(range);
   const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
-  if (filtered.length === 0) {
+  if (filtered.length === 0)
     return valid.slice(-50).map((r: Reading) => ({
       timestamp: r.parsedTs!.toISOString(),
       voltage: r.acVoltage,
@@ -268,7 +269,6 @@ app.get("/api/readings/history", async (request) => {
       temperature: r.temperature,
       humidity: r.humidity,
     }));
-  }
   const buckets = new Map<
     string,
     {

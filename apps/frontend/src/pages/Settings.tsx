@@ -1,4 +1,4 @@
-// [apps/frontend] src/pages/Settings.tsx
+// apps/frontend/src/pages/Settings.tsx
 import { useState } from "react";
 import { useAuth, useLoginHistory } from "@/services/auth";
 import {
@@ -223,20 +223,41 @@ export function Settings() {
     }
   };
 
+  const handleClearSessions = async () => {
+    if (
+      !confirm("Clear all sessions? You will be logged out from all devices.")
+    )
+      return;
+    try {
+      await fetch(`${API_BASE}/auth/clear-sessions`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      localStorage.removeItem("token");
+      window.location.href = "/login";
+    } catch {}
+  };
+
   const deleteConfirmText = "delete my account";
 
   return (
-    <div className="flex flex-col md:flex-row gap-10 max-w-4xl w-full">
+    <div className="flex flex-col md:flex-row gap-10 max-w-4xl w-full font-sans">
       {/* Left Sidebar */}
       <div className="w-full md:w-48 shrink-0">
-        <h2 className="text-xl font-bold text-gray-900 mb-6">Settings</h2>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
+          Settings
+        </h2>
         <nav className="flex flex-col space-y-1">
           <button
             onClick={() => {
               setActiveTab("general");
               setEditing(null);
             }}
-            className={`text-left px-3 py-2 rounded-lg font-medium text-sm transition ${activeTab === "general" ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50"}`}
+            className={`text-left px-3 py-2 rounded-lg font-semibold text-sm transition ${
+              activeTab === "general"
+                ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+            }`}
           >
             General
           </button>
@@ -245,7 +266,11 @@ export function Settings() {
               setActiveTab("security");
               setEditing(null);
             }}
-            className={`text-left px-3 py-2 rounded-lg font-medium text-sm transition ${activeTab === "security" ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50"}`}
+            className={`text-left px-3 py-2 rounded-lg font-semibold text-sm transition ${
+              activeTab === "security"
+                ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
+            }`}
           >
             Login & Security
           </button>
@@ -255,17 +280,19 @@ export function Settings() {
       {/* Right Content */}
       <div className="flex-1 max-w-xl">
         {/* Avatar */}
-        <div className="flex items-center gap-4 pb-6 border-b border-gray-100 mb-2">
-          <div className="h-14 w-14 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-semibold text-lg shrink-0">
+        <div className="flex items-center gap-4 pb-6 border-b border-gray-100 dark:border-gray-800 mb-2">
+          <div className="h-14 w-14 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-white font-semibold text-lg shrink-0">
             {user?.name
               ? user.name.charAt(0).toUpperCase()
               : user?.email?.charAt(0).toUpperCase() || "U"}
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">
               {user?.name || "User"}
             </p>
-            <p className="text-xs text-gray-400">{user?.email}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {user?.email}
+            </p>
           </div>
         </div>
 
@@ -273,25 +300,25 @@ export function Settings() {
         {activeTab === "general" && (
           <div className="flex flex-col">
             {/* Name */}
-            <div className="py-4 border-b border-gray-100">
+            <div className="py-4 border-b border-gray-100 dark:border-gray-800">
               <div
                 className={`transition-all duration-300 overflow-hidden ${editing === "name" ? "max-h-96 opacity-100" : editing ? "max-h-0 opacity-0" : "max-h-96 opacity-100"}`}
               >
                 {editing === "name" ? (
                   <div className="space-y-3 animate-slideDown">
-                    <label className="text-sm font-medium text-gray-900 block">
+                    <label className="text-sm font-semibold text-gray-900 dark:text-white block">
                       Name
                     </label>
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="w-full max-w-xs text-sm text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-gray-500 transition"
+                      className="w-full max-w-xs text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition"
                       placeholder="Your name"
                     />
                     {nameMsg && (
                       <p
-                        className={`text-xs flex items-center gap-1.5 ${nameMsg.type === "success" ? "text-emerald-600" : "text-red-500"}`}
+                        className={`text-xs flex items-center gap-1.5 font-medium ${nameMsg.type === "success" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}
                       >
                         {nameMsg.type === "success" ? (
                           <CheckCircle2 size={12} />
@@ -306,14 +333,14 @@ export function Settings() {
                         type="submit"
                         onClick={handleUpdateName}
                         disabled={nameLoading}
-                        className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                        className="px-4 py-2 text-sm font-semibold text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50 transition"
                       >
                         {nameLoading ? "Saving..." : "Save"}
                       </button>
                       <button
                         type="button"
                         onClick={handleCancel}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
                       >
                         Cancel
                       </button>
@@ -323,16 +350,16 @@ export function Settings() {
                   !editing && (
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
                           Name
                         </p>
-                        <p className="text-sm text-gray-500 mt-0.5">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                           {user?.name || "Not set"}
                         </p>
                       </div>
                       <button
                         onClick={() => handleEdit("name")}
-                        className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+                        className="px-3 py-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
                       >
                         Edit
                       </button>
@@ -343,36 +370,36 @@ export function Settings() {
             </div>
 
             {/* Email */}
-            <div className="py-4 border-b border-gray-100">
+            <div className="py-4 border-b border-gray-100 dark:border-gray-800">
               <div
                 className={`transition-all duration-300 overflow-hidden ${editing === "email" ? "max-h-96 opacity-100" : editing ? "max-h-0 opacity-0" : "max-h-96 opacity-100"}`}
               >
                 {editing === "email" ? (
                   <div className="space-y-3 animate-slideDown">
-                    <label className="text-sm font-medium text-gray-900 block">
+                    <label className="text-sm font-semibold text-gray-900 dark:text-white block">
                       Email Address
                     </label>
                     <input
                       type="email"
                       value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
-                      className="w-full max-w-xs text-sm text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-gray-500 transition"
+                      className="w-full max-w-xs text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition"
                       required
                     />
-                    <label className="text-sm font-medium text-gray-900 block">
+                    <label className="text-sm font-semibold text-gray-900 dark:text-white block">
                       Current Password
                     </label>
                     <input
                       type="password"
                       value={emailPassword}
                       onChange={(e) => setEmailPassword(e.target.value)}
-                      className="w-full max-w-xs text-sm text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-gray-500 transition"
+                      className="w-full max-w-xs text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition"
                       placeholder="Confirm to change email"
                       required
                     />
                     {emailMsg && (
                       <p
-                        className={`text-xs flex items-center gap-1.5 ${emailMsg.type === "success" ? "text-emerald-600" : "text-red-500"}`}
+                        className={`text-xs flex items-center gap-1.5 font-medium ${emailMsg.type === "success" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}
                       >
                         {emailMsg.type === "success" ? (
                           <CheckCircle2 size={12} />
@@ -387,14 +414,14 @@ export function Settings() {
                         type="submit"
                         onClick={handleChangeEmail}
                         disabled={emailLoading}
-                        className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                        className="px-4 py-2 text-sm font-semibold text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50 transition"
                       >
                         {emailLoading ? "Saving..." : "Save"}
                       </button>
                       <button
                         type="button"
                         onClick={handleCancel}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
                       >
                         Cancel
                       </button>
@@ -404,16 +431,16 @@ export function Settings() {
                   !editing && (
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
                           Email
                         </p>
-                        <p className="text-sm text-gray-500 mt-0.5">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                           {user?.email}
                         </p>
                       </div>
                       <button
                         onClick={() => handleEdit("email")}
-                        className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+                        className="px-3 py-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
                       >
                         Edit
                       </button>
@@ -424,16 +451,16 @@ export function Settings() {
             </div>
 
             {/* Member Since */}
-            <div className="py-4 border-b border-gray-100">
+            <div className="py-4 border-b border-gray-100 dark:border-gray-800">
               <div
                 className={`transition-all duration-300 overflow-hidden ${editing ? "max-h-0 opacity-0" : "max-h-96 opacity-100"}`}
               >
                 {!editing && (
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
                       Member since
                     </p>
-                    <p className="text-sm text-gray-500 mt-0.5">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                       {user?.createdAt
                         ? new Date(user.createdAt).toLocaleDateString("en-US", {
                             year: "numeric",
@@ -449,14 +476,17 @@ export function Settings() {
 
             {/* Danger Zone */}
             <div className="py-4 mt-4">
-              <div className="bg-white border border-red-200 rounded-xl p-5">
+              <div className="bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 rounded-xl p-5">
                 <div className="flex items-center gap-3 mb-4">
-                  <Trash2 size={18} className="text-red-500" />
+                  <Trash2
+                    size={18}
+                    className="text-red-500 dark:text-red-400"
+                  />
                   <div>
-                    <p className="text-sm font-semibold text-red-600">
+                    <p className="text-sm font-semibold text-red-600 dark:text-red-400">
                       Danger Zone
                     </p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       Permanently delete your account and all associated data
                     </p>
                   </div>
@@ -467,9 +497,9 @@ export function Settings() {
                 >
                   {editing === "delete" ? (
                     <div className="space-y-3 animate-slideDown">
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-600 dark:text-gray-300">
                         To confirm, type{" "}
-                        <span className="font-mono font-semibold text-gray-900 bg-gray-100 px-1.5 py-0.5 rounded">
+                        <span className="font-mono font-semibold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
                           delete my account
                         </span>{" "}
                         below:
@@ -478,21 +508,21 @@ export function Settings() {
                         type="text"
                         value={deleteConfirm}
                         onChange={(e) => setDeleteConfirm(e.target.value)}
-                        className="w-full text-sm text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-red-500 transition"
+                        className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-red-500 transition"
                         placeholder="delete my account"
                       />
-                      <label className="text-sm font-medium text-gray-900 block">
+                      <label className="text-sm font-semibold text-gray-900 dark:text-white block">
                         Your Password
                       </label>
                       <input
                         type="password"
                         value={deletePassword}
                         onChange={(e) => setDeletePassword(e.target.value)}
-                        className="w-full text-sm text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-red-500 transition"
+                        className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-red-500 transition"
                         placeholder="Confirm your password"
                       />
                       {deleteMsg && (
-                        <p className="text-xs flex items-center gap-1.5 text-red-500">
+                        <p className="text-xs flex items-center gap-1.5 font-medium text-red-500 dark:text-red-400">
                           <AlertCircle size={12} />
                           {deleteMsg.text}
                         </p>
@@ -506,14 +536,14 @@ export function Settings() {
                             !deletePassword ||
                             deleteLoading
                           }
-                          className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
+                          className="px-4 py-2 text-sm font-semibold text-white bg-red-600 dark:bg-red-500 rounded-lg hover:bg-red-700 dark:hover:bg-red-600 disabled:opacity-50 transition"
                         >
                           {deleteLoading ? "Deleting..." : "Delete Account"}
                         </button>
                         <button
                           type="button"
                           onClick={handleCancel}
-                          className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+                          className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
                         >
                           Cancel
                         </button>
@@ -523,7 +553,7 @@ export function Settings() {
                     !editing && (
                       <button
                         onClick={() => handleEdit("delete")}
-                        className="px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition"
+                        className="px-4 py-2 text-sm font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition"
                       >
                         Delete Account
                       </button>
@@ -539,39 +569,39 @@ export function Settings() {
         {activeTab === "security" && (
           <div className="flex flex-col">
             {/* Password */}
-            <div className="py-4 border-b border-gray-100">
+            <div className="py-4 border-b border-gray-100 dark:border-gray-800">
               <div
                 className={`transition-all duration-300 overflow-hidden ${editing === "password" ? "max-h-96 opacity-100" : editing ? "max-h-0 opacity-0" : "max-h-96 opacity-100"}`}
               >
                 {editing === "password" ? (
                   <div className="space-y-3 animate-slideDown">
-                    <label className="text-sm font-medium text-gray-900 block">
+                    <label className="text-sm font-semibold text-gray-900 dark:text-white block">
                       Current Password
                     </label>
                     <input
                       type="password"
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="w-full max-w-xs text-sm text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-gray-500 transition"
+                      className="w-full max-w-xs text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition"
                       required
                     />
-                    <label className="text-sm font-medium text-gray-900 block">
+                    <label className="text-sm font-semibold text-gray-900 dark:text-white block">
                       New Password
                     </label>
                     <input
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full max-w-xs text-sm text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-gray-500 transition"
+                      className="w-full max-w-xs text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition"
                       required
                       minLength={6}
                     />
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                       At least 6 characters
                     </p>
                     {pwMsg && (
                       <p
-                        className={`text-xs flex items-center gap-1.5 ${pwMsg.type === "success" ? "text-emerald-600" : "text-red-500"}`}
+                        className={`text-xs flex items-center gap-1.5 font-medium ${pwMsg.type === "success" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}
                       >
                         {pwMsg.type === "success" ? (
                           <CheckCircle2 size={12} />
@@ -586,14 +616,14 @@ export function Settings() {
                         type="submit"
                         onClick={handleChangePassword}
                         disabled={pwLoading}
-                        className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                        className="px-4 py-2 text-sm font-semibold text-white bg-gray-900 dark:bg-white dark:text-gray-900 rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50 transition"
                       >
                         {pwLoading ? "Saving..." : "Save"}
                       </button>
                       <button
                         type="button"
                         onClick={handleCancel}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+                        className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
                       >
                         Cancel
                       </button>
@@ -603,14 +633,16 @@ export function Settings() {
                   !editing && (
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
                           Password
                         </p>
-                        <p className="text-sm text-gray-500 mt-0.5">••••••••</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                          ••••••••
+                        </p>
                       </div>
                       <button
                         onClick={() => handleEdit("password")}
-                        className="px-3 py-1.5 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50 transition"
+                        className="px-3 py-1.5 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
                       >
                         Edit
                       </button>
@@ -621,16 +653,16 @@ export function Settings() {
             </div>
 
             {/* Active Session */}
-            <div className="py-4 border-b border-gray-100">
+            <div className="py-4 border-b border-gray-100 dark:border-gray-800">
               <div
                 className={`transition-all duration-300 overflow-hidden ${editing ? "max-h-0 opacity-0" : "max-h-96 opacity-100"}`}
               >
                 {!editing && (
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
                       Active Session
                     </p>
-                    <p className="text-sm text-gray-500 mt-0.5">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                       You're signed in on this device
                     </p>
                   </div>
@@ -645,17 +677,29 @@ export function Settings() {
               >
                 {!editing && (
                   <div>
-                    <p className="text-sm font-medium text-gray-900 mb-3">
-                      Login History
-                    </p>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        Login History
+                      </p>
+                      {loginHistory.length > 0 && (
+                        <button
+                          onClick={handleClearSessions}
+                          className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline"
+                        >
+                          Clear all sessions
+                        </button>
+                      )}
+                    </div>
                     {historyLoading ? (
-                      <p className="text-sm text-gray-400">Loading...</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Loading...
+                      </p>
                     ) : loginHistory.length === 0 ? (
-                      <p className="text-sm text-gray-400">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
                         No login history available
                       </p>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                         {loginHistory.map((entry, index) => {
                           const browser = getBrowser(entry.userAgent);
                           const os = getOS(entry.userAgent);
@@ -665,22 +709,25 @@ export function Settings() {
                           return (
                             <div
                               key={entry.id}
-                              className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-gray-50 border border-gray-100"
+                              className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700"
                             >
-                              <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0">
-                                <Monitor size={14} className="text-gray-500" />
+                              <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0">
+                                <Monitor
+                                  size={14}
+                                  className="text-gray-500 dark:text-gray-300"
+                                />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">
+                                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                                   {deviceInfo || "Unknown device"}
                                 </p>
-                                <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
+                                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                   <span className="flex items-center gap-1">
                                     <Clock size={10} />
                                     {formatTimeAgo(entry.createdAt)}
                                   </span>
                                   {index === 0 && (
-                                    <span className="text-emerald-600 font-medium">
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
                                       Current session
                                     </span>
                                   )}
