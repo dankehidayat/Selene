@@ -1,0 +1,11 @@
+{
+  "name": "selene",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "frontend:only": "npm run dev --workspace=@selene/frontend"
+  }
+}

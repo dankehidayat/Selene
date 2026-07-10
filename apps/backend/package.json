@@ -1,0 +1,25 @@
+{
+  "name": "@selene/backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --env-file=.env run src/index.ts",
+    "db:generate": "bunx selene generate",
+    "db:migrate": "bunx selene migrate dev --name init",
+    "db:push": "bunx selene db push"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@selene/client": "^6.0.0",
+    "bcryptjs": "^2.4.3",
+    "fastify": "^4.28.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^20.14.0",
+    "selene": "^6.0.0",
+    "typescript": "^5.5.0"
+  }
+}

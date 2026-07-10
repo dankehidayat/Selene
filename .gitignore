@@ -1,0 +1,72 @@
+# .gitignore
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+ehthumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Prisma
+prisma/.env
+
+# Bun
+bun.lock
+
+# Vite
+apps/frontend/dist/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Environment variable backup
+*.env.bak
+*.env.backup
+
+# Archive
+*.zip
+*.tar.gz
+*.rar
+
+# Certificates
+*.pem
+*.crt
+*.key
