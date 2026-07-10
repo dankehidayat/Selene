@@ -48,7 +48,7 @@ services:
     container_name: selene-frontend
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "4173:3000"
     networks:
       - selene
 
