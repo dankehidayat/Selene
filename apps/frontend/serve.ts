@@ -1,9 +1,10 @@
 // apps/frontend/serve.ts
-import { serve } from "bun";
-import { join } from "path";
 import { readFileSync, existsSync, statSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
-const DIST = join(import.meta.dirname, "dist");
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DIST = join(__dirname, "dist");
 const PORT = parseInt(process.env.PORT || "3000");
 
 const MIME: Record<string, string> = {
@@ -19,20 +20,16 @@ const MIME: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-serve({
+const server = Bun.serve({
   port: PORT,
   fetch(req: Request) {
     const url = new URL(req.url);
     let pathname = url.pathname;
-
     if (pathname === "/") pathname = "/index.html";
-
     const filePath = join(DIST, pathname);
-
     if (existsSync(filePath) && statSync(filePath).isFile()) {
       const ext = pathname.substring(pathname.lastIndexOf("."));
       const isHash = /-[a-f0-9]{8,}\./.test(pathname);
-
       return new Response(readFileSync(filePath), {
         headers: {
           "Content-Type": MIME[ext] || "application/octet-stream",
@@ -42,8 +39,6 @@ serve({
         },
       });
     }
-
-    // SPA fallback
     return new Response(readFileSync(join(DIST, "index.html")), {
       headers: {
         "Content-Type": "text/html; charset=utf-8",

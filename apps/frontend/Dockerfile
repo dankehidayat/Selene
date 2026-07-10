@@ -1,3 +1,4 @@
+# apps/frontend/Dockerfile
 FROM oven/bun:1.2.12-alpine AS builder
 
 WORKDIR /app
