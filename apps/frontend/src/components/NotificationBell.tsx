@@ -1,12 +1,11 @@
 // apps/frontend/src/components/NotificationBell.tsx
-// Change the fetchNotifications function to use React Query or add a simple cache:
-
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Bell, Zap, Thermometer, Shield, Activity } from "lucide-react";
 import { useAuth } from "@/services/auth";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const POLL_INTERVAL = 60_000; // Poll every 60 seconds
 
 interface Notification {
   id: string;
@@ -31,44 +30,42 @@ const typeColors: Record<string, string> = {
   system: "text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30",
 };
 
-// Global cache to persist across page navigations
-let notificationCache: Notification[] = [];
-let unreadCache = 0;
-let lastFetchTime = 0;
-
 export function NotificationBell() {
   const { token } = useAuth();
-  const [notifications, setNotifications] =
-    useState<Notification[]>(notificationCache);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(unreadCache);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchNotifications = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE}/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.notifications) {
+        setNotifications(data.notifications);
+        setUnreadCount(
+          data.unreadCount ??
+            data.notifications.filter((n: Notification) => !n.read).length,
+        );
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     if (!token) return;
 
-    // Only fetch if cache is older than 30 seconds
-    const shouldFetch = Date.now() - lastFetchTime > 30000;
+    // Fetch immediately on mount
+    fetchNotifications();
 
-    if (shouldFetch) {
-      fetch(`${API_BASE}/notifications`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.notifications) {
-            setNotifications(data.notifications);
-            setUnreadCount(
-              data.unreadCount ??
-                data.notifications.filter((n: Notification) => !n.read).length,
-            );
-            notificationCache = data.notifications;
-            unreadCache =
-              data.unreadCount ??
-              data.notifications.filter((n: Notification) => !n.read).length;
-            lastFetchTime = Date.now();
-          }
-        });
-    }
+    // Then poll every 60 seconds
+    intervalRef.current = setInterval(fetchNotifications, POLL_INTERVAL);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [token]);
 
   const markAsRead = async (id: string) => {
@@ -80,10 +77,6 @@ export function NotificationBell() {
       prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
     );
     setUnreadCount((prev) => Math.max(0, prev - 1));
-    notificationCache = notificationCache.map((n) =>
-      n.id === id ? { ...n, read: true } : n,
-    );
-    unreadCache = Math.max(0, unreadCache - 1);
   };
 
   const markAllRead = async () => {
@@ -93,8 +86,6 @@ export function NotificationBell() {
     });
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     setUnreadCount(0);
-    notificationCache = notificationCache.map((n) => ({ ...n, read: true }));
-    unreadCache = 0;
   };
 
   const formatTime = (dateStr: string) => {
