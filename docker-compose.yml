@@ -1,0 +1,56 @@
+# docker-compose.yml (project root)
+services:
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    container_name: selene-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=8787
+    networks:
+      - selene
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        - VITE_BLYNK_SERVER_URL=${VITE_BLYNK_SERVER_URL}
+        - VITE_BLYNK_AUTH_TOKEN=${VITE_BLYNK_AUTH_TOKEN}
+    container_name: selene-frontend
+    restart: unless-stopped
+    networks:
+      - selene
+    volumes:
+      - frontend_data:/srv
+
+  caddy:
+    image: caddy:alpine
+    container_name: selene-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - frontend_data:/srv
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - selene
+    depends_on:
+      - backend
+      - frontend
+
+networks:
+  selene:
+    driver: bridge
+
+volumes:
+  frontend_data:
+  caddy_data:
+  caddy_config:
