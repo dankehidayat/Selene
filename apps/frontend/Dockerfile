@@ -1,4 +1,3 @@
-# apps/frontend/Dockerfile
 FROM oven/bun:1-alpine AS builder
 
 WORKDIR /app
@@ -19,6 +18,7 @@ ENV VITE_BLYNK_AUTH_TOKEN=$VITE_BLYNK_AUTH_TOKEN
 RUN bun run build
 
 FROM alpine:latest
+RUN apk add --no-cache busybox-extras
 COPY --from=builder /app/dist /srv
 EXPOSE 80
-CMD ["sh", "-c", "tail -f /dev/null"]
+CMD ["httpd", "-f", "-h", "/srv", "-p", "80"]
