@@ -230,7 +230,7 @@ const backendPackages: PackageInfo[] = [
 
 const iotPackages: PackageInfo[] = [
   {
-    name: "ESP32",
+    name: "ESP32 DevKitC V2",
     version: "—",
     license: "Open Source",
     url: "https://www.espressif.com",
@@ -251,15 +251,15 @@ const iotPackages: PackageInfo[] = [
     description: "Basic digital temperature and humidity sensor",
   },
   {
-    name: "Arduino Framework",
-    version: "—",
+    name: "Arduino IDE",
+    version: "2.3.8",
     license: "LGPL",
     url: "https://www.arduino.cc",
     description: "Open-source electronics prototyping platform",
   },
   {
-    name: "Blynk IoT",
-    version: "—",
+    name: "Blynk",
+    version: "2.27.34",
     license: "AGPL-3.0",
     url: "https://blynk.io",
     description: "IoT platform for connecting devices to the cloud",
