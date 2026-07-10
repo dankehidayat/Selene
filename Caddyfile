@@ -1,4 +1,4 @@
-# Caddyfile
+# Caddyfile 
 selene.dankehidayat.my.id {
     root * /srv
     file_server
@@ -7,4 +7,8 @@ selene.dankehidayat.my.id {
     handle /api/* {
         reverse_proxy backend:8787
     }
+}
+
+api.dankehidayat.my.id {
+    reverse_proxy backend:8787
 }
