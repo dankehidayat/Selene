@@ -1,4 +1,4 @@
-FROM oven/bun:1-alpine AS builder
+FROM oven/bun:1.2.12-alpine AS builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ ENV VITE_BLYNK_AUTH_TOKEN=$VITE_BLYNK_AUTH_TOKEN
 
 RUN bun run build
 
-FROM oven/bun:1-alpine
+FROM oven/bun:1.2.12-alpine
 WORKDIR /app
 
 COPY --from=builder /app/dist ./dist
