@@ -1,6 +1,14 @@
-// [apps/frontend] src/pages/Impressum.tsx
+// apps/frontend/src/pages/Impressum.tsx
 import { useState } from "react";
-import { ExternalLink } from "lucide-react";
+import {
+  ExternalLink,
+  Mail,
+  User,
+  GraduationCap,
+  School,
+  Globe,
+  Code,
+} from "lucide-react";
 import { ChartCard } from "@/components/ChartCard";
 
 interface PackageInfo {
@@ -417,24 +425,149 @@ export function Impressum() {
               </p>
             </div>
           </ChartCard>
+
           <ChartCard title="Created By">
-            <div className="space-y-3">
-              <p className="text-base font-semibold text-gray-900 dark:text-white">
-                Danke Hidayat
-              </p>
-              <p className="text-sm text-gray-900 dark:text-white font-medium">
-                Vocational School of IPB University
-              </p>
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                <p className="text-sm text-gray-900 dark:text-white font-medium">
-                  Technology of Computer Engineering, IPB University
-                </p>
-                <p className="text-sm text-gray-900 dark:text-white font-medium">
-                  Email
-                </p>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                  <User size={18} className="text-gray-600 dark:text-white" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-gray-900 dark:text-white">
+                    Danke Hidayat
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                    Author & Developer
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                  <Mail size={18} className="text-gray-600 dark:text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Email
+                  </p>
+                  <a
+                    href="mailto:dnk.hidayat@gmail.com"
+                    className="text-sm text-gray-900 dark:text-white font-medium hover:text-blue-600 dark:hover:text-blue-400 transition"
+                  >
+                    dnk.hidayat@gmail.com
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                  <School size={18} className="text-gray-600 dark:text-white" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Institution
+                  </p>
+                  <p className="text-sm text-gray-900 dark:text-white font-medium">
+                    Vocational School of IPB University
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
+                  <GraduationCap
+                    size={18}
+                    className="text-gray-600 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Program
+                  </p>
+                  <p className="text-sm text-gray-900 dark:text-white font-medium">
+                    Technology of Computer Engineering
+                  </p>
+                </div>
               </div>
             </div>
           </ChartCard>
+
+          <ChartCard title="Links">
+            <div className="space-y-3">
+              <a
+                href="https://www.linkedin.com/in/dankehidayat/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition group"
+              >
+                <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
+                  <Globe
+                    size={18}
+                    className="text-blue-600 dark:text-blue-400"
+                  />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">
+                    LinkedIn
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    linkedin.com/in/dankehidayat
+                  </p>
+                </div>
+                <ExternalLink
+                  size={14}
+                  className="text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition ml-auto"
+                />
+              </a>
+
+              <a
+                href="https://bsky.app/profile/dankehidayat.my.id"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition group"
+              >
+                <div className="h-10 w-10 rounded-full bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center shrink-0">
+                  <Globe size={18} className="text-sky-600 dark:text-sky-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-sky-600 dark:group-hover:text-sky-400 transition">
+                    Bluesky
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    bsky.app/profile/dankehidayat.my.id
+                  </p>
+                </div>
+                <ExternalLink
+                  size={14}
+                  className="text-gray-400 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition ml-auto"
+                />
+              </a>
+
+              <a
+                href="https://github.com/dankehidayat/selene"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition group"
+              >
+                <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0">
+                  <Code size={18} className="text-gray-700 dark:text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-gray-900 transition">
+                    GitHub
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    github.com/dankehidayat/selene
+                  </p>
+                </div>
+                <ExternalLink
+                  size={14}
+                  className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-white transition ml-auto"
+                />
+              </a>
+            </div>
+          </ChartCard>
+
           <ChartCard title="Academic Context">
             <div className="space-y-3 text-sm text-gray-900 dark:text-white font-medium">
               <p>

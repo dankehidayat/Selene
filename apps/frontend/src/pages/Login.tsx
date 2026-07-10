@@ -77,7 +77,7 @@ export function Login() {
             Welcome back
           </h1>
           <p className="text-sm text-gray-900 dark:text-white mt-1 font-medium">
-            Sign in to your FlowPoint account
+            Sign in to your Selene account
           </p>
         </div>
 
