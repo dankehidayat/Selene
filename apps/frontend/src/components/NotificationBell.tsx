@@ -85,6 +85,7 @@ export function NotificationBell() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: "{}",
       });
       const data = await res.json();
       if (data.success) {
@@ -104,6 +105,7 @@ export function NotificationBell() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: "{}",
       });
       const data = await res.json();
       if (data.success) {
