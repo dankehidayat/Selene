@@ -1,6 +1,7 @@
 // apps/frontend/src/pages/Analytics.tsx
 import { useState, useRef, useEffect } from "react";
 import * as Plot from "@observablehq/plot";
+import * as HoverCard from "@radix-ui/react-hover-card";
 import {
   ResponsiveContainer,
   BarChart,
@@ -26,6 +27,8 @@ import {
   TrendingUp,
   Gauge,
   PieChartIcon,
+  Info,
+  ChevronDown,
 } from "lucide-react";
 import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { StatCard } from "@/components/StatCard";
@@ -36,6 +39,7 @@ import {
   useFuzzyDistribution,
   useMembershipData,
   useDecisionSurface,
+  useClimateFuzzyDistribution,
 } from "@/services/api";
 
 const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
@@ -46,6 +50,13 @@ const FUZZY_COLORS: Record<string, string> = {
   WASTEFUL: "#e74c3c",
 };
 const COMFORT_COLORS: Record<string, string> = {
+  COLD: "#3B82F6",
+  COOL: "#06B6D4",
+  COMFORTABLE: "#10B981",
+  WARM: "#F59E0B",
+  HOT: "#EF4444",
+};
+const CLIMATE_FUZZY_COLORS: Record<string, string> = {
   COLD: "#3B82F6",
   COOL: "#06B6D4",
   COMFORTABLE: "#10B981",
@@ -214,8 +225,6 @@ function PieTooltip({
     </div>
   );
 }
-
-// Custom membership tooltip
 function MembershipTooltip({ active, payload, label }: TooltipBase) {
   if (!active || !payload?.length || !label) return null;
   return (
@@ -240,6 +249,79 @@ function MembershipTooltip({ active, payload, label }: TooltipBase) {
   );
 }
 
+// ── Info HoverCard Component ──────────────────────────────
+function InfoPopover({ title, content }: { title: string; content: string }) {
+  return (
+    <HoverCard.Root openDelay={200} closeDelay={100}>
+      <HoverCard.Trigger asChild>
+        <span className="inline-flex cursor-help">
+          <Info
+            size={13}
+            className="text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+          />
+        </span>
+      </HoverCard.Trigger>
+      <HoverCard.Portal>
+        <HoverCard.Content
+          side="top"
+          sideOffset={8}
+          className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-xl p-4 w-80 z-50"
+        >
+          <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
+            {title}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+            {content}
+          </p>
+        </HoverCard.Content>
+      </HoverCard.Portal>
+    </HoverCard.Root>
+  );
+}
+
+// ── Accordion Component ───────────────────────────────────
+function Accordion({
+  title,
+  defaultOpen,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
+
+  return (
+    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+      >
+        <span className="flex items-center gap-2">
+          {title}
+          <span className="text-xs font-normal text-gray-400">
+            (static reference data)
+          </span>
+        </span>
+        <ChevronDown
+          size={16}
+          className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      <div
+        className={`grid transition-all duration-200 ease-in-out ${
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="px-4 pb-4">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Observable Plot Components ─────────────────────────────
 function ObsScatter({
   data,
 }: {
@@ -285,6 +367,75 @@ function ObsScatter({
           stroke: "#F59E0B",
           strokeWidth: 1.5,
           strokeDasharray: "3,3",
+        }),
+      ],
+    });
+    ref.current.appendChild(plot);
+  }, [data]);
+  return <div ref={ref} className="flex justify-center overflow-visible" />;
+}
+
+function ObsClimateScatter({
+  data,
+}: {
+  data: Array<{ temperature: number; humidity: number; category: string }>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current || !data.length) return;
+    ref.current.innerHTML = "";
+    const plot = Plot.plot({
+      width: 500,
+      height: 350,
+      marginLeft: 50,
+      marginBottom: 35,
+      style: PLOT_STYLE,
+      color: {
+        legend: true,
+        domain: ["COLD", "COOL", "COMFORTABLE", "WARM", "HOT"],
+        range: [
+          CLIMATE_FUZZY_COLORS.COLD,
+          CLIMATE_FUZZY_COLORS.COOL,
+          CLIMATE_FUZZY_COLORS.COMFORTABLE,
+          CLIMATE_FUZZY_COLORS.WARM,
+          CLIMATE_FUZZY_COLORS.HOT,
+        ],
+      },
+      x: { label: "Temperature (°C)" },
+      y: { label: "Humidity (%)" },
+      marks: [
+        Plot.dot(data, {
+          x: "temperature",
+          y: "humidity",
+          fill: "category",
+          r: 5,
+          opacity: 0.7,
+          stroke: "#1E293B",
+          strokeWidth: 0.5,
+        }),
+        Plot.ruleX([24], {
+          stroke: "#3B82F6",
+          strokeWidth: 1.5,
+          strokeDasharray: "4,4",
+          opacity: 0.5,
+        }),
+        Plot.ruleX([28], {
+          stroke: "#F59E0B",
+          strokeWidth: 1.5,
+          strokeDasharray: "4,4",
+          opacity: 0.5,
+        }),
+        Plot.ruleY([50], {
+          stroke: "#3B82F6",
+          strokeWidth: 1.5,
+          strokeDasharray: "4,4",
+          opacity: 0.5,
+        }),
+        Plot.ruleY([70], {
+          stroke: "#EF4444",
+          strokeWidth: 1.5,
+          strokeDasharray: "4,4",
+          opacity: 0.5,
         }),
       ],
     });
@@ -487,16 +638,26 @@ function StatRow({ label, value }: { label: string; value?: string | number }) {
 export function Analytics() {
   const [energyRange, setEnergyRange] = useState<string>("7d");
   const [climateRange, setClimateRange] = useState<string>("7d");
+  const [climateFuzzyRange, setClimateFuzzyRange] = useState<string>("7d");
   const [activeTab, setActiveTab] = useState<
-    "energy" | "environment" | "fuzzy"
+    "energy" | "environment" | "fuzzy" | "climate-fuzzy"
   >("energy");
 
-  const { data: summary } = useAnalyticsSummary(energyRange as any);
-  const { data: history = [] } = useReadingHistory(energyRange as any);
-  const { data: climate } = useClimateSummary(climateRange as any);
-  const { data: fuzzy } = useFuzzyDistribution(energyRange);
+  const { data: summary, isLoading: summaryLoading } = useAnalyticsSummary(
+    energyRange as any,
+  );
+  const { data: history = [], isLoading: historyLoading } = useReadingHistory(
+    energyRange as any,
+  );
+  const { data: climate, isLoading: climateLoading } = useClimateSummary(
+    climateRange as any,
+  );
+  const { data: fuzzy, isLoading: fuzzyLoading } =
+    useFuzzyDistribution(energyRange);
   const { data: membership } = useMembershipData();
   const { data: decisionSurface } = useDecisionSurface();
+  const { data: climateFuzzy, isLoading: climateFuzzyLoading } =
+    useClimateFuzzyDistribution(climateFuzzyRange);
 
   const peakData =
     summary?.peakHours?.map((p: any) => ({
@@ -511,6 +672,36 @@ export function Analytics() {
         { name: "ECONOMICAL", value: fuzzy.distribution?.ECONOMICAL ?? 0 },
         { name: "NORMAL", value: fuzzy.distribution?.NORMAL ?? 0 },
         { name: "WASTEFUL", value: fuzzy.distribution?.WASTEFUL ?? 0 },
+      ].filter((d) => d.value > 0)
+    : [];
+
+  const climatePieData = climateFuzzy
+    ? [
+        {
+          name: "COLD",
+          value: climateFuzzy.distribution?.COLD ?? 0,
+          color: CLIMATE_FUZZY_COLORS.COLD,
+        },
+        {
+          name: "COOL",
+          value: climateFuzzy.distribution?.COOL ?? 0,
+          color: CLIMATE_FUZZY_COLORS.COOL,
+        },
+        {
+          name: "COMFORTABLE",
+          value: climateFuzzy.distribution?.COMFORTABLE ?? 0,
+          color: CLIMATE_FUZZY_COLORS.COMFORTABLE,
+        },
+        {
+          name: "WARM",
+          value: climateFuzzy.distribution?.WARM ?? 0,
+          color: CLIMATE_FUZZY_COLORS.WARM,
+        },
+        {
+          name: "HOT",
+          value: climateFuzzy.distribution?.HOT ?? 0,
+          color: CLIMATE_FUZZY_COLORS.HOT,
+        },
       ].filter((d) => d.value > 0)
     : [];
 
@@ -541,22 +732,27 @@ export function Analytics() {
 
   return (
     <div className="space-y-8 font-sans">
-      <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
-        {(["energy", "environment", "fuzzy"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition font-sans ${activeTab === tab ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"}`}
-          >
-            {tab === "energy"
-              ? "Energy"
-              : tab === "environment"
-                ? "Environment"
-                : "Fuzzy Analysis"}
-          </button>
-        ))}
+      <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit flex-wrap">
+        {(["energy", "environment", "fuzzy", "climate-fuzzy"] as const).map(
+          (tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-semibold rounded-lg transition font-sans ${activeTab === tab ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"}`}
+            >
+              {tab === "energy"
+                ? "Energy"
+                : tab === "environment"
+                  ? "Environment"
+                  : tab === "fuzzy"
+                    ? "Energy Fuzzy"
+                    : "Climate Fuzzy"}
+            </button>
+          ),
+        )}
       </div>
 
+      {/* ═════ ENERGY ═════ */}
       {activeTab === "energy" && (
         <section className="space-y-6">
           <div className="flex items-center justify-between">
@@ -578,34 +774,42 @@ export function Analytics() {
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Avg Power"
-              value={summary?.power?.average ?? "—"}
+              value={summaryLoading ? "..." : (summary?.power?.average ?? "—")}
               unit="W"
               icon={Zap}
               iconColor="text-amber-500 dark:text-amber-400"
             />
             <StatCard
               label="Total Energy"
-              value={summary?.energy?.totalKwh ?? "—"}
+              value={
+                summaryLoading ? "..." : (summary?.energy?.totalKwh ?? "—")
+              }
               unit="kWh"
               icon={Activity}
               iconColor="text-cyan-500 dark:text-cyan-400"
             />
             <StatCard
               label="Est. Cost"
-              value={summary?.energy?.estimatedCost ?? "—"}
+              value={
+                summaryLoading ? "..." : (summary?.energy?.estimatedCost ?? "—")
+              }
               icon={DollarSign}
               iconColor="text-emerald-500 dark:text-emerald-400"
             />
             <StatCard
               label="Data Points"
-              value={summary?.dataPoints ?? "—"}
+              value={summaryLoading ? "..." : (summary?.dataPoints ?? "—")}
               icon={BarChart3}
               iconColor="text-violet-500 dark:text-violet-400"
             />
           </div>
           <div className="grid lg:grid-cols-2 gap-4">
             <ChartCard title="Power Distribution" chartId="chart-power-dist">
-              {history.length === 0 ? (
+              {historyLoading ? (
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  Loading...
+                </div>
+              ) : history.length === 0 ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
@@ -645,7 +849,11 @@ export function Analytics() {
               )}
             </ChartCard>
             <ChartCard title="Peak Usage Hours" chartId="chart-peak-hours">
-              {peakData.length === 0 ? (
+              {summaryLoading ? (
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  Loading...
+                </div>
+              ) : peakData.length === 0 ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
@@ -691,34 +899,45 @@ export function Analytics() {
               <div className="space-y-3">
                 <StatRow
                   label="Mean (μ)"
-                  value={`${summary?.power?.average} W`}
+                  value={summary ? `${summary.power?.average} W` : "..."}
                 />
-                <StatRow label="Median" value={`${summary?.power?.median} W`} />
+                <StatRow
+                  label="Median"
+                  value={summary ? `${summary.power?.median} W` : "..."}
+                />
                 <StatRow
                   label="Std Deviation (σ)"
-                  value={`±${summary?.power?.stdDeviation} W`}
+                  value={summary ? `±${summary.power?.stdDeviation} W` : "..."}
                 />
-                <StatRow label="Minimum" value={`${summary?.power?.min} W`} />
-                <StatRow label="Maximum" value={`${summary?.power?.max} W`} />
+                <StatRow
+                  label="Minimum"
+                  value={summary ? `${summary.power?.min} W` : "..."}
+                />
+                <StatRow
+                  label="Maximum"
+                  value={summary ? `${summary.power?.max} W` : "..."}
+                />
               </div>
             </ChartCard>
             <ChartCard title="Power Quality">
               <div className="space-y-3">
                 <StatRow
                   label="Avg Voltage"
-                  value={`${summary?.voltage?.average} V`}
+                  value={summary ? `${summary.voltage?.average} V` : "..."}
                 />
                 <StatRow
                   label="Avg cos φ"
-                  value={`${summary?.powerFactor?.average}`}
+                  value={summary ? `${summary.powerFactor?.average}` : "..."}
                 />
                 <StatRow
                   label="Avg Reactive Power"
-                  value={`${summary?.reactivePower?.average} VAR`}
+                  value={
+                    summary ? `${summary.reactivePower?.average} VAR` : "..."
+                  }
                 />
                 <StatRow
                   label="Reactive/Active Ratio"
-                  value={`${summary?.reactivePower?.ratio}`}
+                  value={summary ? `${summary.reactivePower?.ratio}` : "..."}
                 />
               </div>
             </ChartCard>
@@ -726,22 +945,22 @@ export function Analytics() {
               <div className="space-y-3">
                 <StatRow
                   label="Total Consumption"
-                  value={`${summary?.energy?.totalKwh} kWh`}
+                  value={summary ? `${summary.energy?.totalKwh} kWh` : "..."}
                 />
                 <StatRow
                   label="Estimated Cost"
-                  value={summary?.energy?.estimatedCost ?? "—"}
+                  value={summary?.energy?.estimatedCost ?? "..."}
                 />
                 <StatRow
                   label="Sample Size"
-                  value={`${summary?.dataPoints} readings`}
+                  value={summary ? `${summary.dataPoints} readings` : "..."}
                 />
                 <StatRow
                   label="Period"
                   value={
                     summary
                       ? `${new Date(summary.timeSpan.from).toLocaleDateString()} – ${new Date(summary.timeSpan.to).toLocaleDateString()}`
-                      : "—"
+                      : "..."
                   }
                 />
               </div>
@@ -750,6 +969,7 @@ export function Analytics() {
         </section>
       )}
 
+      {/* ═════ ENVIRONMENT ═════ */}
       {activeTab === "environment" && (
         <section className="space-y-6">
           <div className="flex items-center justify-between">
@@ -771,28 +991,38 @@ export function Analytics() {
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Avg Temp"
-              value={climate?.temperature?.average ?? "—"}
+              value={
+                climateLoading ? "..." : (climate?.temperature?.average ?? "—")
+              }
               unit="°C"
               icon={Thermometer}
               iconColor="text-rose-500 dark:text-rose-400"
             />
             <StatCard
               label="Avg Humidity"
-              value={climate?.humidity?.average ?? "—"}
+              value={
+                climateLoading ? "..." : (climate?.humidity?.average ?? "—")
+              }
               unit="%"
               icon={Droplets}
               iconColor="text-blue-500 dark:text-blue-400"
             />
             <StatCard
               label="Dew Point"
-              value={climate?.dewPoint?.average ?? "—"}
+              value={
+                climateLoading ? "..." : (climate?.dewPoint?.average ?? "—")
+              }
               unit="°C"
               icon={Gauge}
               iconColor="text-cyan-500 dark:text-cyan-400"
             />
             <StatCard
               label="Correlation"
-              value={climate?.correlation?.tempHumidity ?? "—"}
+              value={
+                climateLoading
+                  ? "..."
+                  : (climate?.correlation?.tempHumidity ?? "—")
+              }
               icon={TrendingUp}
               iconColor="text-violet-500 dark:text-violet-400"
             />
@@ -802,7 +1032,11 @@ export function Analytics() {
               title="Hourly Climate Pattern"
               chartId="chart-hourly-climate"
             >
-              {hourlyClimate.length === 0 ? (
+              {climateLoading ? (
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  Loading...
+                </div>
+              ) : hourlyClimate.length === 0 ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
@@ -869,7 +1103,11 @@ export function Analytics() {
               title="Comfort Distribution"
               chartId="chart-comfort-dist"
             >
-              {comfortData.length === 0 ? (
+              {climateLoading ? (
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  Loading...
+                </div>
+              ) : comfortData.length === 0 ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
@@ -915,27 +1153,31 @@ export function Analytics() {
               <div className="space-y-3">
                 <StatRow
                   label="Mean (μ)"
-                  value={`${climate?.temperature?.average} °C`}
+                  value={climate ? `${climate.temperature?.average} °C` : "..."}
                 />
                 <StatRow
                   label="Median"
-                  value={`${climate?.temperature?.median} °C`}
+                  value={climate ? `${climate.temperature?.median} °C` : "..."}
                 />
                 <StatRow
                   label="Std Deviation (σ)"
-                  value={`±${climate?.temperature?.stdDeviation} °C`}
+                  value={
+                    climate ? `±${climate.temperature?.stdDeviation} °C` : "..."
+                  }
                 />
                 <StatRow
                   label="Minimum"
-                  value={`${climate?.temperature?.min} °C`}
+                  value={climate ? `${climate.temperature?.min} °C` : "..."}
                 />
                 <StatRow
                   label="Maximum"
-                  value={`${climate?.temperature?.max} °C`}
+                  value={climate ? `${climate.temperature?.max} °C` : "..."}
                 />
                 <StatRow
                   label="Degree-Hours (>18°C)"
-                  value={`${climate?.temperature?.degreeHours}`}
+                  value={
+                    climate ? `${climate.temperature?.degreeHours}` : "..."
+                  }
                 />
               </div>
             </ChartCard>
@@ -943,27 +1185,31 @@ export function Analytics() {
               <div className="space-y-3">
                 <StatRow
                   label="Mean (μ)"
-                  value={`${climate?.humidity?.average} %`}
+                  value={climate ? `${climate.humidity?.average} %` : "..."}
                 />
                 <StatRow
                   label="Median"
-                  value={`${climate?.humidity?.median} %`}
+                  value={climate ? `${climate.humidity?.median} %` : "..."}
                 />
                 <StatRow
                   label="Std Deviation (σ)"
-                  value={`±${climate?.humidity?.stdDeviation} %`}
+                  value={
+                    climate ? `±${climate.humidity?.stdDeviation} %` : "..."
+                  }
                 />
                 <StatRow
                   label="Minimum"
-                  value={`${climate?.humidity?.min} %`}
+                  value={climate ? `${climate.humidity?.min} %` : "..."}
                 />
                 <StatRow
                   label="Maximum"
-                  value={`${climate?.humidity?.max} %`}
+                  value={climate ? `${climate.humidity?.max} %` : "..."}
                 />
                 <StatRow
                   label="Temp-Humidity Corr"
-                  value={`${climate?.correlation?.tempHumidity}`}
+                  value={
+                    climate ? `${climate.correlation?.tempHumidity}` : "..."
+                  }
                 />
               </div>
             </ChartCard>
@@ -971,17 +1217,24 @@ export function Analytics() {
         </section>
       )}
 
+      {/* ═════ ENERGY FUZZY ═════ */}
       {activeTab === "fuzzy" && (
         <section className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Fuzzy Energy Analysis
+                Energy Fuzzy Analysis
               </h2>
-              <p className="text-sm text-gray-900 dark:text-white mt-1 font-medium">
-                Multi-variable fuzzy inference system for energy consumption
-                classification
-              </p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-sm text-gray-900 dark:text-white font-medium">
+                  Multi-variable fuzzy inference system for energy consumption
+                  classification
+                </p>
+                <InfoPopover
+                  title="IEEE 1159 & PLN Standards"
+                  content="Based on IEEE 1159-2019 recommended practice for monitoring electric power quality and PLN (Perusahaan Listrik Negara) standards requiring power factor ≥ 0.85. Uses Mamdani fuzzy inference with 15 rules across 4 input variables: voltage, active power, power factor, and reactive power. Categories: Economical (efficient), Normal (acceptable), Wasteful (needs attention)."
+                />
+              </div>
             </div>
             <RangeSelect
               options={RANGE_OPTIONS}
@@ -992,25 +1245,31 @@ export function Analytics() {
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Economical"
-              value={fuzzy?.distribution?.ECONOMICAL ?? "—"}
+              value={
+                fuzzyLoading ? "..." : (fuzzy?.distribution?.ECONOMICAL ?? "—")
+              }
               icon={PieChartIcon}
               iconColor="text-emerald-500 dark:text-emerald-400"
             />
             <StatCard
               label="Normal"
-              value={fuzzy?.distribution?.NORMAL ?? "—"}
+              value={
+                fuzzyLoading ? "..." : (fuzzy?.distribution?.NORMAL ?? "—")
+              }
               icon={PieChartIcon}
               iconColor="text-blue-500 dark:text-blue-400"
             />
             <StatCard
               label="Wasteful"
-              value={fuzzy?.distribution?.WASTEFUL ?? "—"}
+              value={
+                fuzzyLoading ? "..." : (fuzzy?.distribution?.WASTEFUL ?? "—")
+              }
               icon={PieChartIcon}
               iconColor="text-red-500 dark:text-red-400"
             />
             <StatCard
               label="Total"
-              value={fuzzy?.total ?? "—"}
+              value={fuzzyLoading ? "..." : (fuzzy?.total ?? "—")}
               icon={BarChart3}
               iconColor="text-violet-500 dark:text-violet-400"
             />
@@ -1020,7 +1279,11 @@ export function Analytics() {
               title="Distribution of Energy Categories"
               chartId="chart-fuzzy-pie"
             >
-              {pieData.length === 0 ? (
+              {fuzzyLoading ? (
+                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  Loading...
+                </div>
+              ) : pieData.length === 0 ? (
                 <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
@@ -1060,7 +1323,11 @@ export function Analytics() {
               title="Power vs Power Factor (Scatter)"
               chartId="chart-fuzzy-scatter"
             >
-              {!fuzzy?.scatterData?.length ? (
+              {fuzzyLoading ? (
+                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  Loading...
+                </div>
+              ) : !fuzzy?.scatterData?.length ? (
                 <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   No data
                 </div>
@@ -1071,136 +1338,42 @@ export function Analytics() {
           </div>
           <div className="grid lg:grid-cols-2 gap-4">
             <ChartCard
-              title="Voltage Membership Functions"
-              chartId="chart-voltage-mf"
+              title="Decision Surface (Power vs Power Factor)"
+              chartId="chart-decision-surface"
             >
-              {!membership ? (
-                <div className="flex h-[250px] items-center justify-center text-sm text-gray-900 dark:text-white">
+              {!decisionSurface || !fuzzy?.scatterData ? (
+                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   Loading...
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={membership.voltageMembership}>
-                    <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
-                    <XAxis dataKey="x" tick={CHART_FONT} />
-                    <YAxis domain={[0, 1]} tick={CHART_FONT} />
-                    <Tooltip content={<MembershipTooltip />} />
-                    <Legend
-                      wrapperStyle={{
-                        fontSize: 11,
-                        fontFamily: "Inter, sans-serif",
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="low"
-                      stroke="#EF4444"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Low"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="normal"
-                      stroke="#10B981"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Normal"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="high"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      dot={false}
-                      name="High"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <ObsDecisionSurface
+                  surface={decisionSurface}
+                  actual={fuzzy.scatterData}
+                />
               )}
             </ChartCard>
             <ChartCard
-              title="Power Membership Functions"
-              chartId="chart-power-mf"
+              title="Power Distribution by Category (Box Plot)"
+              chartId="chart-box-plot"
             >
-              {!membership ? (
-                <div className="flex h-[250px] items-center justify-center text-sm text-gray-900 dark:text-white">
+              {fuzzyLoading ? (
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
                   Loading...
                 </div>
+              ) : !fuzzy?.results?.length ? (
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  No data
+                </div>
               ) : (
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={membership.powerMembership}>
-                    <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
-                    <XAxis dataKey="x" tick={CHART_FONT} />
-                    <YAxis domain={[0, 1]} tick={CHART_FONT} />
-                    <Tooltip content={<MembershipTooltip />} />
-                    <Legend
-                      wrapperStyle={{
-                        fontSize: 11,
-                        fontFamily: "Inter, sans-serif",
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="economical"
-                      stroke="#2ecc71"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Economical"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="normal"
-                      stroke="#3498db"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Normal"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="wasteful"
-                      stroke="#e74c3c"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Wasteful"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <ObsBoxPlot
+                  data={fuzzy.results.map((d: any) => ({
+                    power: d.power,
+                    category: d.category,
+                  }))}
+                />
               )}
             </ChartCard>
           </div>
-          <ChartCard
-            title="Decision Surface (Power vs Power Factor)"
-            chartId="chart-decision-surface"
-          >
-            {!decisionSurface || !fuzzy?.scatterData ? (
-              <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
-                Loading...
-              </div>
-            ) : (
-              <ObsDecisionSurface
-                surface={decisionSurface}
-                actual={fuzzy.scatterData}
-              />
-            )}
-          </ChartCard>
-          <ChartCard
-            title="Power Distribution by Category (Box Plot)"
-            chartId="chart-box-plot"
-          >
-            {!fuzzy?.results?.length ? (
-              <div className="flex h-[280px] items-center justify-center text-sm text-gray-900 dark:text-white">
-                No data
-              </div>
-            ) : (
-              <ObsBoxPlot
-                data={fuzzy.results.map((d: any) => ({
-                  power: d.power,
-                  category: d.category,
-                }))}
-              />
-            )}
-          </ChartCard>
           <ChartCard
             title="Bland-Altman Analysis (Fuzzy vs Threshold)"
             chartId="chart-bland-altman"
@@ -1218,6 +1391,253 @@ export function Analytics() {
               />
             )}
           </ChartCard>
+          <Accordion title="Membership Functions">
+            <div className="grid lg:grid-cols-2 gap-4 pt-2">
+              <ChartCard
+                title="Voltage Membership Functions"
+                chartId="chart-voltage-mf"
+              >
+                {!membership ? (
+                  <div className="flex h-[250px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                    Loading...
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={membership.voltageMembership}>
+                      <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
+                      <XAxis dataKey="x" tick={CHART_FONT} />
+                      <YAxis domain={[0, 1]} tick={CHART_FONT} />
+                      <Tooltip content={<MembershipTooltip />} />
+                      <Legend
+                        wrapperStyle={{
+                          fontSize: 11,
+                          fontFamily: "Inter, sans-serif",
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="low"
+                        stroke="#EF4444"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Low"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="normal"
+                        stroke="#10B981"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Normal"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="high"
+                        stroke="#3B82F6"
+                        strokeWidth={2}
+                        dot={false}
+                        name="High"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </ChartCard>
+              <ChartCard
+                title="Power Membership Functions"
+                chartId="chart-power-mf"
+              >
+                {!membership ? (
+                  <div className="flex h-[250px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                    Loading...
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={membership.powerMembership}>
+                      <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
+                      <XAxis dataKey="x" tick={CHART_FONT} />
+                      <YAxis domain={[0, 1]} tick={CHART_FONT} />
+                      <Tooltip content={<MembershipTooltip />} />
+                      <Legend
+                        wrapperStyle={{
+                          fontSize: 11,
+                          fontFamily: "Inter, sans-serif",
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="economical"
+                        stroke="#2ecc71"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Economical"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="normal"
+                        stroke="#3498db"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Normal"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="wasteful"
+                        stroke="#e74c3c"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Wasteful"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </ChartCard>
+            </div>
+          </Accordion>
+        </section>
+      )}
+
+      {/* ═════ CLIMATE FUZZY ═════ */}
+      {activeTab === "climate-fuzzy" && (
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                Climate Fuzzy Analysis
+              </h2>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-sm text-gray-900 dark:text-white font-medium">
+                  Multi-variable fuzzy inference system for thermal comfort
+                  classification
+                </p>
+                <InfoPopover
+                  title="ASHRAE 55 & SNI 03-6572 Standards"
+                  content="Based on ASHRAE Standard 55-2020 (Thermal Environmental Conditions for Human Occupancy) and SNI 03-6572-2001 (Procedures for Designing Ventilation and Air Conditioning Systems in Buildings). Adapted for naturally ventilated buildings in tropical climates. Uses Mamdani fuzzy inference with 14 rules across 2 input variables: temperature and relative humidity. Categories: Cold (<22°C), Cool (22-25°C), Comfortable (24-28°C), Warm (27-31°C), Hot (>30°C)."
+                />
+              </div>
+            </div>
+            <RangeSelect
+              options={RANGE_OPTIONS}
+              value={climateFuzzyRange}
+              onChange={setClimateFuzzyRange}
+            />
+          </div>
+          <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
+            <StatCard
+              label="Cold"
+              value={
+                climateFuzzyLoading
+                  ? "..."
+                  : (climateFuzzy?.distribution?.COLD ?? "—")
+              }
+              icon={Thermometer}
+              iconColor="text-blue-500 dark:text-blue-400"
+            />
+            <StatCard
+              label="Cool"
+              value={
+                climateFuzzyLoading
+                  ? "..."
+                  : (climateFuzzy?.distribution?.COOL ?? "—")
+              }
+              icon={Thermometer}
+              iconColor="text-cyan-500 dark:text-cyan-400"
+            />
+            <StatCard
+              label="Comfortable"
+              value={
+                climateFuzzyLoading
+                  ? "..."
+                  : (climateFuzzy?.distribution?.COMFORTABLE ?? "—")
+              }
+              icon={Thermometer}
+              iconColor="text-emerald-500 dark:text-emerald-400"
+            />
+            <StatCard
+              label="Warm"
+              value={
+                climateFuzzyLoading
+                  ? "..."
+                  : (climateFuzzy?.distribution?.WARM ?? "—")
+              }
+              icon={Thermometer}
+              iconColor="text-amber-500 dark:text-amber-400"
+            />
+            <StatCard
+              label="Hot"
+              value={
+                climateFuzzyLoading
+                  ? "..."
+                  : (climateFuzzy?.distribution?.HOT ?? "—")
+              }
+              icon={Thermometer}
+              iconColor="text-red-500 dark:text-red-400"
+            />
+            <StatCard
+              label="Total"
+              value={climateFuzzyLoading ? "..." : (climateFuzzy?.total ?? "—")}
+              icon={BarChart3}
+              iconColor="text-violet-500 dark:text-violet-400"
+            />
+          </div>
+          <div className="grid lg:grid-cols-2 gap-4">
+            <ChartCard
+              title="Climate Comfort Distribution"
+              chartId="chart-climate-fuzzy-pie"
+            >
+              {climateFuzzyLoading ? (
+                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  Loading...
+                </div>
+              ) : climatePieData.length === 0 ? (
+                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  No data
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={350}>
+                  <PieChart
+                    margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+                  >
+                    <Pie
+                      data={climatePieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={110}
+                      paddingAngle={4}
+                      dataKey="value"
+                      label={({ name, percent }) =>
+                        `${name} ${(percent * 100).toFixed(0)}%`
+                      }
+                      labelLine={{ stroke: "#9CA3AF", strokeWidth: 1 }}
+                    >
+                      {climatePieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={<PieTooltip total={climateFuzzy?.total || 0} />}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
+            <ChartCard
+              title="Temperature vs Humidity Scatter"
+              chartId="chart-climate-fuzzy-scatter"
+            >
+              {climateFuzzyLoading ? (
+                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  Loading...
+                </div>
+              ) : !climateFuzzy?.scatterData?.length ? (
+                <div className="flex h-[350px] items-center justify-center text-sm text-gray-900 dark:text-white">
+                  No data
+                </div>
+              ) : (
+                <ObsClimateScatter data={climateFuzzy.scatterData} />
+              )}
+            </ChartCard>
+          </div>
         </section>
       )}
     </div>

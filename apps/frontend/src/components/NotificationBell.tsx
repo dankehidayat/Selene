@@ -36,6 +36,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef = useRef(true);
 
   const fetchNotifications = async () => {
     if (!token) return;
@@ -44,7 +45,7 @@ export function NotificationBell() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      if (data.notifications) {
+      if (mountedRef.current && data.notifications) {
         setNotifications(data.notifications);
         setUnreadCount(
           data.unreadCount ??
@@ -55,32 +56,59 @@ export function NotificationBell() {
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     if (!token) return;
+
+    // Fetch immediately on mount
     fetchNotifications();
+
+    // Then poll every 60 seconds
     intervalRef.current = setInterval(fetchNotifications, POLL_INTERVAL);
+
     return () => {
+      mountedRef.current = false;
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [token]);
 
+  // Refresh when token changes (login/logout)
+  useEffect(() => {
+    if (token) {
+      fetchNotifications();
+    } else {
+      setNotifications([]);
+      setUnreadCount(0);
+    }
+  }, [token]);
+
   const markAsRead = async (id: string) => {
-    await fetch(`${API_BASE}/notifications/${id}/read`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
-    );
-    setUnreadCount((prev) => Math.max(0, prev - 1));
+    try {
+      const res = await fetch(`${API_BASE}/notifications/${id}/read`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
+        );
+        setUnreadCount(data.unreadCount ?? Math.max(0, unreadCount - 1));
+      }
+    } catch {}
   };
 
   const markAllRead = async () => {
-    await fetch(`${API_BASE}/notifications/read-all`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    setUnreadCount(0);
+    try {
+      const res = await fetch(`${API_BASE}/notifications/read-all`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        setUnreadCount(0);
+      }
+    } catch {}
   };
 
   const formatTime = (dateStr: string) => {
@@ -136,7 +164,9 @@ export function NotificationBell() {
                 return (
                   <button
                     key={n.id}
-                    onClick={() => markAsRead(n.id)}
+                    onClick={() => {
+                      if (!n.read) markAsRead(n.id);
+                    }}
                     className={`w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition border-b border-gray-50 dark:border-gray-800 last:border-0 ${!n.read ? "bg-blue-50/30 dark:bg-blue-900/10" : ""}`}
                   >
                     <div className="flex gap-3">

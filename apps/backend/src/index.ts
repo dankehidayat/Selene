@@ -7,12 +7,12 @@ import { registerGlossaryRoutes } from "./routes/glossary";
 import { registerNotificationRoutes } from "./routes/notifications";
 import {
   classifyEnergyFuzzy,
+  classifyClimateFuzzy,
   generateMembershipData,
   generateDecisionSurface,
   generateBoxPlotData,
   generateBlandAltmanData,
 } from "./analytics/fuzzy";
-
 const app = Fastify({ logger: true });
 
 await app.register(cors, {
@@ -693,6 +693,53 @@ app.get("/api/analytics/bland-altman", async (request) => {
     reactive: r.reactivePower,
   }));
   return generateBlandAltmanData(input);
+});
+
+app.get("/api/analytics/climate-fuzzy-distribution", async (request) => {
+  const query = request.query as { range?: string };
+  const range = query.range ?? "7d";
+  const data = await fetchSheetData();
+  if (data.length === 0) return { error: "No data" };
+
+  const valid = data.filter((r: Reading) => r.parsedTs);
+  valid.sort(
+    (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
+  );
+  let filtered = valid;
+  if (range !== "all") {
+    const { from } = getRangeConfig(range);
+    filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
+  }
+
+  const results = filtered.map((r: Reading) => ({
+    ...classifyClimateFuzzy(r.temperature, r.humidity),
+    timestamp: r.parsedTs?.toISOString() || r.timestamp,
+    temperature: r.temperature,
+    humidity: r.humidity,
+  }));
+
+  const distribution: Record<string, number> = {
+    COLD: 0,
+    COOL: 0,
+    COMFORTABLE: 0,
+    WARM: 0,
+    HOT: 0,
+  };
+  const scatterData: Array<{
+    temperature: number;
+    humidity: number;
+    category: string;
+  }> = [];
+  for (const r of results) {
+    distribution[r.category]++;
+    scatterData.push({
+      temperature: r.temperature,
+      humidity: r.humidity,
+      category: r.category,
+    });
+  }
+
+  return { distribution, total: filtered.length, scatterData, results };
 });
 
 app.get("/health", async () => ({

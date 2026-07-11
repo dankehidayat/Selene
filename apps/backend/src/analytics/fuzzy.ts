@@ -1,11 +1,19 @@
-// [apps/backend] src/analytics/fuzzy.ts
+// apps/backend/src/analytics/fuzzy.ts
 export type EnergyCategory = "ECONOMICAL" | "NORMAL" | "WASTEFUL";
+export type ClimateCategory = "COLD" | "COOL" | "COMFORTABLE" | "WARM" | "HOT";
 
 export interface FuzzyResult {
   category: EnergyCategory;
   confidence: number;
   strengths: { economical: number; normal: number; wasteful: number };
 }
+
+export interface ClimateFuzzyResult {
+  category: ClimateCategory;
+  confidence: number;
+}
+
+// ==================== ENERGY FUZZY (15 RULES) ====================
 
 export function classifyEnergyFuzzy(
   voltage: number,
@@ -83,6 +91,114 @@ export function classifyEnergyFuzzy(
   };
 }
 
+// ==================== CLIMATE FUZZY (14 RULES) ====================
+// Based on ASHRAE 55-2020 and SNI 03-6572-2001
+// Adapted for naturally ventilated buildings in tropical climates (Jakarta, Indonesia)
+
+export function classifyClimateFuzzy(
+  temperature: number,
+  humidity: number,
+): ClimateFuzzyResult {
+  // Temperature membership
+  let t_cold = 0,
+    t_cool = 0,
+    t_comfortable = 0,
+    t_warm = 0,
+    t_hot = 0;
+
+  if (temperature <= 20) t_cold = 1;
+  else if (temperature <= 23) t_cold = (23 - temperature) / 3;
+
+  if (temperature >= 22 && temperature <= 24) t_cool = (temperature - 22) / 2;
+  else if (temperature > 24 && temperature <= 26)
+    t_cool = (26 - temperature) / 2;
+
+  if (temperature >= 24 && temperature <= 26)
+    t_comfortable = (temperature - 24) / 2;
+  else if (temperature > 26 && temperature <= 29)
+    t_comfortable = (29 - temperature) / 3;
+
+  if (temperature >= 27 && temperature <= 29) t_warm = (temperature - 27) / 2;
+  else if (temperature > 29 && temperature <= 32)
+    t_warm = (32 - temperature) / 3;
+
+  if (temperature >= 33) t_hot = 1;
+  else if (temperature >= 30) t_hot = (temperature - 30) / 3;
+
+  // Humidity membership
+  let h_dry = 0,
+    h_comfortable = 0,
+    h_humid = 0;
+
+  if (humidity <= 40) h_dry = 1;
+  else if (humidity <= 55) h_dry = (55 - humidity) / 15;
+
+  if (humidity >= 50 && humidity <= 60) h_comfortable = (humidity - 50) / 10;
+  else if (humidity > 60 && humidity <= 72)
+    h_comfortable = (72 - humidity) / 12;
+
+  if (humidity >= 80) h_humid = 1;
+  else if (humidity >= 68) h_humid = (humidity - 68) / 12;
+
+  // Rule base (14 rules)
+  let cold_strength = 0,
+    cool_strength = 0,
+    comfortable_strength = 0,
+    warm_strength = 0,
+    hot_strength = 0;
+
+  cold_strength = Math.max(cold_strength, t_cold);
+  cold_strength = Math.max(cold_strength, Math.min(t_cool, h_dry));
+
+  cool_strength = Math.max(cool_strength, Math.min(t_cool, h_comfortable));
+  cool_strength = Math.max(cool_strength, Math.min(t_comfortable, h_dry));
+
+  comfortable_strength = Math.max(
+    comfortable_strength,
+    Math.min(t_comfortable, h_comfortable),
+  );
+  comfortable_strength = Math.max(
+    comfortable_strength,
+    Math.min(t_comfortable, h_humid),
+  );
+  comfortable_strength = Math.max(
+    comfortable_strength,
+    Math.min(t_warm, h_comfortable),
+  );
+
+  warm_strength = Math.max(warm_strength, Math.min(t_warm, h_dry));
+  warm_strength = Math.max(warm_strength, Math.min(t_warm, h_humid));
+  warm_strength = Math.max(warm_strength, Math.min(t_hot, h_comfortable));
+  warm_strength = Math.max(warm_strength, Math.min(t_comfortable, h_dry));
+
+  hot_strength = Math.max(hot_strength, t_hot);
+  hot_strength = Math.max(hot_strength, Math.min(t_hot, h_humid));
+  hot_strength = Math.max(hot_strength, Math.min(t_warm, h_dry));
+
+  const strengths = [
+    cold_strength,
+    cool_strength,
+    comfortable_strength,
+    warm_strength,
+    hot_strength,
+  ];
+  const categories: ClimateCategory[] = [
+    "COLD",
+    "COOL",
+    "COMFORTABLE",
+    "WARM",
+    "HOT",
+  ];
+  const maxIdx = strengths.indexOf(Math.max(...strengths));
+
+  return {
+    category: categories[maxIdx],
+    confidence: strengths[maxIdx],
+  };
+}
+
+// ==================== MEMBERSHIP DATA GENERATORS ====================
+
 export function generateMembershipData() {
   const voltageRange = Array.from({ length: 61 }, (_, i) => 190 + i);
   const powerRange = Array.from({ length: 151 }, (_, i) => i);
@@ -132,16 +248,13 @@ export function generateDecisionSurface() {
     { length: 15 },
     (_, i) => +(0.3 + i * 0.05).toFixed(2),
   );
-
   const surface: Array<{ power: number; pf: number; category: string }> = [];
-
   for (const pf of pfRange) {
     for (const power of pRange) {
       const result = classifyEnergyFuzzy(220, power, pf, 20);
       surface.push({ power, pf, category: result.category });
     }
   }
-
   return surface;
 }
 
@@ -149,7 +262,6 @@ export function generateBoxPlotData(
   data: Array<{ power: number; category: string }>,
 ) {
   const categories = ["ECONOMICAL", "NORMAL", "WASTEFUL"];
-
   return categories
     .map((cat) => {
       const values = data
@@ -157,13 +269,11 @@ export function generateBoxPlotData(
         .map((d) => d.power)
         .sort((a, b) => a - b);
       if (values.length === 0) return null;
-
       const q1 = values[Math.floor(values.length * 0.25)];
       const q3 = values[Math.floor(values.length * 0.75)];
       const iqr = q3 - q1;
       const lowerWhisker = Math.max(values[0], q1 - 1.5 * iqr);
       const upperWhisker = Math.min(values[values.length - 1], q3 + 1.5 * iqr);
-
       return {
         category: cat,
         min: +lowerWhisker.toFixed(1),
@@ -181,7 +291,6 @@ export function generateBlandAltmanData(
   data: Array<{ voltage: number; power: number; pf: number; reactive: number }>,
 ) {
   const results: Array<{ mean: number; difference: number }> = [];
-
   for (const row of data) {
     const fuzzy = classifyEnergyFuzzy(
       row.voltage,
@@ -193,23 +302,18 @@ export function generateBlandAltmanData(
     if (row.power <= 30) thresholdScore = 1;
     else if (row.power <= 70) thresholdScore = 2;
     else thresholdScore = 3;
-
     const fuzzyScore =
       fuzzy.category === "ECONOMICAL" ? 1 : fuzzy.category === "NORMAL" ? 2 : 3;
-    const mean = (fuzzyScore + thresholdScore) / 2;
-    const difference = fuzzyScore - thresholdScore;
     results.push({
-      mean: +mean.toFixed(2),
-      difference: +difference.toFixed(2),
+      mean: +((fuzzyScore + thresholdScore) / 2).toFixed(2),
+      difference: +(fuzzyScore - thresholdScore).toFixed(2),
     });
   }
-
   const diffs = results.map((r) => r.difference);
   const meanDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
   const stdDiff = Math.sqrt(
     diffs.reduce((a, b) => a + (b - meanDiff) ** 2, 0) / diffs.length,
   );
-
   return {
     data: results,
     meanDiff: +meanDiff.toFixed(3),

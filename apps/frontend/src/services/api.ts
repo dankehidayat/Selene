@@ -323,3 +323,44 @@ export function useBlandAltman(range: string) {
     refetchInterval: 60_000,
   });
 }
+
+export interface ClimateFuzzyDistribution {
+  distribution: {
+    COLD: number;
+    COOL: number;
+    COMFORTABLE: number;
+    WARM: number;
+    HOT: number;
+  };
+  total: number;
+  scatterData: Array<{
+    temperature: number;
+    humidity: number;
+    category: string;
+  }>;
+  results: Array<{
+    timestamp: string;
+    temperature: number;
+    humidity: number;
+    category: string;
+    confidence: number;
+  }>;
+}
+
+async function fetchClimateFuzzyDistribution(
+  range: string,
+): Promise<ClimateFuzzyDistribution> {
+  const res = await fetch(
+    `${API_BASE}/analytics/climate-fuzzy-distribution?range=${range}`,
+  );
+  if (!res.ok) throw new Error("Failed to fetch climate fuzzy distribution");
+  return res.json();
+}
+
+export function useClimateFuzzyDistribution(range: string) {
+  return useQuery<ClimateFuzzyDistribution>({
+    queryKey: ["climate-fuzzy-distribution", range],
+    queryFn: () => fetchClimateFuzzyDistribution(range),
+    refetchInterval: 60_000,
+  });
+}

@@ -42,11 +42,28 @@ export async function registerNotificationRoutes(app: FastifyInstance) {
 
     try {
       const { id } = request.params as { id: string };
+      const payload = verifyToken(token);
+
+      // Verify this notification belongs to the user
+      const notification = await prisma.notification.findFirst({
+        where: { id, userId: payload.userId },
+      });
+
+      if (!notification) {
+        return reply.code(404).send({ error: "Notification not found" });
+      }
+
       await prisma.notification.update({
         where: { id },
         data: { read: true },
       });
-      return { success: true };
+
+      // Return updated unread count
+      const unreadCount = await prisma.notification.count({
+        where: { userId: payload.userId, read: false },
+      });
+
+      return { success: true, unreadCount };
     } catch {
       return reply.code(500).send({ error: "Failed" });
     }
@@ -63,7 +80,8 @@ export async function registerNotificationRoutes(app: FastifyInstance) {
         where: { userId: payload.userId, read: false },
         data: { read: true },
       });
-      return { success: true };
+
+      return { success: true, unreadCount: 0 };
     } catch {
       return reply.code(500).send({ error: "Failed" });
     }
@@ -79,7 +97,7 @@ export async function registerNotificationRoutes(app: FastifyInstance) {
       await prisma.notification.deleteMany({
         where: { userId: payload.userId },
       });
-      return { success: true };
+      return { success: true, unreadCount: 0 };
     } catch {
       return reply.code(500).send({ error: "Failed" });
     }
