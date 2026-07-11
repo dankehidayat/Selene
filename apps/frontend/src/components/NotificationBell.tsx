@@ -59,10 +59,7 @@ export function NotificationBell() {
     mountedRef.current = true;
     if (!token) return;
 
-    // Fetch immediately on mount
     fetchNotifications();
-
-    // Then poll every 60 seconds
     intervalRef.current = setInterval(fetchNotifications, POLL_INTERVAL);
 
     return () => {
@@ -71,7 +68,6 @@ export function NotificationBell() {
     };
   }, [token]);
 
-  // Refresh when token changes (login/logout)
   useEffect(() => {
     if (token) {
       fetchNotifications();
@@ -85,7 +81,10 @@ export function NotificationBell() {
     try {
       const res = await fetch(`${API_BASE}/notifications/${id}/read`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
       });
       const data = await res.json();
       if (data.success) {
@@ -101,7 +100,10 @@ export function NotificationBell() {
     try {
       const res = await fetch(`${API_BASE}/notifications/read-all`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
       });
       const data = await res.json();
       if (data.success) {
