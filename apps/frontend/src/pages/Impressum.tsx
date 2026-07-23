@@ -8,6 +8,11 @@ import {
   School,
   Globe,
   Code,
+  Activity,
+  Shield,
+  Layers,
+  Database,
+  Cpu,
 } from "lucide-react";
 import { ChartCard } from "@/components/ChartCard";
 
@@ -220,18 +225,46 @@ const backendPackages: PackageInfo[] = [
     description: "CORS plugin for Fastify",
   },
   {
+    name: "@fastify/swagger",
+    version: "^8.15.0",
+    license: "MIT",
+    url: "https://github.com/fastify/fastify-swagger",
+    description: "Swagger/OpenAPI documentation generator for Fastify",
+  },
+  {
+    name: "@fastify/swagger-ui",
+    version: "^3.1.0",
+    license: "MIT",
+    url: "https://github.com/fastify/fastify-swagger-ui",
+    description: "Swagger UI integration for Fastify",
+  },
+  {
+    name: "pg",
+    version: "^8.13.0",
+    license: "MIT",
+    url: "https://node-postgres.com",
+    description: "PostgreSQL client for Node.js",
+  },
+  {
     name: "PostgreSQL",
     version: "16.x",
     license: "PostgreSQL",
     url: "https://www.postgresql.org",
     description: "Advanced open-source relational database",
   },
+  {
+    name: "TimescaleDB",
+    version: "2.x",
+    license: "Timescale License",
+    url: "https://www.timescale.com",
+    description: "Time-series database extension for PostgreSQL",
+  },
 ];
 
 const iotPackages: PackageInfo[] = [
   {
-    name: "ESP32 DevKitC V2",
-    version: "—",
+    name: "ESP32 Dev-Kit",
+    version: "V1.0",
     license: "Open Source",
     url: "https://www.espressif.com",
     description: "Low-cost, low-power microcontroller with Wi-Fi & Bluetooth",
@@ -308,6 +341,34 @@ const devPackages: PackageInfo[] = [
     license: "MIT",
     url: "https://www.npmjs.com/package/@types/file-saver",
     description: "TypeScript definitions for file-saver",
+  },
+  {
+    name: "@types/bcryptjs",
+    version: "^2.4.6",
+    license: "MIT",
+    url: "https://www.npmjs.com/package/@types/bcryptjs",
+    description: "TypeScript definitions for bcryptjs",
+  },
+  {
+    name: "@types/jsonwebtoken",
+    version: "^9.0.7",
+    license: "MIT",
+    url: "https://www.npmjs.com/package/@types/jsonwebtoken",
+    description: "TypeScript definitions for jsonwebtoken",
+  },
+  {
+    name: "@types/pg",
+    version: "^8.11.0",
+    license: "MIT",
+    url: "https://www.npmjs.com/package/@types/pg",
+    description: "TypeScript definitions for pg",
+  },
+  {
+    name: "@types/node",
+    version: "^20.14.0",
+    license: "MIT",
+    url: "https://www.npmjs.com/package/@types/node",
+    description: "TypeScript definitions for Node.js",
   },
 ];
 
@@ -392,7 +453,7 @@ export function Impressum() {
         <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
           Impressum
         </h2>
-        <p className="text-sm text-gray-900 dark:text-white mt-1 font-medium">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
           About this project and its creator
         </p>
       </div>
@@ -418,73 +479,171 @@ export function Impressum() {
               <p className="text-base font-semibold text-gray-900 dark:text-white">
                 Selene
               </p>
-              <p className="text-sm text-gray-900 dark:text-white font-medium">
+              <p className="text-sm text-gray-600 dark:text-gray-300 font-medium leading-relaxed">
                 A real-time energy and climate monitoring dashboard for
-                ESP32-based IoT sensors. Built with React, TypeScript, Fastify,
-                and PostgreSQL.
+                ESP32-based IoT sensors. Features a 15-rule Mamdani fuzzy
+                inference engine for energy classification, climate fuzzy
+                analysis based on ASHRAE 55 standards, role-based access
+                control, and time-series data storage with automated Blynk
+                polling.
               </p>
             </div>
           </ChartCard>
 
-          <ChartCard title="Created By">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                  <User size={18} className="text-gray-600 dark:text-white" />
-                </div>
+          <ChartCard title="Tech Stack Used">
+            <div className="flex flex-wrap gap-2">
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                React 18
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
+                TypeScript
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400">
+                Fastify
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                Bun
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400">
+                PostgreSQL
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">
+                TimescaleDB
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400">
+                Prisma ORM
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
+                TanStack
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400">
+                Recharts
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
+                Observable Plot
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                Radix UI
+              </span>
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-lime-50 dark:bg-lime-900/30 text-lime-700 dark:text-lime-400">
+                Tailwind CSS
+              </span>
+            </div>
+          </ChartCard>
+
+          <ChartCard title="Key Features">
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="flex items-start gap-3 py-3">
+                <Activity size={16} className="text-blue-500 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-base font-semibold text-gray-900 dark:text-white">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Real-Time Monitoring
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                    Live sensor data via Blynk IoT proxy, refreshing every 3
+                    seconds with automated TimescaleDB storage.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 py-3">
+                <Database
+                  size={16}
+                  className="text-emerald-500 mt-0.5 shrink-0"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Time-Series Storage
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                    TimescaleDB hypertables with automatic Blynk-to-database
+                    polling and 7-day chunk partitioning.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 py-3">
+                <Cpu size={16} className="text-violet-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Dual Fuzzy Engines
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                    15-rule energy classification (IEEE 1159) and 14-rule
+                    climate comfort analysis (ASHRAE 55).
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 py-3">
+                <Shield size={16} className="text-amber-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Role-Based Access
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                    Admin panel with user management, role switching, account
+                    control, and session history.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 py-3">
+                <Layers size={16} className="text-cyan-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Comprehensive Analytics
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                    Bland-Altman plots, box plots, decision surfaces, membership
+                    functions, and statistical summaries.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </ChartCard>
+
+          <ChartCard title="Developer Information">
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="flex items-center gap-3 py-3">
+                <User size={16} className="text-gray-400 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
                     Danke Hidayat
                   </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Author & Developer
                   </p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                  <Mail size={18} className="text-gray-600 dark:text-white" />
-                </div>
+              <div className="flex items-center gap-3 py-3">
+                <Mail size={16} className="text-gray-400 shrink-0" />
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Email
                   </p>
                   <a
                     href="mailto:dnk.hidayat@gmail.com"
-                    className="text-sm text-gray-900 dark:text-white font-medium hover:text-blue-600 dark:hover:text-blue-400 transition"
+                    className="text-sm font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition"
                   >
                     dnk.hidayat@gmail.com
                   </a>
                 </div>
               </div>
-
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                  <School size={18} className="text-gray-600 dark:text-white" />
-                </div>
+              <div className="flex items-center gap-3 py-3">
+                <School size={16} className="text-gray-400 shrink-0" />
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Institution
                   </p>
-                  <p className="text-sm text-gray-900 dark:text-white font-medium">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
                     Vocational School of IPB University
                   </p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                  <GraduationCap
-                    size={18}
-                    className="text-gray-600 dark:text-white"
-                  />
-                </div>
+              <div className="flex items-center gap-3 py-3">
+                <GraduationCap size={16} className="text-gray-400 shrink-0" />
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Program
                   </p>
-                  <p className="text-sm text-gray-900 dark:text-white font-medium">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
                     Technology of Computer Engineering
                   </p>
                 </div>
@@ -493,92 +652,85 @@ export function Impressum() {
           </ChartCard>
 
           <ChartCard title="Links">
-            <div className="space-y-3">
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <a
                 href="https://www.linkedin.com/in/dankehidayat/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition group"
+                className="flex items-center gap-3 py-3 hover:opacity-70 transition -mx-2 px-2 rounded-lg group"
               >
-                <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
-                  <Globe
-                    size={18}
-                    className="text-blue-600 dark:text-blue-400"
-                  />
-                </div>
-                <div>
+                <Globe size={16} className="text-blue-500 shrink-0" />
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">
                     LinkedIn
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     linkedin.com/in/dankehidayat
                   </p>
                 </div>
                 <ExternalLink
                   size={14}
-                  className="text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition ml-auto"
+                  className="text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition shrink-0"
                 />
               </a>
-
               <a
                 href="https://bsky.app/profile/dankehidayat.my.id"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition group"
+                className="flex items-center gap-3 py-3 hover:opacity-70 transition -mx-2 px-2 rounded-lg group"
               >
-                <div className="h-10 w-10 rounded-full bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center shrink-0">
-                  <Globe size={18} className="text-sky-600 dark:text-sky-400" />
-                </div>
-                <div>
+                <Globe size={16} className="text-sky-500 shrink-0" />
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-sky-600 dark:group-hover:text-sky-400 transition">
                     Bluesky
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     bsky.app/profile/dankehidayat.my.id
                   </p>
                 </div>
                 <ExternalLink
                   size={14}
-                  className="text-gray-400 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition ml-auto"
+                  className="text-gray-400 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition shrink-0"
                 />
               </a>
-
               <a
                 href="https://github.com/dankehidayat/selene"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition group"
+                className="flex items-center gap-3 py-3 hover:opacity-70 transition -mx-2 px-2 rounded-lg group"
               >
-                <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0">
-                  <Code size={18} className="text-gray-700 dark:text-white" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white group-hover:text-gray-900 transition">
+                <Code size={16} className="text-gray-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
                     GitHub
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     github.com/dankehidayat/selene
                   </p>
                 </div>
                 <ExternalLink
                   size={14}
-                  className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-white transition ml-auto"
+                  className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-white transition shrink-0"
                 />
               </a>
             </div>
           </ChartCard>
 
-          <ChartCard title="Academic Context">
-            <div className="space-y-3 text-sm text-gray-900 dark:text-white font-medium">
+          <ChartCard title="Why This Project Was Created">
+            <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300 font-medium leading-relaxed">
               <p>
                 This project was developed as part of the final assignment
                 (Tugas Akhir) at the Computer Engineering Technology program,
                 College of Vocational Studies, IPB University.
               </p>
               <p>
-                The system implements fuzzy logic for energy consumption
-                classification and provides comprehensive analytics for
-                monitoring electrical parameters and environmental conditions.
+                Monitoring energy consumption and environmental conditions is
+                essential for efficiency and comfort. The system combines fuzzy
+                logic for intelligent classification with modern web
+                technologies to provide actionable insights from IoT sensor
+                data. All readings are stored in a time-series database with
+                automated ingestion, making historical analysis fast and
+                reliable.
               </p>
             </div>
           </ChartCard>
@@ -588,7 +740,7 @@ export function Impressum() {
       {activeTab === "acknowledgement" && (
         <div>
           <ChartCard title="Open Source Libraries & Tools">
-            <p className="text-sm text-gray-900 dark:text-white font-medium mb-6">
+            <p className="text-sm text-gray-600 dark:text-gray-300 font-medium mb-6">
               Selene makes use of the following open-source libraries and tools.
               We are grateful to the maintainers and contributors of these
               projects.
