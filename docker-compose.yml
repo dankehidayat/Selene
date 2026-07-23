@@ -1,4 +1,3 @@
-# docker-compose.yml (project root)
 services:
   postgres:
     image: postgres:16-alpine
@@ -18,6 +17,26 @@ services:
       timeout: 5s
       retries: 5
 
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: selene-timescaledb
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=selene_ts
+      - POSTGRES_PASSWORD=k0iAjJmuzPH3xD8dh25W5Fod7B9PC73rl2qFUdnqrks=
+      - POSTGRES_DB=selene_measurements
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - selene
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U selene_ts -d selene_measurements"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./apps/backend
@@ -29,10 +48,13 @@ services:
     environment:
       - PORT=8787
       - DATABASE_URL=postgresql://selene_admin:x9Fm2KpR7vLq4WnB8cYt3Hj6DsA1Gf5d@postgres:5432/selene
+      - TIMESCALE_URL=postgresql://selene_ts:k0iAjJmuzPH3xD8dh25W5Fod7B9PC73rl2qFUdnqrks=@timescaledb:5432/selene_measurements
     ports:
       - "8787:8787"
     depends_on:
       postgres:
+        condition: service_healthy
+      timescaledb:
         condition: service_healthy
     networks:
       - selene
@@ -56,3 +78,4 @@ networks:
 
 volumes:
   postgres_data:
+  timescale_data:
