@@ -16,10 +16,8 @@ export async function initTimescaleDB(): Promise<void> {
 
   const client = await pool.connect();
   try {
-    // Enable TimescaleDB extension
     await client.query(`CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;`);
 
-    // Create sensor_readings table
     await client.query(`
       CREATE TABLE IF NOT EXISTS sensor_readings (
         time        TIMESTAMPTZ NOT NULL,
@@ -42,7 +40,6 @@ export async function initTimescaleDB(): Promise<void> {
       );
     `);
 
-    // Convert to hypertable (partitioned by time, 7-day chunks)
     await client.query(`
       SELECT create_hypertable('sensor_readings', 'time', 
         chunk_time_interval => INTERVAL '7 days',
@@ -50,7 +47,6 @@ export async function initTimescaleDB(): Promise<void> {
       );
     `);
 
-    // Create indexes for common queries
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_readings_time_desc 
       ON sensor_readings (time DESC);
@@ -288,6 +284,63 @@ export async function getExportData(): Promise<any[]> {
     tempComfort: row.temp_comfort,
     energyStatus: row.energy_status,
   }));
+}
+
+export async function getEnergyInRange(
+  from: string,
+  to: string,
+  bucketSize?: string,
+): Promise<{ timestamp: string; energy_kwh: number }[]> {
+  if (!pool) return [];
+
+  const result = await pool.query(
+    `SELECT time, ac_power FROM sensor_readings 
+     WHERE time >= $1 AND time <= $2 
+     ORDER BY time ASC`,
+    [from, to],
+  );
+
+  const rows = result.rows;
+  if (rows.length < 2) return [];
+
+  const buckets = new Map<string, { energy_wh: number; timestamp: string }>();
+
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1];
+    const curr = rows[i];
+    const intervalHours =
+      (new Date(curr.time).getTime() - new Date(prev.time).getTime()) / 3600000;
+    const energyWh = ((prev.ac_power + curr.ac_power) / 2) * intervalHours;
+
+    let key: string;
+    if (bucketSize === "hour") key = curr.time.toISOString().slice(0, 13);
+    else if (bucketSize === "day") key = curr.time.toISOString().slice(0, 10);
+    else if (bucketSize === "month") key = curr.time.toISOString().slice(0, 7);
+    else key = curr.time.toISOString().slice(0, 13);
+
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.energy_wh += energyWh;
+    } else {
+      let bucketTimestamp: string;
+      if (bucketSize === "hour") bucketTimestamp = `${key}:00:00.000Z`;
+      else if (bucketSize === "day") bucketTimestamp = `${key}T12:00:00.000Z`;
+      else if (bucketSize === "month")
+        bucketTimestamp = `${key}-01T12:00:00.000Z`;
+      else bucketTimestamp = `${key}:00:00.000Z`;
+      buckets.set(key, { energy_wh: energyWh, timestamp: bucketTimestamp });
+    }
+  }
+
+  return Array.from(buckets.values())
+    .map((b) => ({
+      timestamp: b.timestamp,
+      energy_kwh: +b.energy_wh.toFixed(1),
+    }))
+    .sort(
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
 }
 
 export async function getTimescaleStats(): Promise<any> {

@@ -25,6 +25,16 @@ import { useAuth } from "@/services/auth";
 
 const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
 
+const RANGE_LABELS: Record<string, string> = {
+  "1h": "1 Hour",
+  "24h": "24 Hours",
+  "7d": "7 Days",
+  "30d": "30 Days",
+  "3m": "3 Months",
+  "6m": "6 Months",
+  "1y": "1 Year",
+};
+
 function formatDateForTooltip(iso: string, range: string): string {
   const d = new Date(iso);
   switch (range) {
@@ -233,13 +243,14 @@ export function Dashboard() {
 
         <div className="grid lg:grid-cols-[1fr_320px] gap-4">
           <ChartCard
-            title="Power Usage Past History"
+            title="Energy Usage"
             chartId="chart-energy-usage"
             action={
               <RangeSelect
                 options={RANGE_OPTIONS}
                 value={chartRange}
                 onChange={setChartRange}
+                labels={RANGE_LABELS}
               />
             }
           >
@@ -389,13 +400,14 @@ export function Dashboard() {
         </p>
         <div className="grid lg:grid-cols-[1fr_320px] gap-4">
           <ChartCard
-            title="Climate Past History"
+            title="Climate History"
             chartId="chart-climate"
             action={
               <RangeSelect
                 options={RANGE_OPTIONS}
                 value={chartRange}
                 onChange={setChartRange}
+                labels={RANGE_LABELS}
               />
             }
           >

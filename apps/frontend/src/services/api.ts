@@ -238,6 +238,14 @@ async function fetchBlandAltman(range: string): Promise<BlandAltmanResult> {
   return res.json();
 }
 
+async function fetchEnergyHistory(range: string) {
+  const res = await fetch(
+    `${API_BASE}/readings/history?range=${range}&type=energy`,
+  );
+  if (!res.ok) throw new Error("Failed to fetch energy history");
+  return res.json();
+}
+
 export function useLiveReading() {
   return useQuery<EnergyReading>({
     queryKey: ["live-reading"],
@@ -260,6 +268,15 @@ export function useReadingHistory(
   >({
     queryKey: ["reading-history", range],
     queryFn: () => fetchHistory(range),
+    refetchInterval: 30_000,
+  });
+}
+export function useEnergyHistory(
+  range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
+) {
+  return useQuery<Array<{ timestamp: string; energy_kwh: number }>>({
+    queryKey: ["energy-history", range],
+    queryFn: () => fetchEnergyHistory(range),
     refetchInterval: 30_000,
   });
 }

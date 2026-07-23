@@ -1,4 +1,4 @@
-// [apps/frontend] src/components/ChartCard.tsx
+// apps/frontend/src/components/ChartCard.tsx
 import { type ReactNode, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, Copy, Check } from "lucide-react";
@@ -128,14 +128,20 @@ interface RangeSelectProps {
   options: readonly string[];
   value: string;
   onChange: (value: string) => void;
+  labels?: Record<string, string>;
 }
 
-export function RangeSelect({ options, value, onChange }: RangeSelectProps) {
+export function RangeSelect({
+  options,
+  value,
+  onChange,
+  labels,
+}: RangeSelectProps) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition outline-none">
-          {value} <ChevronDown size={13} />
+          {labels?.[value] ?? value} <ChevronDown size={13} />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -155,7 +161,7 @@ export function RangeSelect({ options, value, onChange }: RangeSelectProps) {
                   : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700",
               )}
             >
-              {option}
+              {labels?.[option] ?? option}
             </DropdownMenu.Item>
           ))}
         </DropdownMenu.Content>

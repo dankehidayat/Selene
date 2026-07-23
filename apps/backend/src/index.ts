@@ -24,6 +24,7 @@ import {
   getRecentLogs,
   getAllReadingsForAnalytics,
   getExportData,
+  getEnergyInRange,
 } from "./timescale";
 
 const app = Fastify({ logger: true });
@@ -300,13 +301,19 @@ app.get(
       tags: ["Readings"],
       querystring: {
         type: "object",
-        properties: { range: { type: "string", default: "24h" } },
+        properties: {
+          range: { type: "string", default: "24h" },
+          type: { type: "string", enum: ["power", "energy"], default: "power" },
+        },
       },
     },
   },
   async (request) => {
-    const query = request.query as { range?: string };
-    const range = query.range ?? "24h";
+    const { range = "24h", type = "power" } = request.query as {
+      range?: string;
+      type?: string;
+    };
+
     if (range === "1h") {
       const data = await getRecentLogs(60);
       return data.reverse().map((r: any) => ({
@@ -318,7 +325,18 @@ app.get(
         humidity: r.humidity,
       }));
     }
+
     const { from, to, bucketSize } = getRangeConfig(range);
+
+    if (type === "energy") {
+      const energyData = await getEnergyInRange(
+        from.toISOString(),
+        to.toISOString(),
+        bucketSize ?? undefined,
+      );
+      return energyData;
+    }
+
     return getReadingsInRange(
       from.toISOString(),
       to.toISOString(),
@@ -488,10 +506,7 @@ app.get(
     }
     const peakHours = Array.from({ length: 24 }, (_, hour) => {
       const h = hourlyUsage.get(hour);
-      return {
-        hour,
-        avgPower: h ? +(h.power / h.count).toFixed(2) : 0,
-      };
+      return { hour, avgPower: h ? +(h.power / h.count).toFixed(2) : 0 };
     });
 
     return {

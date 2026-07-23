@@ -44,9 +44,20 @@ import {
   useMembershipData,
   useDecisionSurface,
   useClimateFuzzyDistribution,
+  useEnergyHistory,
 } from "@/services/api";
 
 const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
+
+const RANGE_LABELS: Record<string, string> = {
+  "1h": "1 Hour",
+  "24h": "24 Hours",
+  "7d": "7 Days",
+  "30d": "30 Days",
+  "3m": "3 Months",
+  "6m": "6 Months",
+  "1y": "1 Year",
+};
 
 const FUZZY_COLORS: Record<string, string> = {
   ECONOMICAL: "#2ecc71",
@@ -123,7 +134,7 @@ function formatTick(v: string, range: string): string {
   }
 }
 
-function EnergyTooltip({
+function PowerTooltip({
   active,
   payload,
   label,
@@ -160,6 +171,34 @@ function EnergyTooltip({
           </span>
         </p>
       ))}
+    </div>
+  );
+}
+
+function EnergyTooltip({
+  active,
+  payload,
+  label,
+  range,
+}: {
+  active?: boolean;
+  payload?: any[];
+  label?: string;
+  range: string;
+}) {
+  if (!active || !payload?.length || !label) return null;
+  return (
+    <div className={TOOLTIP_CLASS}>
+      <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
+        {formatDateForTooltip(label, range)}
+      </p>
+      <p className="text-gray-400 dark:text-gray-400 flex items-center gap-2">
+        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+        Energy:{" "}
+        <span className="text-gray-900 dark:text-white font-semibold">
+          {payload[0]?.value} Wh
+        </span>
+      </p>
     </div>
   );
 }
@@ -377,7 +416,6 @@ function Accordion({
   );
 }
 
-// ── Observable Plot Components ─────────────────────────────
 function ObsScatter({
   data,
 }: {
@@ -732,6 +770,8 @@ export function Analytics() {
   const { data: history = [], isLoading: historyLoading } = useReadingHistory(
     energyRange as any,
   );
+  const { data: energyHistory = [], isLoading: energyLoading } =
+    useEnergyHistory(energyRange as any);
   const { data: climate, isLoading: climateLoading } = useClimateSummary(
     climateRange as any,
   );
@@ -748,6 +788,15 @@ export function Analytics() {
   });
   const comfortData = climate?.comfortDistribution ?? [];
   const hourlyClimate = climate?.hourlyData ?? [];
+
+  const enrichedHistory = history.map((h: any) => ({
+    ...h,
+    apparentPower: +(h.voltage * h.current).toFixed(1) || 0,
+    reactivePower:
+      +Math.sqrt(
+        Math.max(0, (h.voltage * h.current) ** 2 - h.power ** 2),
+      ).toFixed(1) || 0,
+  }));
 
   const pieData = fuzzy
     ? [
@@ -812,15 +861,6 @@ export function Analytics() {
       })()
     : null;
 
-  const enrichedHistory = history.map((h: any) => ({
-    ...h,
-    apparentPower: +(h.voltage * h.current).toFixed(1) || 0,
-    reactivePower:
-      +Math.sqrt(
-        Math.max(0, (h.voltage * h.current) ** 2 - h.power ** 2),
-      ).toFixed(1) || 0,
-  }));
-
   return (
     <div className="space-y-8 font-sans">
       <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit flex-wrap">
@@ -859,6 +899,7 @@ export function Analytics() {
               options={RANGE_OPTIONS}
               value={energyRange}
               onChange={setEnergyRange}
+              labels={RANGE_LABELS}
             />
           </div>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -893,232 +934,210 @@ export function Analytics() {
               iconColor="text-violet-500 dark:text-violet-400"
             />
           </div>
+
+          {/* Energy Usage — multi-line power chart */}
+          <ChartCard title="Energy Usage" chartId="chart-energy-usage">
+            {historyLoading ? (
+              <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                Loading...
+              </div>
+            ) : enrichedHistory.length === 0 ? (
+              <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                No data
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={enrichedHistory}>
+                  <defs>
+                    <linearGradient id="ePowerGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset="0%"
+                        stopColor="#3B82F6"
+                        stopOpacity={0.15}
+                      />
+                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient
+                      id="eCurrentGrad"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stopColor="#F59E0B"
+                        stopOpacity={0.15}
+                      />
+                      <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient
+                      id="eApparentGrad"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.1} />
+                      <stop offset="100%" stopColor="#8B5CF6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient
+                      id="eReactiveGrad"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor="#EF4444" stopOpacity={0.1} />
+                      <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    vertical={false}
+                    stroke="#E5E7EB"
+                    strokeOpacity={0.3}
+                  />
+                  <XAxis
+                    dataKey="timestamp"
+                    tick={CHART_FONT}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v: string) => formatTick(v, energyRange)}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={CHART_FONT}
+                    axisLine={false}
+                    tickLine={false}
+                    width={50}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={CHART_FONT}
+                    axisLine={false}
+                    tickLine={false}
+                    width={45}
+                  />
+                  <Tooltip content={<PowerTooltip range={energyRange} />} />
+                  <Legend
+                    wrapperStyle={{
+                      fontSize: 11,
+                      fontFamily: "Inter, sans-serif",
+                    }}
+                    payload={[
+                      {
+                        value: "Power (W)",
+                        type: "line",
+                        color: "#3B82F6",
+                        id: "power",
+                      },
+                      {
+                        value: "Current (A)",
+                        type: "line",
+                        color: "#F59E0B",
+                        id: "current",
+                      },
+                      {
+                        value: "Apparent (VA)",
+                        type: "line",
+                        color: "#8B5CF6",
+                        id: "apparentPower",
+                      },
+                      {
+                        value: "Reactive (VAR)",
+                        type: "line",
+                        color: "#EF4444",
+                        id: "reactivePower",
+                      },
+                    ]}
+                  />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="power"
+                    fill="url(#ePowerGrad)"
+                    stroke="none"
+                    hide
+                  />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="power"
+                    stroke="#3B82F6"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#3B82F6" }}
+                    name="Power (W)"
+                  />
+                  <Area
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="current"
+                    fill="url(#eCurrentGrad)"
+                    stroke="none"
+                    hide
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="current"
+                    stroke="#F59E0B"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#F59E0B" }}
+                    name="Current (A)"
+                  />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="apparentPower"
+                    fill="url(#eApparentGrad)"
+                    stroke="none"
+                    hide
+                  />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="apparentPower"
+                    stroke="#8B5CF6"
+                    strokeWidth={1.5}
+                    dot={false}
+                    strokeDasharray="4,3"
+                    name="Apparent (VA)"
+                  />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="reactivePower"
+                    fill="url(#eReactiveGrad)"
+                    stroke="none"
+                    hide
+                  />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="reactivePower"
+                    stroke="#EF4444"
+                    strokeWidth={1.5}
+                    dot={false}
+                    strokeDasharray="4,3"
+                    name="Reactive (VAR)"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+
+          {/* Usage Pattern + Energy Consumption side by side */}
           <div className="grid lg:grid-cols-2 gap-4">
-            <ChartCard title="Energy Usage" chartId="chart-energy-history">
-              {historyLoading ? (
-                <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                  Loading...
-                </div>
-              ) : enrichedHistory.length === 0 ? (
-                <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                  No data
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={300}>
-                  <ComposedChart data={enrichedHistory}>
-                    <defs>
-                      <linearGradient
-                        id="ePowerGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#3B82F6"
-                          stopOpacity={0.15}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#3B82F6"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                      <linearGradient
-                        id="eCurrentGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#F59E0B"
-                          stopOpacity={0.15}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#F59E0B"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                      <linearGradient
-                        id="eApparentGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#8B5CF6"
-                          stopOpacity={0.1}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#8B5CF6"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                      <linearGradient
-                        id="eReactiveGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#EF4444"
-                          stopOpacity={0.1}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#EF4444"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      vertical={false}
-                      stroke="#E5E7EB"
-                      strokeOpacity={0.3}
-                    />
-                    <XAxis
-                      dataKey="timestamp"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: string) => formatTick(v, energyRange)}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      width={50}
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      width={45}
-                    />
-                    <Tooltip content={<EnergyTooltip range={energyRange} />} />
-                    <Legend
-                      wrapperStyle={{
-                        fontSize: 11,
-                        fontFamily: "Inter, sans-serif",
-                      }}
-                      payload={[
-                        {
-                          value: "Power (W)",
-                          type: "line",
-                          color: "#3B82F6",
-                          id: "power",
-                        },
-                        {
-                          value: "Current (A)",
-                          type: "line",
-                          color: "#F59E0B",
-                          id: "current",
-                        },
-                        {
-                          value: "Apparent (VA)",
-                          type: "line",
-                          color: "#8B5CF6",
-                          id: "apparentPower",
-                        },
-                        {
-                          value: "Reactive (VAR)",
-                          type: "line",
-                          color: "#EF4444",
-                          id: "reactivePower",
-                        },
-                      ]}
-                    />
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="power"
-                      fill="url(#ePowerGrad)"
-                      stroke="none"
-                      hide
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="power"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4, fill: "#3B82F6" }}
-                      name="Power (W)"
-                    />
-                    <Area
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="current"
-                      fill="url(#eCurrentGrad)"
-                      stroke="none"
-                      hide
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="current"
-                      stroke="#F59E0B"
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 4, fill: "#F59E0B" }}
-                      name="Current (A)"
-                    />
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="apparentPower"
-                      fill="url(#eApparentGrad)"
-                      stroke="none"
-                      hide
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="apparentPower"
-                      stroke="#8B5CF6"
-                      strokeWidth={1.5}
-                      dot={false}
-                      strokeDasharray="4,3"
-                      name="Apparent (VA)"
-                    />
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="reactivePower"
-                      fill="url(#eReactiveGrad)"
-                      stroke="none"
-                      hide
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="reactivePower"
-                      stroke="#EF4444"
-                      strokeWidth={1.5}
-                      dot={false}
-                      strokeDasharray="4,3"
-                      name="Reactive (VAR)"
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              )}
-            </ChartCard>
             <ChartCard title="Usage Pattern" chartId="chart-peak-hours">
-              {allPeakHours.length === 0 ? (
+              {energyRange === "1h" ? (
+                <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400 px-4 text-center">
+                  Hourly breakdown requires at least 24 hours of data
+                </div>
+              ) : allPeakHours.length === 0 ? (
                 <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   No data
                 </div>
@@ -1163,7 +1182,106 @@ export function Analytics() {
                 </ResponsiveContainer>
               )}
             </ChartCard>
+
+            <ChartCard
+              title="Energy Consumption"
+              chartId="chart-energy-consumption"
+            >
+              {energyRange === "1h" ? (
+                <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400 px-4 text-center">
+                  Energy consumption totals require at least 24 hours of data to
+                  calculate meaningful values
+                </div>
+              ) : energyLoading ? (
+                <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                  Loading...
+                </div>
+              ) : energyHistory.length === 0 ? (
+                <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                  No data
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <ComposedChart data={energyHistory}>
+                    <defs>
+                      <linearGradient
+                        id="energyGrad"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="0%"
+                          stopColor="#10B981"
+                          stopOpacity={0.2}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#10B981"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      vertical={false}
+                      stroke="#E5E7EB"
+                      strokeOpacity={0.3}
+                    />
+                    <XAxis
+                      dataKey="timestamp"
+                      tick={CHART_FONT}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v: string) => formatTick(v, energyRange)}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      tick={CHART_FONT}
+                      axisLine={false}
+                      tickLine={false}
+                      width={50}
+                      label={{
+                        value: "Wh",
+                        position: "insideTopLeft",
+                        offset: -5,
+                        style: CHART_FONT,
+                      }}
+                    />
+                    <Tooltip content={<EnergyTooltip range={energyRange} />} />
+                    <Legend
+                      wrapperStyle={{
+                        fontSize: 11,
+                        fontFamily: "Inter, sans-serif",
+                      }}
+                      payload={[
+                        {
+                          value: "Energy (Wh)",
+                          type: "rect",
+                          color: "#10B981",
+                          id: "energy_kwh",
+                        },
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="energy_kwh"
+                      fill="url(#energyGrad)"
+                      stroke="none"
+                      hide
+                    />
+                    <Bar
+                      dataKey="energy_kwh"
+                      fill="#10B981"
+                      radius={[4, 4, 0, 0]}
+                      name="Energy (Wh)"
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </ChartCard>
           </div>
+
           <ChartCard title="Key Metrics">
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8">
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -1284,6 +1402,7 @@ export function Analytics() {
               options={RANGE_OPTIONS}
               value={climateRange}
               onChange={setClimateRange}
+              labels={RANGE_LABELS}
             />
           </div>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1628,6 +1747,7 @@ export function Analytics() {
               options={RANGE_OPTIONS}
               value={energyRange}
               onChange={setEnergyRange}
+              labels={RANGE_LABELS}
             />
           </div>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1897,6 +2017,7 @@ export function Analytics() {
               options={RANGE_OPTIONS}
               value={climateFuzzyRange}
               onChange={setClimateFuzzyRange}
+              labels={RANGE_LABELS}
             />
           </div>
           <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
