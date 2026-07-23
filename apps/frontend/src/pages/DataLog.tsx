@@ -1,4 +1,4 @@
-// [apps/frontend] src/pages/DataLog.tsx - Full code with ALL BLACK text
+// apps/frontend/src/pages/DataLog.tsx
 import { useState, useRef } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
@@ -107,8 +107,8 @@ export function DataLog() {
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
             Data Log
           </h2>
-          <p className="text-sm text-gray-900 dark:text-white mt-1 font-medium">
-            Historical sensor readings from Google Sheets
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
+            Historical sensor readings
           </p>
         </div>
         <DropdownMenu.Root>
@@ -129,7 +129,7 @@ export function DataLog() {
                 className="flex items-center gap-2.5 text-sm px-3 py-2.5 cursor-pointer outline-none rounded-lg mx-1 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <FileSpreadsheet size={14} />{" "}
-                {exportLoading === "csv" ? "Exporting..." : "CSV"}
+                {exportLoading === "csv" ? "Downloading..." : "Download as CSV"}
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => handleExport("tsv")}
@@ -137,7 +137,7 @@ export function DataLog() {
                 className="flex items-center gap-2.5 text-sm px-3 py-2.5 cursor-pointer outline-none rounded-lg mx-1 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <FileText size={14} />{" "}
-                {exportLoading === "tsv" ? "Exporting..." : "TSV"}
+                {exportLoading === "tsv" ? "Downloading..." : "Download as TSV"}
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
@@ -146,11 +146,11 @@ export function DataLog() {
 
       <ChartCard title="Sensor Readings">
         {isLoading ? (
-          <div className="flex h-64 items-center justify-center text-sm text-gray-900 dark:text-white">
+          <div className="flex h-64 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
             Loading...
           </div>
         ) : allReadings.length === 0 ? (
-          <div className="flex h-64 items-center justify-center text-sm text-gray-900 dark:text-white">
+          <div className="flex h-64 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
             No readings available
           </div>
         ) : (
@@ -201,7 +201,7 @@ export function DataLog() {
                       key={r.timestamp + i}
                       className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors"
                     >
-                      <td className="py-3 px-2 text-gray-700 dark:text-white tabular-nums text-xs whitespace-nowrap font-medium">
+                      <td className="py-2.5 px-2 text-sm text-gray-600 dark:text-gray-400 tabular-nums whitespace-nowrap">
                         {new Date(r.timestamp).toLocaleString("id-ID", {
                           year: "numeric",
                           month: "2-digit",
@@ -211,28 +211,28 @@ export function DataLog() {
                           second: "2-digit",
                         })}
                       </td>
-                      <td className="py-3 px-2 text-gray-900 dark:text-white tabular-nums font-semibold">
+                      <td className="py-2.5 px-2 text-sm text-gray-600 dark:text-gray-400 tabular-nums">
                         {r.acVoltage.toFixed(1)}
                       </td>
-                      <td className="py-3 px-2 text-gray-900 dark:text-white tabular-nums">
+                      <td className="py-2.5 px-2 text-sm text-gray-600 dark:text-gray-400 tabular-nums">
                         {r.acCurrent.toFixed(3)}
                       </td>
-                      <td className="py-3 px-2 text-gray-900 dark:text-white tabular-nums">
+                      <td className="py-2.5 px-2 text-sm text-gray-600 dark:text-gray-400 tabular-nums">
                         {r.acPower.toFixed(1)}
                       </td>
-                      <td className="py-3 px-2 text-gray-900 dark:text-white tabular-nums">
+                      <td className="py-2.5 px-2 text-sm text-gray-600 dark:text-gray-400 tabular-nums">
                         {r.cosPhi.toFixed(2)}
                       </td>
-                      <td className="py-3 px-2 text-gray-900 dark:text-white tabular-nums hidden md:table-cell">
+                      <td className="py-2.5 px-2 text-sm text-gray-600 dark:text-gray-400 tabular-nums hidden md:table-cell">
                         {r.temperature.toFixed(1)}
                       </td>
-                      <td className="py-3 px-2 text-gray-900 dark:text-white tabular-nums hidden md:table-cell">
+                      <td className="py-2.5 px-2 text-sm text-gray-600 dark:text-gray-400 tabular-nums hidden md:table-cell">
                         {r.humidity.toFixed(0)}
                       </td>
-                      <td className="py-3 px-2 text-gray-900 dark:text-white tabular-nums">
+                      <td className="py-2.5 px-2 text-sm text-gray-600 dark:text-gray-400 tabular-nums">
                         {r.frequency.toFixed(1)}
                       </td>
-                      <td className="py-3 px-2 text-gray-900 dark:text-white tabular-nums">
+                      <td className="py-2.5 px-2 text-sm text-gray-600 dark:text-gray-400 tabular-nums">
                         {r.totalEnergy.toFixed(3)}
                       </td>
                     </tr>
@@ -242,14 +242,14 @@ export function DataLog() {
             </div>
 
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-              <div className="flex items-center gap-3 text-xs text-gray-900 dark:text-white font-medium">
+              <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 font-medium">
                 <span>
                   {startIndex + 1}–{Math.min(startIndex + pageSize, totalRows)}{" "}
                   of {totalRows}
                 </span>
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>
-                    <button className="flex items-center gap-1 px-2 py-1 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 outline-none text-gray-900 dark:text-white font-medium">
+                    <button className="flex items-center gap-1 px-2 py-1 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 outline-none text-gray-700 dark:text-gray-300 font-medium">
                       {pageSize} <ChevronDown size={12} />
                     </button>
                   </DropdownMenu.Trigger>
@@ -284,7 +284,7 @@ export function DataLog() {
                   <button
                     onClick={() => setPage(page - 1)}
                     disabled={page === 1}
-                    className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-700 dark:text-white hover:text-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 transition"
+                    className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 transition"
                   >
                     <ChevronLeft size={16} />
                   </button>
@@ -292,7 +292,7 @@ export function DataLog() {
                     if (item === "ellipsis")
                       return (
                         <Popover.Trigger key={`ellipsis-${idx}`} asChild>
-                          <button className="h-8 w-8 flex items-center justify-center text-sm rounded-lg text-gray-700 dark:text-white hover:text-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                          <button className="h-8 w-8 flex items-center justify-center text-sm rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
                             ...
                           </button>
                         </Popover.Trigger>
@@ -301,7 +301,7 @@ export function DataLog() {
                       <button
                         key={item}
                         onClick={() => setPage(item)}
-                        className={`h-8 w-8 flex items-center justify-center text-sm rounded-lg transition ${page === item ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900" : "text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+                        className={`h-8 w-8 flex items-center justify-center text-sm rounded-lg transition ${page === item ? "bg-gray-900 dark:bg-white text-white dark:text-gray-900" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
                       >
                         {item}
                       </button>
@@ -310,7 +310,7 @@ export function DataLog() {
                   <button
                     onClick={() => setPage(page + 1)}
                     disabled={page === totalPages}
-                    className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-700 dark:text-white hover:text-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 transition"
+                    className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 transition"
                   >
                     <ChevronRight size={16} />
                   </button>

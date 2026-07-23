@@ -18,6 +18,7 @@ import {
 } from "./analytics/fuzzy";
 import {
   initTimescaleDB,
+  insertReading,
   getLatestReading,
   getReadingsInRange,
   getRecentLogs,
@@ -168,6 +169,66 @@ function getRangeConfig(range: string): {
   }
 }
 
+// ── Blynk Polling → TimescaleDB ──────────────────────────
+async function pollBlynkToTimescale() {
+  if (!BLYNK_SERVER_URL || !BLYNK_AUTH_TOKEN) return;
+
+  try {
+    const fetchPin = async (pin: number): Promise<number> => {
+      const res = await fetch(
+        `${BLYNK_SERVER_URL}/${BLYNK_AUTH_TOKEN}/get/v${pin}`,
+      );
+      const data = await res.json();
+      const value = Array.isArray(data) ? data[0] : data;
+      return Number(value) || 0;
+    };
+
+    const [
+      acVoltage,
+      acCurrent,
+      acPower,
+      cosPhi,
+      apparentPower,
+      totalEnergy,
+      frequency,
+      reactivePower,
+      temperature,
+      humidity,
+    ] = await Promise.all([
+      fetchPin(0),
+      fetchPin(1),
+      fetchPin(2),
+      fetchPin(3),
+      fetchPin(4),
+      fetchPin(5),
+      fetchPin(6),
+      fetchPin(7),
+      fetchPin(8),
+      fetchPin(9),
+    ]);
+
+    if (acVoltage > 100) {
+      await insertReading({
+        time: new Date().toISOString(),
+        acVoltage,
+        acCurrent,
+        acPower,
+        cosPhi,
+        apparentPower,
+        totalEnergy,
+        frequency,
+        reactivePower,
+        temperature,
+        humidity,
+        tempComfort: "COMFORTABLE",
+        energyStatus: "2",
+      });
+    }
+  } catch {
+    // Silently fail — Blynk might be unreachable temporarily
+  }
+}
+
 // ═══════════════════════════════════════════════════════════
 //  Blynk Proxy
 // ═══════════════════════════════════════════════════════════
@@ -209,7 +270,6 @@ app.get(
   async (request, reply) => {
     const latest = await getLatestReading();
     if (!latest) return reply.code(404).send({ error: "No readings found" });
-
     return {
       timestamp: latest.time,
       acVoltage: latest.ac_voltage,
@@ -240,15 +300,24 @@ app.get(
       tags: ["Readings"],
       querystring: {
         type: "object",
-        properties: {
-          range: { type: "string", default: "24h" },
-        },
+        properties: { range: { type: "string", default: "24h" } },
       },
     },
   },
   async (request) => {
     const query = request.query as { range?: string };
     const range = query.range ?? "24h";
+    if (range === "1h") {
+      const data = await getRecentLogs(60);
+      return data.reverse().map((r: any) => ({
+        timestamp: r.timestamp,
+        voltage: r.acVoltage,
+        power: r.acPower,
+        current: r.acCurrent,
+        temperature: r.temperature,
+        humidity: r.humidity,
+      }));
+    }
     const { from, to, bucketSize } = getRangeConfig(range);
     return getReadingsInRange(
       from.toISOString(),
@@ -266,9 +335,7 @@ app.get(
       tags: ["Readings"],
       querystring: {
         type: "object",
-        properties: {
-          pageSize: { type: "string", default: "20" },
-        },
+        properties: { pageSize: { type: "string", default: "20" } },
       },
     },
   },
@@ -297,7 +364,6 @@ app.get(
     const query = request.query as { format?: string };
     const format = query.format ?? "csv";
     const data = await getExportData();
-
     if (!data.length)
       return reply.code(404).send({ error: "No data available" });
 
@@ -311,7 +377,6 @@ app.get(
       String(now.getMinutes()).padStart(2, "0"),
       String(now.getSeconds()).padStart(2, "0"),
     ].join("");
-
     const headers = [
       "Timestamp",
       "AC Voltage (V)",
@@ -327,7 +392,6 @@ app.get(
       "Temp Comfort",
       "Energy Status",
     ];
-
     const rows = data.map((r: any) => [
       new Date(r.timestamp).toLocaleString(),
       r.acVoltage,
@@ -343,7 +407,6 @@ app.get(
       r.tempComfort,
       r.energyStatus,
     ]);
-
     const ext = format === "tsv" ? "tsv" : "csv";
     const filename = `sensor-data-${ts}.${ext}`;
 
@@ -357,7 +420,6 @@ app.get(
         .header("Content-Disposition", `attachment; filename=${filename}`)
         .send(tsvContent);
     }
-
     const csvContent = [
       headers.join(","),
       ...rows.map((r) => r.join(",")),
@@ -380,9 +442,7 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: {
-          range: { type: "string", default: "7d" },
-        },
+        properties: { range: { type: "string", default: "7d" } },
       },
     },
   },
@@ -394,7 +454,6 @@ app.get(
       from.toISOString(),
       to.toISOString(),
     );
-
     if (!data.length) return { error: "No data in range" };
 
     const powers = data
@@ -403,7 +462,6 @@ app.get(
     const voltages = data.map((r: any) => r.acVoltage);
     const cosPhis = data.map((r: any) => r.cosPhi);
     const reactivePowers = data.map((r: any) => r.reactivePower);
-
     const avgPower = mean(powers),
       medPower = median(powers),
       stdPower = stdDev(powers, avgPower);
@@ -428,7 +486,6 @@ app.get(
       h.count++;
       hourlyUsage.set(hour, h);
     }
-
     const peakHours = Array.from(hourlyUsage.entries())
       .map(([hour, d]) => ({ hour, avgPower: +(d.power / d.count).toFixed(2) }))
       .sort((a, b) => b.avgPower - a.avgPower)
@@ -471,9 +528,7 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: {
-          range: { type: "string", default: "7d" },
-        },
+        properties: { range: { type: "string", default: "7d" } },
       },
     },
   },
@@ -485,7 +540,6 @@ app.get(
       from.toISOString(),
       to.toISOString(),
     );
-
     if (!data.length) return { error: "No data in range" };
 
     const temps = data
@@ -496,7 +550,6 @@ app.get(
       .sort((a: number, b: number) => a - b);
     const avgTemp = mean(temps),
       avgHum = mean(hums);
-
     const dewPoints = data.map((r: any) => {
       const a = 17.27,
         b = 237.7;
@@ -536,9 +589,8 @@ app.get(
     }
 
     const comfortDist: Record<string, number> = {};
-    for (const r of data) {
+    for (const r of data)
       comfortDist[r.tempComfort] = (comfortDist[r.tempComfort] || 0) + 1;
-    }
 
     const hourlyClimate = new Map<
       number,
@@ -552,7 +604,6 @@ app.get(
       h.count++;
       hourlyClimate.set(hour, h);
     }
-
     const hourlyData = Array.from(hourlyClimate.entries())
       .map(([hour, d]) => ({
         hour,
@@ -601,9 +652,7 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: {
-          range: { type: "string", default: "7d" },
-        },
+        properties: { range: { type: "string", default: "7d" } },
       },
     },
   },
@@ -618,7 +667,6 @@ app.get(
             from.toISOString(),
             to.toISOString(),
           );
-
     if (!data.length) return { error: "No data" };
 
     const results = data.map((r: any) => ({
@@ -629,7 +677,6 @@ app.get(
       voltage: r.acVoltage,
       reactivePower: r.reactivePower,
     }));
-
     const distribution: Record<string, number> = {
       ECONOMICAL: 0,
       NORMAL: 0,
@@ -640,7 +687,6 @@ app.get(
       powerFactor: number;
       category: string;
     }> = [];
-
     for (const r of results) {
       distribution[r.category]++;
       scatterData.push({
@@ -649,7 +695,6 @@ app.get(
         category: r.category,
       });
     }
-
     return { distribution, total: data.length, scatterData, results };
   },
 );
@@ -684,9 +729,7 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: {
-          range: { type: "string", default: "7d" },
-        },
+        properties: { range: { type: "string", default: "7d" } },
       },
     },
   },
@@ -701,9 +744,7 @@ app.get(
             from.toISOString(),
             to.toISOString(),
           );
-
     if (!data.length) return [];
-
     const categorized = data.map((r: any) => ({
       power: r.acPower,
       category: classifyEnergyFuzzy(
@@ -713,7 +754,6 @@ app.get(
         r.reactivePower,
       ).category,
     }));
-
     return generateBoxPlotData(categorized);
   },
 );
@@ -726,9 +766,7 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: {
-          range: { type: "string", default: "7d" },
-        },
+        properties: { range: { type: "string", default: "7d" } },
       },
     },
   },
@@ -743,16 +781,13 @@ app.get(
             from.toISOString(),
             to.toISOString(),
           );
-
     if (!data.length) return { error: "No data" };
-
     const input = data.map((r: any) => ({
       voltage: r.acVoltage,
       power: r.acPower,
       pf: r.cosPhi,
       reactive: r.reactivePower,
     }));
-
     return generateBlandAltmanData(input);
   },
 );
@@ -765,9 +800,7 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: {
-          range: { type: "string", default: "7d" },
-        },
+        properties: { range: { type: "string", default: "7d" } },
       },
     },
   },
@@ -782,16 +815,13 @@ app.get(
             from.toISOString(),
             to.toISOString(),
           );
-
     if (!data.length) return { error: "No data" };
-
     const results = data.map((r: any) => ({
       ...classifyClimateFuzzy(r.temperature, r.humidity),
       timestamp: r.timestamp,
       temperature: r.temperature,
       humidity: r.humidity,
     }));
-
     const distribution: Record<string, number> = {
       COLD: 0,
       COOL: 0,
@@ -804,7 +834,6 @@ app.get(
       humidity: number;
       category: string;
     }> = [];
-
     for (const r of results) {
       distribution[r.category]++;
       scatterData.push({
@@ -813,7 +842,6 @@ app.get(
         category: r.category,
       });
     }
-
     return { distribution, total: data.length, scatterData, results };
   },
 );
@@ -823,9 +851,7 @@ app.get(
   {
     schema: { description: "Health check endpoint", tags: ["Health"] },
   },
-  async () => ({
-    status: "ok",
-  }),
+  async () => ({ status: "ok" }),
 );
 
 // ═══════════════════════════════════════════════════════════
@@ -833,16 +859,16 @@ app.get(
 // ═══════════════════════════════════════════════════════════
 const port = Number(process.env.PORT ?? 8787);
 
-// Init TimescaleDB
 await initTimescaleDB();
 
-// Connect to user database
+setInterval(pollBlynkToTimescale, 30_000);
+setTimeout(pollBlynkToTimescale, 5_000);
+
 try {
   await prisma.$connect();
   console.log("Connected to database");
 } catch (error) {
   console.warn("Database connection failed:", error);
 }
-
 await app.listen({ port, host: "0.0.0.0" });
 console.log(`Backend running on http://localhost:${port}`);
