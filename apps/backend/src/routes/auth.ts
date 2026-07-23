@@ -1,4 +1,3 @@
-// apps/backend/src/routes/auth.ts
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../db";
 import {
@@ -37,9 +36,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       data: { email, password: hashedPassword, name },
     });
 
-    const token = generateToken({ userId: user.id, email: user.email });
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
 
-    // Welcome notification
     await prisma.notification.create({
       data: {
         userId: user.id,
@@ -52,7 +54,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     return {
       token,
-      user: { id: user.id, email: user.email, name: user.name },
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
     };
   });
 
@@ -77,7 +84,6 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       return reply.code(401).send({ error: "Invalid email or password" });
     }
 
-    // Record login history
     const ip =
       request.ip || String(request.headers["x-forwarded-for"] || "unknown");
     const userAgent = String(request.headers["user-agent"] || "unknown");
@@ -86,9 +92,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       data: { userId: user.id, ip, userAgent },
     });
 
-    const token = generateToken({ userId: user.id, email: user.email });
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
 
-    // Check if login notification was already sent in the last 6 hours
     const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
     const recentNotification = await prisma.notification.findFirst({
       where: {
@@ -99,7 +108,6 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       },
     });
 
-    // Only create notification if none in last 6 hours
     if (!recentNotification) {
       const browser = userAgent.includes("Firefox")
         ? "Firefox"
@@ -123,7 +131,12 @@ export async function registerAuthRoutes(app: FastifyInstance) {
 
     return {
       token,
-      user: { id: user.id, email: user.email, name: user.name },
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
     };
   });
 
@@ -136,7 +149,13 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const payload = verifyToken(token);
       const user = await prisma.user.findUnique({
         where: { id: payload.userId },
-        select: { id: true, email: true, name: true, createdAt: true },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+        },
       });
 
       if (!user) return reply.code(404).send({ error: "User not found" });
@@ -207,7 +226,7 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const user = await prisma.user.update({
         where: { id: payload.userId },
         data: { name },
-        select: { id: true, email: true, name: true },
+        select: { id: true, email: true, name: true, role: true },
       });
 
       return { user };

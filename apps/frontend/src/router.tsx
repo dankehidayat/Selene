@@ -1,4 +1,4 @@
-// [apps/frontend] src/router.tsx
+// apps/frontend/src/router.tsx
 import {
   createRootRoute,
   createRoute,
@@ -10,7 +10,6 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Dashboard } from "@/pages/Dashboard";
 import { DataLog } from "@/pages/DataLog";
 import { Analytics } from "@/pages/Analytics";
-import { Settings } from "@/pages/Settings";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
 import { Impressum } from "@/pages/Impressum";
@@ -56,18 +55,6 @@ const analyticsRoute = createRoute({
   ),
 });
 
-const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings",
-  component: () => (
-    <ProtectedRoute>
-      <Layout>
-        <Settings />
-      </Layout>
-    </ProtectedRoute>
-  ),
-});
-
 const impressumRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/impressum",
@@ -108,7 +95,6 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   logRoute,
   analyticsRoute,
-  settingsRoute,
   impressumRoute,
   glossaryRoute,
   loginRoute,

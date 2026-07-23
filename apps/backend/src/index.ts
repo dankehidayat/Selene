@@ -6,6 +6,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import { prisma } from "./db";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerGlossaryRoutes } from "./routes/glossary";
+import { registerAdminRoutes } from "./routes/admin";
 import { registerNotificationRoutes } from "./routes/notifications";
 import {
   classifyEnergyFuzzy,
@@ -83,7 +84,7 @@ await app.register(swaggerUi, {
 await app.register(registerAuthRoutes);
 await app.register(registerGlossaryRoutes);
 await app.register(registerNotificationRoutes);
-
+await app.register(registerAdminRoutes);
 const SHEET_CSV_URL = process.env.SHEET_CSV_URL;
 if (!SHEET_CSV_URL) {
   console.error("SHEET_CSV_URL is not set");

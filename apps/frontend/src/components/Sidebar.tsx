@@ -1,4 +1,4 @@
-// [apps/frontend] src/components/Sidebar.tsx
+// apps/frontend/src/components/Sidebar.tsx
 import { Link } from "@tanstack/react-router";
 import {
   LayoutDashboard,

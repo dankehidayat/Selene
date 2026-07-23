@@ -364,3 +364,95 @@ export function useClimateFuzzyDistribution(range: string) {
     refetchInterval: 60_000,
   });
 }
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  _count: { loginHistory: number };
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  activeUsers: number;
+  adminUsers: number;
+  totalLogins: number;
+}
+
+async function fetchAdminUsers(params?: {
+  search?: string;
+  role?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ users: AdminUser[]; total: number }> {
+  const token = localStorage.getItem("token");
+  const searchParams = new URLSearchParams();
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.role) searchParams.set("role", params.role);
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
+
+  const res = await fetch(`${API_BASE}/admin/users?${searchParams}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch users");
+  return res.json();
+}
+
+async function fetchAdminStats(): Promise<AdminStats> {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API_BASE}/admin/stats`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to fetch stats");
+  return res.json();
+}
+
+async function updateUserRole(userId: string, role: string): Promise<void> {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API_BASE}/admin/users/${userId}/role`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ role }),
+  });
+  if (!res.ok) throw new Error("Failed to update role");
+}
+
+async function toggleUserActive(userId: string): Promise<void> {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API_BASE}/admin/users/${userId}/toggle-active`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to toggle user status");
+}
+
+export function useAdminUsers(params?: {
+  search?: string;
+  role?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return useQuery({
+    queryKey: ["admin-users", params],
+    queryFn: () => fetchAdminUsers(params),
+    enabled: !!localStorage.getItem("token"),
+  });
+}
+
+export function useAdminStats() {
+  return useQuery({
+    queryKey: ["admin-stats"],
+    queryFn: fetchAdminStats,
+    enabled: !!localStorage.getItem("token"),
+    refetchInterval: 30_000,
+  });
+}
+
+export { updateUserRole, toggleUserActive };

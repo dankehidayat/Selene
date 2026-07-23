@@ -1,13 +1,13 @@
-// [apps/backend] src/auth.ts
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "selene-secret";
+const JWT_SECRET: string = process.env.JWT_SECRET || "selene-secret";
 const JWT_EXPIRES_IN = "7d";
 
 export interface JWTPayload {
   userId: string;
   email: string;
+  role?: string;
 }
 
 export async function hashPassword(password: string): Promise<string> {

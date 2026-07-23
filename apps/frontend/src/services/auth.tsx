@@ -1,4 +1,3 @@
-// [apps/frontend] src/services/auth.tsx - Updated with login history
 import React, {
   createContext,
   useContext,
@@ -11,6 +10,7 @@ interface User {
   id: string;
   email: string;
   name?: string;
+  role?: string;
   createdAt?: string;
 }
 

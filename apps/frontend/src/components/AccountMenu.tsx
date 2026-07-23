@@ -1,9 +1,10 @@
-// [apps/frontend] src/components/AccountMenu.tsx - Fixed padding
+// apps/frontend/src/components/AccountMenu.tsx
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Settings, LogOut, ChevronUp, Sun, Moon, Monitor } from "lucide-react";
 import { useAuth } from "@/services/auth";
 import { useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { useSettings } from "@/components/SettingsOverlay";
 
 type Theme = "light" | "dark" | "system";
 
@@ -23,6 +24,7 @@ function applyTheme(theme: Theme) {
 export function AccountMenu() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { openSettings } = useSettings();
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
 
   useEffect(() => {
@@ -83,7 +85,7 @@ export function AccountMenu() {
           className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg py-1 min-w-[14rem] z-50"
         >
           <DropdownMenu.Item
-            onSelect={() => navigate({ to: "/settings" })}
+            onSelect={() => openSettings()}
             className="flex items-center gap-2.5 text-sm px-3 py-2 cursor-pointer outline-none rounded-lg mx-1 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
           >
             <Settings size={14} /> User Settings
