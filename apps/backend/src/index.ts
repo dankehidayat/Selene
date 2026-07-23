@@ -486,10 +486,13 @@ app.get(
       h.count++;
       hourlyUsage.set(hour, h);
     }
-    const peakHours = Array.from(hourlyUsage.entries())
-      .map(([hour, d]) => ({ hour, avgPower: +(d.power / d.count).toFixed(2) }))
-      .sort((a, b) => b.avgPower - a.avgPower)
-      .slice(0, 3);
+    const peakHours = Array.from({ length: 24 }, (_, hour) => {
+      const h = hourlyUsage.get(hour);
+      return {
+        hour,
+        avgPower: h ? +(h.power / h.count).toFixed(2) : 0,
+      };
+    });
 
     return {
       range,
