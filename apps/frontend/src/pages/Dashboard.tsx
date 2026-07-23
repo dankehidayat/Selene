@@ -10,8 +10,9 @@ import {
   Legend,
   Area,
   ComposedChart,
+  ReferenceLine,
 } from "recharts";
-import { Zap, Activity, Gauge, DollarSign } from "lucide-react";
+import { Zap, Activity, Gauge, DollarSign, Info } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { PowerOverview } from "@/components/PowerOverview";
@@ -22,9 +23,9 @@ import {
   useAnalyticsSummary,
 } from "@/services/api";
 import { useAuth } from "@/services/auth";
+import { ensembleForecast, confidenceBands } from "@/lib/forecast";
 
 const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
-
 const RANGE_LABELS: Record<string, string> = {
   "1h": "1 Hour",
   "24h": "24 Hours",
@@ -37,25 +38,45 @@ const RANGE_LABELS: Record<string, string> = {
 
 function formatDateForTooltip(iso: string, range: string): string {
   const d = new Date(iso);
+  const now = new Date();
+  const isFuture = d > now;
+  const prefix = isFuture ? "Predicted · " : "";
   switch (range) {
     case "1h":
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return (
+        prefix +
+        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      );
     case "24h":
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return (
+        prefix +
+        d.toLocaleDateString([], { weekday: "short" }) +
+        " " +
+        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      );
     case "7d":
       return (
-        d.toLocaleDateString([], { weekday: "short" }) +
+        prefix +
+        d.toLocaleDateString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        }) +
         " " +
         d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       );
     case "30d":
     case "3m":
-      return d.toLocaleDateString([], { month: "short", day: "numeric" });
+      return (
+        prefix + d.toLocaleDateString([], { month: "short", day: "numeric" })
+      );
     case "6m":
     case "1y":
-      return d.toLocaleDateString([], { month: "short", year: "numeric" });
+      return (
+        prefix + d.toLocaleDateString([], { month: "short", year: "numeric" })
+      );
     default:
-      return d.toLocaleString();
+      return prefix + d.toLocaleString();
   }
 }
 
@@ -78,14 +99,18 @@ function formatTick(v: string, range: string): string {
   }
 }
 
-const CHART_FONT = {
-  fontSize: 11,
-  fontFamily: "Inter, sans-serif",
-  fill: "#9CA3AF",
-};
-
-const TOOLTIP_CLASS =
+const CF = { fontSize: 11, fontFamily: "Inter, sans-serif", fill: "#9CA3AF" };
+const TC =
   "bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg px-3.5 py-2.5 text-xs font-sans";
+
+function ForecastBanner() {
+  return (
+    <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-[11px] text-blue-600 dark:text-blue-300 w-fit">
+      <Info size={12} className="shrink-0" />
+      <span>Dashed = predicted. Solid = actual readings.</span>
+    </div>
+  );
+}
 
 function UnifiedTooltip({
   active,
@@ -100,22 +125,22 @@ function UnifiedTooltip({
 }) {
   if (!active || !payload?.length || !label) return null;
   return (
-    <div className={TOOLTIP_CLASS}>
+    <div className={TC}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
         {formatDateForTooltip(label, range)}
       </p>
-      {payload.map((entry) => (
+      {payload.map((e) => (
         <p
-          key={entry.name}
+          key={e.name}
           className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
         >
           <span
             className="inline-block w-2 h-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
+            style={{ backgroundColor: e.color }}
           />
-          {entry.name}:{" "}
+          {e.name}:{" "}
           <span className="text-gray-900 dark:text-white font-semibold">
-            {entry.value} W
+            {e.value} W
           </span>
         </p>
       ))}
@@ -136,23 +161,23 @@ function ClimateTooltip({
 }) {
   if (!active || !payload?.length || !label) return null;
   return (
-    <div className={TOOLTIP_CLASS}>
+    <div className={TC}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
         {formatDateForTooltip(label, range)}
       </p>
-      {payload.map((entry) => (
+      {payload.map((e) => (
         <p
-          key={entry.name}
+          key={e.name}
           className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
         >
           <span
             className="inline-block w-2 h-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
+            style={{ backgroundColor: e.color }}
           />
-          {entry.name}:{" "}
+          {e.name}:{" "}
           <span className="text-gray-900 dark:text-white font-semibold">
-            {entry.value}
-            {entry.name === "Temperature" ? "°C" : "%"}
+            {e.value}
+            {e.name?.includes("Temp") ? "°C" : "%"}
           </span>
         </p>
       ))}
@@ -161,39 +186,79 @@ function ClimateTooltip({
 }
 
 function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
   return "Good evening";
 }
-
 function getGreetingMessage(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Start your day with insights into your energy usage.";
-  if (hour < 17)
+  const h = new Date().getHours();
+  if (h < 12) return "Start your day with insights into your energy usage.";
+  if (h < 17)
     return "Monitor your power consumption and environmental conditions.";
   return "Review today's energy patterns and plan for tomorrow.";
 }
 
 export function Dashboard() {
   const [chartRange, setChartRange] = useState<string>("24h");
+  const [showForecast, setShowForecast] = useState(false);
   const { user } = useAuth();
   const { data: live } = useLiveReading();
   const { data: history = [] } = useReadingHistory(chartRange as any);
   const { data: summary } = useAnalyticsSummary("24h");
-
-  const estimatedCost = summary?.energy?.estimatedCost ?? "—";
-  const totalKwh = summary?.energy?.totalKwh ?? "—";
-
-  const climateHistory = history.map((h: any) => ({
+  const ec = summary?.energy?.estimatedCost ?? "—";
+  const tk = summary?.energy?.totalKwh ?? "—";
+  const ch = history.map((h: any) => ({
     timestamp: h.timestamp,
     temperature: h.temperature,
     humidity: h.humidity,
   }));
 
+  const pf = showForecast
+    ? ensembleForecast(
+        history.map((h: any) => ({ timestamp: h.timestamp, value: h.power })),
+        chartRange,
+      )
+    : { forecast: [], confidence: 0 };
+  const cfc = showForecast
+    ? ensembleForecast(
+        history.map((h: any) => ({ timestamp: h.timestamp, value: h.current })),
+        chartRange,
+      )
+    : { forecast: [], confidence: 0 };
+  const tf = showForecast
+    ? ensembleForecast(
+        ch.map((h: any) => ({ timestamp: h.timestamp, value: h.temperature })),
+        chartRange,
+      )
+    : { forecast: [], confidence: 0 };
+  const hf = showForecast
+    ? ensembleForecast(
+        ch.map((h: any) => ({ timestamp: h.timestamp, value: h.humidity })),
+        chartRange,
+      )
+    : { forecast: [], confidence: 0 };
+
+  const pb = pf.forecast.length
+    ? confidenceBands(pf.forecast)
+    : { upper: [], lower: [] };
+  const cb = cfc.forecast.length
+    ? confidenceBands(cfc.forecast)
+    : { upper: [], lower: [] };
+  const tb = tf.forecast.length
+    ? confidenceBands(tf.forecast)
+    : { upper: [], lower: [] };
+  const hb = hf.forecast.length
+    ? confidenceBands(hf.forecast)
+    : { upper: [], lower: [] };
+
+  const avgConf =
+    pf.confidence + cfc.confidence + tf.confidence + hf.confidence;
+  const showConf = showForecast && avgConf > 0;
+  const now = new Date().toISOString();
+
   return (
     <div className="space-y-8 font-sans">
-      {/* Greeting */}
       <div>
         <p className="text-lg font-semibold text-gray-900 dark:text-white">
           {getGreeting()}
@@ -204,11 +269,31 @@ export function Dashboard() {
         </p>
       </div>
 
-      {/* Energy Section */}
+      {/* Energy */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-3">
-          Energy
-        </p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            Energy
+          </p>
+          <div className="flex items-center gap-2">
+            {showConf && (
+              <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
+                {Math.round((avgConf / 4) * 100)}% confidence
+              </span>
+            )}
+            <button
+              onClick={() => setShowForecast(!showForecast)}
+              className={`text-xs font-medium px-2 py-1 rounded-lg border transition ${showForecast ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" : "text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+            >
+              Forecast
+            </button>
+          </div>
+        </div>
+        {showForecast && (
+          <div className="mb-3">
+            <ForecastBanner />
+          </div>
+        )}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
           <StatCard
             label="AC Voltage"
@@ -233,14 +318,13 @@ export function Dashboard() {
           />
           <StatCard
             label="Est. Cost (24h)"
-            value={estimatedCost}
+            value={ec}
             icon={DollarSign}
             iconColor="text-emerald-500 dark:text-emerald-400"
-            sub={totalKwh !== "—" ? `${totalKwh} kWh` : undefined}
+            sub={tk !== "—" ? `${tk} kWh` : undefined}
             subTone="text-gray-500 dark:text-gray-400"
           />
         </div>
-
         <div className="grid lg:grid-cols-[1fr_320px] gap-4">
           <ChartCard
             title="Energy Usage"
@@ -256,19 +340,13 @@ export function Dashboard() {
           >
             {history.length === 0 ? (
               <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                No data available
+                No data
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={history}>
                   <defs>
-                    <linearGradient
-                      id="powerGradient"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
+                    <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
                       <stop
                         offset="0%"
                         stopColor="#3B82F6"
@@ -276,17 +354,27 @@ export function Dashboard() {
                       />
                       <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
                     </linearGradient>
-                    <linearGradient
-                      id="currentGradient"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
+                    <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
                       <stop
                         offset="0%"
                         stopColor="#F59E0B"
                         stopOpacity={0.15}
+                      />
+                      <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="pfb" x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset="0%"
+                        stopColor="#3B82F6"
+                        stopOpacity={0.06}
+                      />
+                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="cfb" x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset="0%"
+                        stopColor="#F59E0B"
+                        stopOpacity={0.06}
                       />
                       <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
                     </linearGradient>
@@ -298,7 +386,7 @@ export function Dashboard() {
                   />
                   <XAxis
                     dataKey="timestamp"
-                    tick={CHART_FONT}
+                    tick={CF}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v: string) => formatTick(v, chartRange)}
@@ -306,7 +394,7 @@ export function Dashboard() {
                   />
                   <YAxis
                     yAxisId="left"
-                    tick={CHART_FONT}
+                    tick={CF}
                     axisLine={false}
                     tickLine={false}
                     width={45}
@@ -314,7 +402,7 @@ export function Dashboard() {
                   <YAxis
                     yAxisId="right"
                     orientation="right"
-                    tick={CHART_FONT}
+                    tick={CF}
                     axisLine={false}
                     tickLine={false}
                     width={45}
@@ -328,23 +416,58 @@ export function Dashboard() {
                     payload={[
                       {
                         value: "Power (W)",
-                        type: "line",
+                        type: "line" as const,
                         color: "#3B82F6",
-                        id: "power",
+                        id: "p",
                       },
                       {
                         value: "Current (A)",
-                        type: "line",
+                        type: "line" as const,
                         color: "#F59E0B",
-                        id: "current",
+                        id: "c",
                       },
+                      ...(pf.forecast.length
+                        ? [
+                            {
+                              value: "P. Forecast",
+                              type: "line" as const,
+                              color: "#3B82F6",
+                              id: "pf",
+                            },
+                          ]
+                        : []),
+                      ...(cfc.forecast.length
+                        ? [
+                            {
+                              value: "C. Forecast",
+                              type: "line" as const,
+                              color: "#F59E0B",
+                              id: "cf",
+                            },
+                          ]
+                        : []),
                     ]}
                   />
+                  {pf.forecast.length > 0 && (
+                    <ReferenceLine
+                      x={now}
+                      yAxisId="left"
+                      stroke="#9CA3AF"
+                      strokeWidth={1}
+                      strokeDasharray="4,4"
+                      label={{
+                        value: "Now",
+                        position: "top",
+                        fill: "#9CA3AF",
+                        fontSize: 10,
+                      }}
+                    />
+                  )}
                   <Area
                     yAxisId="left"
                     type="monotone"
                     dataKey="power"
-                    fill="url(#powerGradient)"
+                    fill="url(#pg)"
                     stroke="none"
                     hide
                   />
@@ -362,7 +485,7 @@ export function Dashboard() {
                     yAxisId="right"
                     type="monotone"
                     dataKey="current"
-                    fill="url(#currentGradient)"
+                    fill="url(#cg)"
                     stroke="none"
                     hide
                   />
@@ -376,28 +499,97 @@ export function Dashboard() {
                     activeDot={{ r: 4, fill: "#F59E0B" }}
                     name="Current (A)"
                   />
+                  {pb.upper.length > 0 && (
+                    <Area
+                      yAxisId="left"
+                      type="monotone"
+                      data={pb.upper}
+                      dataKey="value"
+                      stroke="none"
+                      fill="url(#pfb)"
+                      hide
+                    />
+                  )}
+                  {pf.forecast.length > 0 && (
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      data={pf.forecast}
+                      dataKey="value"
+                      stroke="#3B82F6"
+                      strokeWidth={2}
+                      strokeDasharray="6,4"
+                      dot={false}
+                      name="P. Forecast"
+                      connectNulls
+                    />
+                  )}
+                  {cb.upper.length > 0 && (
+                    <Area
+                      yAxisId="right"
+                      type="monotone"
+                      data={cb.upper}
+                      dataKey="value"
+                      stroke="none"
+                      fill="url(#cfb)"
+                      hide
+                    />
+                  )}
+                  {cfc.forecast.length > 0 && (
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      data={cfc.forecast}
+                      dataKey="value"
+                      stroke="#F59E0B"
+                      strokeWidth={2}
+                      strokeDasharray="6,4"
+                      dot={false}
+                      name="C. Forecast"
+                      connectNulls
+                    />
+                  )}
                 </ComposedChart>
               </ResponsiveContainer>
             )}
           </ChartCard>
-
           <ChartCard title="Power Overview">
             <PowerOverview
               qualityScore={live?.powerQualityScore}
               cosPhi={live?.cosPhi}
               frequency={live?.frequency}
-              estimatedCost={estimatedCost}
-              totalKwh={totalKwh}
+              estimatedCost={ec}
+              totalKwh={tk}
             />
           </ChartCard>
         </div>
       </div>
 
-      {/* Environment Section */}
+      {/* Environment */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-3">
-          Environment
-        </p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            Environment
+          </p>
+          <div className="flex items-center gap-2">
+            {showConf && (
+              <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
+                {Math.round((avgConf / 4) * 100)}% confidence
+              </span>
+            )}
+            <button
+              onClick={() => setShowForecast(!showForecast)}
+              className={`text-xs font-medium px-2 py-1 rounded-lg border transition ${showForecast ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" : "text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+            >
+              Forecast
+            </button>
+          </div>
+        </div>
+        {showForecast && (
+          <div className="mb-3">
+            <ForecastBanner />
+          </div>
+        )}
         <div className="grid lg:grid-cols-[1fr_320px] gap-4">
           <ChartCard
             title="Climate History"
@@ -411,21 +603,15 @@ export function Dashboard() {
               />
             }
           >
-            {climateHistory.length === 0 ? (
+            {ch.length === 0 ? (
               <div className="flex h-[260px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                No data available
+                No data
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
-                <ComposedChart data={climateHistory}>
+                <ComposedChart data={ch}>
                   <defs>
-                    <linearGradient
-                      id="tempGradient"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
+                    <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
                       <stop
                         offset="0%"
                         stopColor="#EF4444"
@@ -433,17 +619,27 @@ export function Dashboard() {
                       />
                       <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
                     </linearGradient>
-                    <linearGradient
-                      id="humidGradient"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
+                    <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1">
                       <stop
                         offset="0%"
                         stopColor="#3B82F6"
                         stopOpacity={0.15}
+                      />
+                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="tfb" x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset="0%"
+                        stopColor="#EF4444"
+                        stopOpacity={0.06}
+                      />
+                      <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="hfb" x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset="0%"
+                        stopColor="#3B82F6"
+                        stopOpacity={0.06}
                       />
                       <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
                     </linearGradient>
@@ -455,7 +651,7 @@ export function Dashboard() {
                   />
                   <XAxis
                     dataKey="timestamp"
-                    tick={CHART_FONT}
+                    tick={CF}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v: string) => formatTick(v, chartRange)}
@@ -463,7 +659,7 @@ export function Dashboard() {
                   />
                   <YAxis
                     yAxisId="left"
-                    tick={CHART_FONT}
+                    tick={CF}
                     axisLine={false}
                     tickLine={false}
                     width={45}
@@ -471,7 +667,7 @@ export function Dashboard() {
                   <YAxis
                     yAxisId="right"
                     orientation="right"
-                    tick={CHART_FONT}
+                    tick={CF}
                     axisLine={false}
                     tickLine={false}
                     width={40}
@@ -485,23 +681,38 @@ export function Dashboard() {
                     payload={[
                       {
                         value: "Temperature (°C)",
-                        type: "line",
+                        type: "line" as const,
                         color: "#EF4444",
-                        id: "temperature",
+                        id: "t",
                       },
                       {
                         value: "Humidity (%)",
-                        type: "line",
+                        type: "line" as const,
                         color: "#3B82F6",
-                        id: "humidity",
+                        id: "h",
                       },
                     ]}
                   />
+                  {tf.forecast.length > 0 && (
+                    <ReferenceLine
+                      x={now}
+                      yAxisId="left"
+                      stroke="#9CA3AF"
+                      strokeWidth={1}
+                      strokeDasharray="4,4"
+                      label={{
+                        value: "Now",
+                        position: "top",
+                        fill: "#9CA3AF",
+                        fontSize: 10,
+                      }}
+                    />
+                  )}
                   <Area
                     yAxisId="left"
                     type="monotone"
                     dataKey="temperature"
-                    fill="url(#tempGradient)"
+                    fill="url(#tg)"
                     stroke="none"
                     hide
                   />
@@ -519,7 +730,7 @@ export function Dashboard() {
                     yAxisId="right"
                     type="monotone"
                     dataKey="humidity"
-                    fill="url(#humidGradient)"
+                    fill="url(#hg)"
                     stroke="none"
                     hide
                   />
@@ -533,11 +744,60 @@ export function Dashboard() {
                     activeDot={{ r: 4, fill: "#3B82F6" }}
                     name="Humidity (%)"
                   />
+                  {tb.upper.length > 0 && (
+                    <Area
+                      yAxisId="left"
+                      type="monotone"
+                      data={tb.upper}
+                      dataKey="value"
+                      stroke="none"
+                      fill="url(#tfb)"
+                      hide
+                    />
+                  )}
+                  {tf.forecast.length > 0 && (
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      data={tf.forecast}
+                      dataKey="value"
+                      stroke="#EF4444"
+                      strokeWidth={2}
+                      strokeDasharray="6,4"
+                      dot={false}
+                      name="T. Forecast"
+                      connectNulls
+                    />
+                  )}
+                  {hb.upper.length > 0 && (
+                    <Area
+                      yAxisId="right"
+                      type="monotone"
+                      data={hb.upper}
+                      dataKey="value"
+                      stroke="none"
+                      fill="url(#hfb)"
+                      hide
+                    />
+                  )}
+                  {hf.forecast.length > 0 && (
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      data={hf.forecast}
+                      dataKey="value"
+                      stroke="#3B82F6"
+                      strokeWidth={2}
+                      strokeDasharray="6,4"
+                      dot={false}
+                      name="H. Forecast"
+                      connectNulls
+                    />
+                  )}
                 </ComposedChart>
               </ResponsiveContainer>
             )}
           </ChartCard>
-
           <ChartCard title="Climate Overview">
             <ClimateOverview
               temperature={live?.temperature}

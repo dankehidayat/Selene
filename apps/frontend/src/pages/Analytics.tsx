@@ -18,6 +18,7 @@ import {
   ComposedChart,
   Line,
   LineChart,
+  ReferenceLine,
 } from "recharts";
 import {
   Zap,
@@ -46,9 +47,9 @@ import {
   useClimateFuzzyDistribution,
   useEnergyHistory,
 } from "@/services/api";
+import { ensembleForecast, confidenceBands } from "@/lib/forecast";
 
 const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
-
 const RANGE_LABELS: Record<string, string> = {
   "1h": "1 Hour",
   "24h": "24 Hours",
@@ -93,26 +94,59 @@ const PLOT_STYLE = {
   background: "transparent",
 };
 
+function hourToISO(hour: number): string {
+  const now = new Date();
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    hour,
+    0,
+    0,
+  ).toISOString();
+}
+
 function formatDateForTooltip(iso: string, range: string): string {
   const d = new Date(iso);
+  const now = new Date();
+  const isFuture = d > now;
+  const prefix = isFuture ? "Predicted · " : "";
   switch (range) {
     case "1h":
+      return (
+        prefix +
+        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      );
     case "24h":
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return (
+        prefix +
+        d.toLocaleDateString([], { weekday: "short" }) +
+        " " +
+        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      );
     case "7d":
       return (
-        d.toLocaleDateString([], { weekday: "short" }) +
+        prefix +
+        d.toLocaleDateString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        }) +
         " " +
         d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       );
     case "30d":
     case "3m":
-      return d.toLocaleDateString([], { month: "short", day: "numeric" });
+      return (
+        prefix + d.toLocaleDateString([], { month: "short", day: "numeric" })
+      );
     case "6m":
     case "1y":
-      return d.toLocaleDateString([], { month: "short", year: "numeric" });
+      return (
+        prefix + d.toLocaleDateString([], { month: "short", year: "numeric" })
+      );
     default:
-      return d.toLocaleString();
+      return prefix + d.toLocaleString();
   }
 }
 function formatTick(v: string, range: string): string {
@@ -134,6 +168,15 @@ function formatTick(v: string, range: string): string {
   }
 }
 
+function ForecastBanner() {
+  return (
+    <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-[11px] text-blue-600 dark:text-blue-300 w-fit">
+      <Info size={12} className="shrink-0" />
+      <span>Dashed = predicted. Solid = actual readings.</span>
+    </div>
+  );
+}
+
 function PowerTooltip({
   active,
   payload,
@@ -151,21 +194,21 @@ function PowerTooltip({
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
         {formatDateForTooltip(label, range)}
       </p>
-      {payload.map((entry: any) => (
+      {payload.map((e: any) => (
         <p
-          key={entry.name}
+          key={e.name}
           className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
         >
           <span
             className="inline-block w-2 h-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
+            style={{ backgroundColor: e.color }}
           />
-          {entry.name}:{" "}
+          {e.name}:{" "}
           <span className="text-gray-900 dark:text-white font-semibold">
-            {entry.value}{" "}
-            {entry.name.includes("Power") || entry.name === "Reactive"
+            {e.value}{" "}
+            {e.name.includes("Power") || e.name === "Reactive"
               ? "W"
-              : entry.name === "Current"
+              : e.name === "Current"
                 ? "A"
                 : ""}
           </span>
@@ -174,7 +217,6 @@ function PowerTooltip({
     </div>
   );
 }
-
 function EnergyTooltip({
   active,
   payload,
@@ -202,41 +244,42 @@ function EnergyTooltip({
     </div>
   );
 }
-
-function ClimateTooltip({
+function EnvTooltip({
   active,
   payload,
   label,
+  range,
 }: {
   active?: boolean;
   payload?: any[];
   label?: string;
+  range: string;
 }) {
   if (!active || !payload?.length || !label) return null;
   return (
     <div className={TOOLTIP_CLASS}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        Hour: {label}:00
+        {formatDateForTooltip(label, range)}
       </p>
-      {payload.map((entry: any) => (
+      {payload.map((e: any) => (
         <p
-          key={entry.name}
+          key={e.name}
           className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
         >
           <span
             className="inline-block w-2 h-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
+            style={{ backgroundColor: e.color }}
           />
-          {entry.name}:{" "}
+          {e.name}:{" "}
           <span className="text-gray-900 dark:text-white font-semibold">
-            {entry.value} {entry.name === "Temperature" ? "°C" : "%"}
+            {e.value}
+            {e.name?.includes("Temp") ? "°C" : "%"}
           </span>
         </p>
       ))}
     </div>
   );
 }
-
 function PeakTooltip({
   active,
   payload,
@@ -264,7 +307,6 @@ function PeakTooltip({
     </div>
   );
 }
-
 function ComfortTooltip({
   active,
   payload,
@@ -292,7 +334,6 @@ function ComfortTooltip({
     </div>
   );
 }
-
 function PieTooltip({
   active,
   payload,
@@ -316,7 +357,6 @@ function PieTooltip({
     </div>
   );
 }
-
 function MembershipTooltip({
   active,
   payload,
@@ -335,20 +375,17 @@ function MembershipTooltip({
           {label}
         </span>
       </p>
-      {payload.map((entry: any) => (
-        <p key={entry.name} className="text-gray-400 dark:text-gray-400">
-          {entry.name}:{" "}
+      {payload.map((e: any) => (
+        <p key={e.name} className="text-gray-400 dark:text-gray-400">
+          {e.name}:{" "}
           <span className="text-gray-900 dark:text-white font-semibold">
-            {typeof entry.value === "number"
-              ? entry.value.toFixed(3)
-              : entry.value}
+            {typeof e.value === "number" ? e.value.toFixed(3) : e.value}
           </span>
         </p>
       ))}
     </div>
   );
 }
-
 function InfoPopover({ title, content }: { title: string; content: string }) {
   return (
     <HoverCard.Root openDelay={200} closeDelay={100}>
@@ -377,7 +414,6 @@ function InfoPopover({ title, content }: { title: string; content: string }) {
     </HoverCard.Root>
   );
 }
-
 function Accordion({
   title,
   defaultOpen,
@@ -760,6 +796,7 @@ export function Analytics() {
   const [energyRange, setEnergyRange] = useState<string>("7d");
   const [climateRange, setClimateRange] = useState<string>("7d");
   const [climateFuzzyRange, setClimateFuzzyRange] = useState<string>("7d");
+  const [showForecast, setShowForecast] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "energy" | "environment" | "fuzzy" | "climate-fuzzy"
   >("energy");
@@ -787,8 +824,10 @@ export function Analytics() {
     return { name: `${i}:00`, power: found?.avgPower ?? 0 };
   });
   const comfortData = climate?.comfortDistribution ?? [];
-  const hourlyClimate = climate?.hourlyData ?? [];
-
+  const hourlyClimate = (climate?.hourlyData ?? []).map((h: any) => ({
+    ...h,
+    timestamp: hourToISO(h.hour),
+  }));
   const enrichedHistory = history.map((h: any) => ({
     ...h,
     apparentPower: +(h.voltage * h.current).toFixed(1) || 0,
@@ -805,7 +844,6 @@ export function Analytics() {
         { name: "WASTEFUL", value: fuzzy.distribution?.WASTEFUL ?? 0 },
       ].filter((d) => d.value > 0)
     : [];
-
   const climatePieData = climateFuzzy
     ? [
         {
@@ -835,31 +873,84 @@ export function Analytics() {
         },
       ].filter((d) => d.value > 0)
     : [];
-
   const blandAltmanData = fuzzy?.results
     ? (() => {
         const points = fuzzy.results.map((d: any) => {
-          const fuzzyScore =
+          const fs =
             d.category === "ECONOMICAL" ? 1 : d.category === "NORMAL" ? 2 : 3;
-          const thresholdScore = d.power <= 30 ? 1 : d.power <= 70 ? 2 : 3;
-          return {
-            mean: (fuzzyScore + thresholdScore) / 2,
-            difference: fuzzyScore - thresholdScore,
-          };
+          const ts = d.power <= 30 ? 1 : d.power <= 70 ? 2 : 3;
+          return { mean: (fs + ts) / 2, difference: fs - ts };
         });
         const diffs = points.map((p) => p.difference);
-        const meanDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
-        const stdDiff = Math.sqrt(
-          diffs.reduce((a, b) => a + (b - meanDiff) ** 2, 0) / diffs.length,
+        const md = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+        const sd = Math.sqrt(
+          diffs.reduce((a, b) => a + (b - md) ** 2, 0) / diffs.length,
         );
         return {
           data: points,
-          meanDiff: +meanDiff.toFixed(3),
-          upperLoA: +(meanDiff + 1.96 * stdDiff).toFixed(3),
-          lowerLoA: +(meanDiff - 1.96 * stdDiff).toFixed(3),
+          meanDiff: +md.toFixed(3),
+          upperLoA: +(md + 1.96 * sd).toFixed(3),
+          lowerLoA: +(md - 1.96 * sd).toFixed(3),
         };
       })()
     : null;
+
+  const pf = showForecast
+    ? ensembleForecast(
+        enrichedHistory.map((h: any) => ({
+          timestamp: h.timestamp,
+          value: h.power,
+        })),
+        energyRange,
+      )
+    : { forecast: [], confidence: 0 };
+  const efc = showForecast
+    ? ensembleForecast(
+        energyHistory.map((h: any) => ({
+          timestamp: h.timestamp,
+          value: h.energy_kwh,
+        })),
+        energyRange,
+      )
+    : { forecast: [], confidence: 0 };
+  const pb = pf.forecast.length
+    ? confidenceBands(pf.forecast)
+    : { upper: [], lower: [] };
+  const efb = efc.forecast.length
+    ? confidenceBands(efc.forecast)
+    : { upper: [], lower: [] };
+
+  const envHistory = hourlyClimate.map((h: any) => ({
+    timestamp: hourToISO(h.hour),
+    temperature: h.temperature,
+    humidity: h.humidity,
+  }));
+  const tf = showForecast
+    ? ensembleForecast(
+        envHistory.map((h: any) => ({
+          timestamp: h.timestamp,
+          value: h.temperature,
+        })),
+        climateRange,
+      )
+    : { forecast: [], confidence: 0 };
+  const hf = showForecast
+    ? ensembleForecast(
+        envHistory.map((h: any) => ({
+          timestamp: h.timestamp,
+          value: h.humidity,
+        })),
+        climateRange,
+      )
+    : { forecast: [], confidence: 0 };
+  const tb = tf.forecast.length
+    ? confidenceBands(tf.forecast)
+    : { upper: [], lower: [] };
+  const hb = hf.forecast.length
+    ? confidenceBands(hf.forecast)
+    : { upper: [], lower: [] };
+
+  const now = new Date().toISOString();
 
   return (
     <div className="space-y-8 font-sans">
@@ -895,13 +986,22 @@ export function Analytics() {
                 Power consumption patterns and statistical summaries
               </p>
             </div>
-            <RangeSelect
-              options={RANGE_OPTIONS}
-              value={energyRange}
-              onChange={setEnergyRange}
-              labels={RANGE_LABELS}
-            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowForecast(!showForecast)}
+                className={`text-xs font-medium px-2 py-1 rounded-lg border transition ${showForecast ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" : "text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+              >
+                Forecast
+              </button>
+              <RangeSelect
+                options={RANGE_OPTIONS}
+                value={energyRange}
+                onChange={setEnergyRange}
+                labels={RANGE_LABELS}
+              />
+            </div>
           </div>
+          {showForecast && <ForecastBanner />}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Avg Power"
@@ -935,7 +1035,6 @@ export function Analytics() {
             />
           </div>
 
-          {/* Energy Usage — multi-line power chart */}
           <ChartCard title="Energy Usage" chartId="chart-energy-usage">
             {historyLoading ? (
               <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -991,6 +1090,14 @@ export function Analytics() {
                       <stop offset="0%" stopColor="#EF4444" stopOpacity={0.1} />
                       <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
                     </linearGradient>
+                    <linearGradient id="epfb" x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset="0%"
+                        stopColor="#3B82F6"
+                        stopOpacity={0.06}
+                      />
+                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                    </linearGradient>
                   </defs>
                   <CartesianGrid
                     vertical={false}
@@ -1029,30 +1136,55 @@ export function Analytics() {
                     payload={[
                       {
                         value: "Power (W)",
-                        type: "line",
+                        type: "line" as const,
                         color: "#3B82F6",
                         id: "power",
                       },
                       {
                         value: "Current (A)",
-                        type: "line",
+                        type: "line" as const,
                         color: "#F59E0B",
                         id: "current",
                       },
                       {
                         value: "Apparent (VA)",
-                        type: "line",
+                        type: "line" as const,
                         color: "#8B5CF6",
                         id: "apparentPower",
                       },
                       {
                         value: "Reactive (VAR)",
-                        type: "line",
+                        type: "line" as const,
                         color: "#EF4444",
                         id: "reactivePower",
                       },
+                      ...(pf.forecast.length
+                        ? [
+                            {
+                              value: "Power Forecast",
+                              type: "line" as const,
+                              color: "#3B82F6",
+                              id: "pf",
+                            },
+                          ]
+                        : []),
                     ]}
                   />
+                  {pf.forecast.length > 0 && (
+                    <ReferenceLine
+                      x={now}
+                      yAxisId="left"
+                      stroke="#9CA3AF"
+                      strokeWidth={1}
+                      strokeDasharray="4,4"
+                      label={{
+                        value: "Now",
+                        position: "top",
+                        fill: "#9CA3AF",
+                        fontSize: 10,
+                      }}
+                    />
+                  )}
                   <Area
                     yAxisId="left"
                     type="monotone"
@@ -1125,12 +1257,36 @@ export function Analytics() {
                     strokeDasharray="4,3"
                     name="Reactive (VAR)"
                   />
+                  {pb.upper.length > 0 && (
+                    <Area
+                      yAxisId="left"
+                      type="monotone"
+                      data={pb.upper}
+                      dataKey="value"
+                      stroke="none"
+                      fill="url(#epfb)"
+                      hide
+                    />
+                  )}
+                  {pf.forecast.length > 0 && (
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      data={pf.forecast}
+                      dataKey="value"
+                      stroke="#3B82F6"
+                      strokeWidth={2}
+                      strokeDasharray="6,4"
+                      dot={false}
+                      name="Power Forecast"
+                      connectNulls
+                    />
+                  )}
                 </ComposedChart>
               </ResponsiveContainer>
             )}
           </ChartCard>
 
-          {/* Usage Pattern + Energy Consumption side by side */}
           <div className="grid lg:grid-cols-2 gap-4">
             <ChartCard title="Usage Pattern" chartId="chart-peak-hours">
               {energyRange === "1h" ? (
@@ -1189,8 +1345,7 @@ export function Analytics() {
             >
               {energyRange === "1h" ? (
                 <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400 px-4 text-center">
-                  Energy consumption totals require at least 24 hours of data to
-                  calculate meaningful values
+                  Energy data requires at least 24 hours of data
                 </div>
               ) : energyLoading ? (
                 <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -1215,6 +1370,18 @@ export function Analytics() {
                           offset="0%"
                           stopColor="#10B981"
                           stopOpacity={0.2}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#10B981"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                      <linearGradient id="efbGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="0%"
+                          stopColor="#10B981"
+                          stopOpacity={0.06}
                         />
                         <stop
                           offset="100%"
@@ -1261,8 +1428,32 @@ export function Analytics() {
                           color: "#10B981",
                           id: "energy_kwh",
                         },
+                        ...(efc.forecast.length
+                          ? [
+                              {
+                                value: "Energy Forecast",
+                                type: "line" as const,
+                                color: "#10B981",
+                                id: "ef",
+                              },
+                            ]
+                          : []),
                       ]}
                     />
+                    {efc.forecast.length > 0 && (
+                      <ReferenceLine
+                        x={now}
+                        stroke="#9CA3AF"
+                        strokeWidth={1}
+                        strokeDasharray="4,4"
+                        label={{
+                          value: "Now",
+                          position: "top",
+                          fill: "#9CA3AF",
+                          fontSize: 10,
+                        }}
+                      />
+                    )}
                     <Area
                       type="monotone"
                       dataKey="energy_kwh"
@@ -1276,6 +1467,29 @@ export function Analytics() {
                       radius={[4, 4, 0, 0]}
                       name="Energy (Wh)"
                     />
+                    {efb.upper.length > 0 && (
+                      <Area
+                        type="monotone"
+                        data={efb.upper}
+                        dataKey="value"
+                        stroke="none"
+                        fill="url(#efbGrad)"
+                        hide
+                      />
+                    )}
+                    {efc.forecast.length > 0 && (
+                      <Line
+                        type="monotone"
+                        data={efc.forecast}
+                        dataKey="value"
+                        stroke="#10B981"
+                        strokeWidth={2}
+                        strokeDasharray="6,4"
+                        dot={false}
+                        name="Energy Forecast"
+                        connectNulls
+                      />
+                    )}
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
@@ -1398,13 +1612,22 @@ export function Analytics() {
                 Temperature, humidity, and climate comfort analytics
               </p>
             </div>
-            <RangeSelect
-              options={RANGE_OPTIONS}
-              value={climateRange}
-              onChange={setClimateRange}
-              labels={RANGE_LABELS}
-            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowForecast(!showForecast)}
+                className={`text-xs font-medium px-2 py-1 rounded-lg border transition ${showForecast ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" : "text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+              >
+                Forecast
+              </button>
+              <RangeSelect
+                options={RANGE_OPTIONS}
+                value={climateRange}
+                onChange={setClimateRange}
+                labels={RANGE_LABELS}
+              />
+            </div>
           </div>
+          {showForecast && <ForecastBanner />}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Avg Temp"
@@ -1494,6 +1717,30 @@ export function Analytics() {
                           stopOpacity={0}
                         />
                       </linearGradient>
+                      <linearGradient id="ctfb" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="0%"
+                          stopColor="#EF4444"
+                          stopOpacity={0.06}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#EF4444"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                      <linearGradient id="chfb" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="0%"
+                          stopColor="#3B82F6"
+                          stopOpacity={0.06}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#3B82F6"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
                     </defs>
                     <CartesianGrid
                       vertical={false}
@@ -1501,11 +1748,18 @@ export function Analytics() {
                       strokeOpacity={0.3}
                     />
                     <XAxis
-                      dataKey="hour"
+                      dataKey="timestamp"
                       tick={CHART_FONT}
                       axisLine={false}
                       tickLine={false}
-                      tickFormatter={(v: number) => `${v}:00`}
+                      tickFormatter={(v: string) => {
+                        const d = new Date(v);
+                        return d.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        });
+                      }}
+                      interval="preserveStartEnd"
                     />
                     <YAxis
                       yAxisId="left"
@@ -1522,7 +1776,7 @@ export function Analytics() {
                       tickLine={false}
                       width={36}
                     />
-                    <Tooltip content={<ClimateTooltip />} />
+                    <Tooltip content={<EnvTooltip range={climateRange} />} />
                     <Legend
                       wrapperStyle={{
                         fontSize: 11,
@@ -1531,16 +1785,36 @@ export function Analytics() {
                       payload={[
                         {
                           value: "Temperature (°C)",
-                          type: "line",
+                          type: "line" as const,
                           color: "#EF4444",
                           id: "temperature",
                         },
                         {
                           value: "Humidity (%)",
-                          type: "line",
+                          type: "line" as const,
                           color: "#3B82F6",
                           id: "humidity",
                         },
+                        ...(tf.forecast.length
+                          ? [
+                              {
+                                value: "Temp Forecast",
+                                type: "line" as const,
+                                color: "#EF4444",
+                                id: "tfc",
+                              },
+                            ]
+                          : []),
+                        ...(hf.forecast.length
+                          ? [
+                              {
+                                value: "Humid Forecast",
+                                type: "line" as const,
+                                color: "#3B82F6",
+                                id: "hfc",
+                              },
+                            ]
+                          : []),
                       ]}
                     />
                     <Area
@@ -1577,6 +1851,56 @@ export function Analytics() {
                       dot={false}
                       name="Humidity (%)"
                     />
+                    {tb.upper.length > 0 && (
+                      <Area
+                        yAxisId="left"
+                        type="monotone"
+                        data={tb.upper}
+                        dataKey="value"
+                        stroke="none"
+                        fill="url(#ctfb)"
+                        hide
+                      />
+                    )}
+                    {tf.forecast.length > 0 && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        data={tf.forecast}
+                        dataKey="value"
+                        stroke="#EF4444"
+                        strokeWidth={2}
+                        strokeDasharray="6,4"
+                        dot={false}
+                        name="Temp Forecast"
+                        connectNulls
+                      />
+                    )}
+                    {hb.upper.length > 0 && (
+                      <Area
+                        yAxisId="right"
+                        type="monotone"
+                        data={hb.upper}
+                        dataKey="value"
+                        stroke="none"
+                        fill="url(#chfb)"
+                        hide
+                      />
+                    )}
+                    {hf.forecast.length > 0 && (
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        data={hf.forecast}
+                        dataKey="value"
+                        stroke="#3B82F6"
+                        strokeWidth={2}
+                        strokeDasharray="6,4"
+                        dot={false}
+                        name="Humid Forecast"
+                        connectNulls
+                      />
+                    )}
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
