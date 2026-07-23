@@ -2,7 +2,7 @@
 
 Smart Energy & Climate Dashboard
 
-A real-time monitoring and analytics platform for ESP32-based IoT sensors. Built with React, TypeScript, Fastify, and PostgreSQL.
+A real-time monitoring and analytics platform for ESP32-based IoT sensors. Built with React, TypeScript, Fastify, PostgreSQL, and TimescaleDB.
 
 ## Overview
 
@@ -20,7 +20,10 @@ ESP32 + PZEM-004T + DHT11
   Fastify Backend (Bun)
         |
         v
-  PostgreSQL + React Frontend
+  PostgreSQL (Users/Auth) + TimescaleDB (Sensor Readings)
+        |
+        v
+  React Frontend
 ```
 
 ## Features
@@ -34,7 +37,7 @@ ESP32 + PZEM-004T + DHT11
 
 ### Data Log
 
-- Paginated table view of historical sensor readings
+- Paginated table view of historical sensor readings from TimescaleDB
 - Client-side sorting by timestamp (ascending/descending)
 - Export to CSV or TSV format
 - Page jump and page size selection (10, 20, 30, 50, 100 rows)
@@ -88,11 +91,11 @@ ESP32 + PZEM-004T + DHT11
 ### Backend
 
 - Fastify running on Bun
-- Prisma ORM with PostgreSQL
+- Prisma ORM with PostgreSQL (user accounts, glossary, notifications)
+- TimescaleDB (sensor readings — hypertable with automatic time-based partitioning)
 - @fastify/swagger + @fastify/swagger-ui for API documentation
 - bcryptjs for password hashing (12 rounds)
 - jsonwebtoken for JWT signing and verification
-- Google Sheets CSV parsing for data ingestion
 - Blynk IoT proxy for live sensor data
 
 ### Hardware
@@ -108,7 +111,9 @@ ESP32 + PZEM-004T + DHT11
 ### Prerequisites
 
 - Bun 1.3 or later
-- PostgreSQL 16
+- Docker Desktop (for PostgreSQL and TimescaleDB)
+- PostgreSQL 16 (via Docker)
+- TimescaleDB (via Docker)
 
 ### Local Development
 
@@ -116,10 +121,13 @@ ESP32 + PZEM-004T + DHT11
 git clone https://github.com/dankehidayat/selene.git
 cd selene
 
+# Start databases (PostgreSQL + TimescaleDB)
+docker compose up -d postgres timescaledb
+
 # Backend setup
+cd apps/backend
 cp .env.example .env
 # Edit .env with your configuration
-cd apps/backend
 bun install
 bun run db:generate
 bun run db:migrate
@@ -132,6 +140,8 @@ bun install
 bun run dev
 ```
 
+The frontend will be available at `http://localhost:5173`, backend at `http://localhost:8787`, and Swagger UI at `http://localhost:8787/docs`.
+
 ### Docker Deployment
 
 ```bash
@@ -142,9 +152,20 @@ docker exec selene-backend bunx prisma db push
 docker exec selene-backend bun run db:generate
 ```
 
-The frontend will be available at `http://localhost:4173` and the backend at `http://localhost:8787`.
+### Data Import (one-time)
 
-Swagger UI is available at `http://localhost:8787/docs`.
+If migrating from Google Sheets, export your data as CSV and import into TimescaleDB:
+
+```bash
+# Copy CSV to container
+docker cp sensor_readings.csv selene-timescaledb:/tmp/
+
+# Import
+docker exec selene-timescaledb psql -U selene_ts -d selene_measurements -c "\COPY sensor_readings FROM '/tmp/sensor_readings.csv' CSV HEADER;"
+
+# Verify
+docker exec selene-timescaledb psql -U selene_ts -d selene_measurements -c "SELECT COUNT(*) FROM sensor_readings;"
+```
 
 ### First Admin Setup
 
@@ -186,18 +207,29 @@ Admin users have access to:
 
 ## Environment Variables
 
-### Backend
+### Root `.env`
 
-| Variable           | Description                  | Example                                      |
-| ------------------ | ---------------------------- | -------------------------------------------- |
-| `PORT`             | Server port                  | `8787`                                       |
-| `JWT_SECRET`       | Secret key for JWT signing   | `openssl rand -base64 64`                    |
-| `SHEET_CSV_URL`    | Google Sheets CSV export URL | `https://docs.google.com/spreadsheets/d/...` |
-| `DATABASE_URL`     | PostgreSQL connection string | `postgresql://user:pass@host:5432/selene`    |
-| `BLYNK_SERVER_URL` | Blynk IoT server URL         | `http://iot.serangkota.go.id:8080`           |
-| `BLYNK_AUTH_TOKEN` | Blynk authentication token   | `your-blynk-token`                           |
+| Variable            | Description                   | Example                                                       |
+| ------------------- | ----------------------------- | ------------------------------------------------------------- |
+| `JWT_SECRET`        | Secret key for JWT signing    | `openssl rand -base64 64`                                     |
+| `DATABASE_URL`      | PostgreSQL connection string  | `postgresql://user:pass@postgres:5432/selene`                 |
+| `TIMESCALE_URL`     | TimescaleDB connection string | `postgresql://user:pass@timescaledb:5432/selene_measurements` |
+| `VITE_API_BASE_URL` | Frontend API URL              | `https://selene.dankehidayat.my.id/api`                       |
+| `BLYNK_SERVER_URL`  | Blynk IoT server URL          | `http://iot.serangkota.go.id:8080`                            |
+| `BLYNK_AUTH_TOKEN`  | Blynk authentication token    | `your-blynk-token`                                            |
 
-### Frontend
+### Backend `.env`
+
+| Variable           | Description                   | Example                                                              |
+| ------------------ | ----------------------------- | -------------------------------------------------------------------- |
+| `PORT`             | Server port                   | `8787`                                                               |
+| `JWT_SECRET`       | Secret key for JWT signing    | `openssl rand -base64 64`                                            |
+| `DATABASE_URL`     | PostgreSQL connection string  | `postgresql://postgres:postgres@localhost:5432/flowpoint`            |
+| `TIMESCALE_URL`    | TimescaleDB connection string | `postgresql://selene_ts:password@localhost:5433/selene_measurements` |
+| `BLYNK_SERVER_URL` | Blynk IoT server URL          | `http://iot.serangkota.go.id:8080`                                   |
+| `BLYNK_AUTH_TOKEN` | Blynk authentication token    | `your-blynk-token`                                                   |
+
+### Frontend `.env`
 
 | Variable            | Description     | Example                     |
 | ------------------- | --------------- | --------------------------- |
@@ -281,6 +313,15 @@ Admin users have access to:
 | ------ | --------- | ------------ | ---- |
 | GET    | `/health` | Health check | No   |
 
+## Database Architecture
+
+| Database    | Purpose                                      | Technology                         |
+| ----------- | -------------------------------------------- | ---------------------------------- |
+| PostgreSQL  | User accounts, auth, glossary, notifications | Standard PostgreSQL                |
+| TimescaleDB | Sensor readings (time-series data)           | PostgreSQL + TimescaleDB extension |
+
+Sensor readings are stored in a TimescaleDB hypertable (`sensor_readings`), automatically partitioned into 7-day chunks. Queries use `time_bucket()` for efficient time-based aggregation.
+
 ## Fuzzy Energy Classification
 
 The system uses a 15-rule Mamdani fuzzy inference engine with four input variables:
@@ -323,6 +364,7 @@ selene/
 │       │   ├── routes/       # Auth, admin, glossary, notifications
 │       │   ├── middleware/   # Auth guards (authenticate, requireAdmin)
 │       │   ├── analytics/    # Fuzzy logic, statistics
+│       │   ├── timescale.ts  # TimescaleDB client
 │       │   └── index.ts      # Server entry point
 │       ├── prisma/
 │       │   └── schema.prisma
