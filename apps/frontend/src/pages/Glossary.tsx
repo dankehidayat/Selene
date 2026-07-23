@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Search, Plus, X, Trash2 } from "lucide-react";
 import { ChartCard } from "@/components/ChartCard";
+import { useAuth } from "@/services/auth";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787/api";
@@ -228,6 +229,8 @@ const defaultTerms: GlossaryTerm[] = [
 ];
 
 export function Glossary() {
+  const { user, token } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   const [terms, setTerms] = useState<GlossaryTerm[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -258,11 +261,14 @@ export function Glossary() {
   );
 
   const addTerm = async () => {
-    if (!newTerm || !newDefinition) return;
+    if (!newTerm || !newDefinition || !token) return;
     try {
       const res = await fetch(`${API_BASE}/glossary`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           term: newTerm,
           definition: newDefinition,
@@ -289,8 +295,12 @@ export function Glossary() {
   };
 
   const deleteTerm = async (id: string) => {
+    if (!token) return;
     try {
-      await fetch(`${API_BASE}/glossary/${id}`, { method: "DELETE" });
+      await fetch(`${API_BASE}/glossary/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
     } catch {}
     setTerms(terms.filter((t) => t.id !== id));
   };
@@ -317,70 +327,72 @@ export function Glossary() {
             placeholder="Search glossary..."
           />
         </div>
-        <Dialog.Root open={dialogOpen} onOpenChange={setDialogOpen}>
-          <Dialog.Trigger asChild>
-            <button className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 dark:text-gray-900 dark:bg-white dark:hover:bg-gray-100 rounded-xl transition shrink-0">
-              <Plus size={14} /> Add Term
-            </button>
-          </Dialog.Trigger>
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 bg-gray-900/30 dark:bg-black/50 z-40" />
-            <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xl p-6 w-full max-w-md z-50">
-              <div className="flex items-center justify-between mb-4">
-                <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Add Glossary Term
-                </Dialog.Title>
-                <Dialog.Close className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                  <X size={18} />
-                </Dialog.Close>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-semibold text-gray-900 dark:text-white mb-1 block">
-                    Term
-                  </label>
-                  <input
-                    type="text"
-                    value={newTerm}
-                    onChange={(e) => setNewTerm(e.target.value)}
-                    className="w-full text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition"
-                    placeholder="e.g., Voltage"
-                  />
+        {isAdmin && (
+          <Dialog.Root open={dialogOpen} onOpenChange={setDialogOpen}>
+            <Dialog.Trigger asChild>
+              <button className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 dark:text-gray-900 dark:bg-white dark:hover:bg-gray-100 rounded-xl transition shrink-0">
+                <Plus size={14} /> Add Term
+              </button>
+            </Dialog.Trigger>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-gray-900/30 dark:bg-black/50 z-40" />
+              <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-xl p-6 w-full max-w-md z-50">
+                <div className="flex items-center justify-between mb-4">
+                  <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Add Glossary Term
+                  </Dialog.Title>
+                  <Dialog.Close className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <X size={18} />
+                  </Dialog.Close>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-900 dark:text-white mb-1 block">
-                    Definition
-                  </label>
-                  <textarea
-                    value={newDefinition}
-                    onChange={(e) => setNewDefinition(e.target.value)}
-                    className="w-full text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition resize-none h-24"
-                    placeholder="Enter definition..."
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-900 dark:text-white mb-1 block">
+                      Term
+                    </label>
+                    <input
+                      type="text"
+                      value={newTerm}
+                      onChange={(e) => setNewTerm(e.target.value)}
+                      className="w-full text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition"
+                      placeholder="e.g., Voltage"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-900 dark:text-white mb-1 block">
+                      Definition
+                    </label>
+                    <textarea
+                      value={newDefinition}
+                      onChange={(e) => setNewDefinition(e.target.value)}
+                      className="w-full text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition resize-none h-24"
+                      placeholder="Enter definition..."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-900 dark:text-white mb-1 block">
+                      Category
+                    </label>
+                    <input
+                      type="text"
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      className="w-full text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition"
+                      placeholder="e.g., Electrical"
+                    />
+                  </div>
+                  <button
+                    onClick={addTerm}
+                    disabled={!newTerm || !newDefinition}
+                    className="w-full text-sm font-semibold rounded-xl px-4 py-2.5 transition text-white bg-gray-900 hover:bg-gray-800 dark:text-gray-900 dark:bg-white dark:hover:bg-gray-100 disabled:opacity-40"
+                  >
+                    Add Term
+                  </button>
                 </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-900 dark:text-white mb-1 block">
-                    Category
-                  </label>
-                  <input
-                    type="text"
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    className="w-full text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition"
-                    placeholder="e.g., Electrical"
-                  />
-                </div>
-                <button
-                  onClick={addTerm}
-                  disabled={!newTerm || !newDefinition}
-                  className="w-full text-sm font-semibold rounded-xl px-4 py-2.5 transition text-white bg-gray-900 hover:bg-gray-800 dark:text-gray-900 dark:bg-white dark:hover:bg-gray-100 disabled:opacity-40"
-                >
-                  Add Term
-                </button>
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        )}
       </div>
 
       <ChartCard title="All Terms">
@@ -402,14 +414,16 @@ export function Glossary() {
                   <th className="font-semibold py-3 px-2 text-gray-900 dark:text-white">
                     Category
                   </th>
-                  <th className="font-semibold py-3 px-2 w-10"></th>
+                  {isAdmin && (
+                    <th className="font-semibold py-3 px-2 w-10"></th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {filteredTerms.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={4}
+                      colSpan={isAdmin ? 4 : 3}
                       className="py-8 text-center text-sm text-gray-500 dark:text-gray-400 font-medium"
                     >
                       No terms found
@@ -432,14 +446,16 @@ export function Glossary() {
                           {t.category}
                         </span>
                       </td>
-                      <td className="py-3 px-2">
-                        <button
-                          onClick={() => deleteTerm(t.id)}
-                          className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
+                      {isAdmin && (
+                        <td className="py-3 px-2">
+                          <button
+                            onClick={() => deleteTerm(t.id)}
+                            className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
