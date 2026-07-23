@@ -2,7 +2,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET || "flowpoint-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "selene-secret";
 const JWT_EXPIRES_IN = "7d";
 
 export interface JWTPayload {

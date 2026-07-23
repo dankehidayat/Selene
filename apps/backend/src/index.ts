@@ -1,6 +1,8 @@
 // apps/backend/src/index.ts
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import { prisma } from "./db";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerGlossaryRoutes } from "./routes/glossary";
@@ -13,6 +15,7 @@ import {
   generateBoxPlotData,
   generateBlandAltmanData,
 } from "./analytics/fuzzy";
+
 const app = Fastify({ logger: true });
 
 await app.register(cors, {
@@ -22,6 +25,61 @@ await app.register(cors, {
     "https://*.dankehidayat.my.id",
   ],
 });
+
+// ── Swagger/OpenAPI ───────────────────────────────────────
+await app.register(swagger, {
+  openapi: {
+    info: {
+      title: "Selene API",
+      description:
+        "Smart Energy & Climate Dashboard — real-time monitoring and analytics for ESP32-based IoT sensors.",
+      version: "0.1.0",
+    },
+    servers: [
+      { url: "https://selene.dankehidayat.my.id", description: "Production" },
+      { url: "http://localhost:8787", description: "Local development" },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
+    },
+    tags: [
+      {
+        name: "Authentication",
+        description: "User registration, login, and profile management",
+      },
+      { name: "Readings", description: "Sensor data retrieval and export" },
+      {
+        name: "Analytics",
+        description:
+          "Statistical analysis, fuzzy classification, and visualizations",
+      },
+      {
+        name: "Blynk Proxy",
+        description: "Real-time sensor data from Blynk IoT",
+      },
+      { name: "Notifications", description: "User notification management" },
+      { name: "Glossary", description: "Technical term definitions" },
+      { name: "Health", description: "Service health check" },
+    ],
+  },
+});
+
+await app.register(swaggerUi, {
+  routePrefix: "/docs",
+  uiConfig: {
+    docExpansion: "list",
+    deepLinking: true,
+    persistAuthorization: true,
+  },
+  staticCSP: true,
+});
+
 await app.register(registerAuthRoutes);
 await app.register(registerGlossaryRoutes);
 await app.register(registerNotificationRoutes);
@@ -208,544 +266,772 @@ function getRangeConfig(range: string): {
 }
 
 // Blynk proxy
-app.get("/api/blynk/:pin", async (request, reply) => {
-  const { pin } = request.params as { pin: string };
-  if (!BLYNK_SERVER_URL || !BLYNK_AUTH_TOKEN)
-    return reply.code(500).send({ error: "Blynk not configured" });
-  try {
-    const response = await fetch(
-      `${BLYNK_SERVER_URL}/${BLYNK_AUTH_TOKEN}/get/v${pin}`,
-    );
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    return reply.code(500).send({ error: "Blynk fetch failed" });
-  }
-});
-
-app.get("/api/readings/latest", async (request, reply) => {
-  const data = await fetchSheetData();
-  if (data.length === 0)
-    return reply.code(404).send({ error: "No readings found" });
-  const latest = data[data.length - 1];
-  return {
-    timestamp: latest.parsedTs?.toISOString() || latest.timestamp,
-    acVoltage: latest.acVoltage,
-    acCurrent: latest.acCurrent,
-    acPower: latest.acPower,
-    cosPhi: latest.cosPhi,
-    apparentPower: latest.apparentPower,
-    totalEnergy: latest.totalEnergy,
-    frequency: latest.frequency,
-    reactivePower: latest.reactivePower,
-    temperature: latest.temperature,
-    humidity: latest.humidity,
-    tempComfort: latest.tempComfort,
-    energyStatus: normalizeEnergyStatus(latest.energyStatus),
-    powerQualityScore: latest.powerQualityScore,
-    voltageStability: latest.voltageStability,
-    currentPerKW: latest.currentPerKW,
-    energyCost: latest.energyCost,
-  };
-});
-
-app.get("/api/readings/history", async (request) => {
-  const query = request.query as { range?: string };
-  const range = query.range ?? "24h";
-  const data = await fetchSheetData();
-  if (data.length === 0) return [];
-  const valid = data.filter((r: Reading) => r.parsedTs);
-  if (valid.length === 0) return [];
-  valid.sort(
-    (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
-  );
-  const { from, bucketSize } = getRangeConfig(range);
-  const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
-  if (filtered.length === 0)
-    return valid.slice(-50).map((r: Reading) => ({
-      timestamp: r.parsedTs!.toISOString(),
-      voltage: r.acVoltage,
-      power: r.acPower,
-      current: r.acCurrent,
-      temperature: r.temperature,
-      humidity: r.humidity,
-    }));
-  const buckets = new Map<
-    string,
-    {
-      voltage: number;
-      power: number;
-      current: number;
-      temperature: number;
-      humidity: number;
-      count: number;
-      timestamp: string;
+app.get(
+  "/api/blynk/:pin",
+  {
+    schema: {
+      description: "Proxy Blynk IoT sensor data by virtual pin",
+      tags: ["Blynk Proxy"],
+      params: {
+        type: "object",
+        required: ["pin"],
+        properties: {
+          pin: {
+            type: "string",
+            description: "Blynk virtual pin number (0-11)",
+          },
+        },
+      },
+    },
+  },
+  async (request, reply) => {
+    const { pin } = request.params as { pin: string };
+    if (!BLYNK_SERVER_URL || !BLYNK_AUTH_TOKEN)
+      return reply.code(500).send({ error: "Blynk not configured" });
+    try {
+      const response = await fetch(
+        `${BLYNK_SERVER_URL}/${BLYNK_AUTH_TOKEN}/get/v${pin}`,
+      );
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      return reply.code(500).send({ error: "Blynk fetch failed" });
     }
-  >();
-  for (const row of filtered) {
-    let key: string;
-    if (bucketSize === "month") key = row.parsedTs!.toISOString().slice(0, 7);
-    else if (bucketSize === "day")
-      key = row.parsedTs!.toISOString().slice(0, 10);
-    else key = row.parsedTs!.toISOString().slice(0, 13);
-    const existing = buckets.get(key);
-    if (existing) {
-      existing.voltage += row.acVoltage;
-      existing.power += row.acPower;
-      existing.current += row.acCurrent;
-      existing.temperature += row.temperature;
-      existing.humidity += row.humidity;
-      existing.count++;
-    } else {
-      let bucketTimestamp: string;
-      if (bucketSize === "month") bucketTimestamp = `${key}-01T12:00:00.000Z`;
-      else if (bucketSize === "day") bucketTimestamp = `${key}T12:00:00.000Z`;
-      else bucketTimestamp = `${key}:00:00.000Z`;
-      buckets.set(key, {
-        timestamp: bucketTimestamp,
-        voltage: row.acVoltage,
-        power: row.acPower,
-        current: row.acCurrent,
-        temperature: row.temperature,
-        humidity: row.humidity,
-        count: 1,
-      });
-    }
-  }
-  let result = Array.from(buckets.values())
-    .map((b) => ({
-      timestamp: b.timestamp,
-      voltage: +(b.voltage / b.count).toFixed(2),
-      power: +(b.power / b.count).toFixed(2),
-      current: +(b.current / b.count).toFixed(3),
-      temperature: +(b.temperature / b.count).toFixed(2),
-      humidity: +(b.humidity / b.count).toFixed(2),
-    }))
-    .sort(
-      (a, b) =>
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-    );
-  if (result.length > 2000) {
-    const step = Math.ceil(result.length / 2000);
-    result = result.filter((_, i) => i % step === 0);
-  }
-  return result;
-});
-
-app.get("/api/readings/logs", async (request) => {
-  const query = request.query as { pageSize?: string };
-  const pageSize = Number(query.pageSize ?? "20");
-  const data = await fetchSheetData();
-  return data
-    .slice(-pageSize)
-    .reverse()
-    .map((r: Reading) => ({
-      timestamp: r.parsedTs?.toISOString() || r.timestamp,
-      acVoltage: r.acVoltage,
-      acCurrent: r.acCurrent,
-      acPower: r.acPower,
-      cosPhi: r.cosPhi,
-      apparentPower: r.apparentPower,
-      totalEnergy: r.totalEnergy,
-      frequency: r.frequency,
-      reactivePower: r.reactivePower,
-      temperature: r.temperature,
-      humidity: r.humidity,
-      tempComfort: r.tempComfort,
-      energyStatus: normalizeEnergyStatus(r.energyStatus),
-      powerQualityScore: r.powerQualityScore,
-      voltageStability: r.voltageStability,
-    }));
-});
-
-app.get("/api/readings/export", async (request, reply) => {
-  const query = request.query as { format?: string };
-  const format = query.format ?? "csv";
-  const data = await fetchSheetData();
-  if (data.length === 0)
-    return reply.code(404).send({ error: "No data available" });
-  const now = new Date();
-  const ts = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-    "-",
-    String(now.getHours()).padStart(2, "0"),
-    String(now.getMinutes()).padStart(2, "0"),
-    String(now.getSeconds()).padStart(2, "0"),
-  ].join("");
-  const headers = [
-    "Timestamp",
-    "AC Voltage (V)",
-    "AC Current (A)",
-    "AC Power (W)",
-    "Cos Phi",
-    "Apparent Power (VA)",
-    "Total Energy (Wh)",
-    "Frequency (Hz)",
-    "Reactive Power (VAR)",
-    "Temperature (°C)",
-    "Humidity (%)",
-    "Temp Comfort",
-    "Energy Status",
-  ];
-  const rows = data.map((r: Reading) => [
-    r.timestamp,
-    r.acVoltage,
-    r.acCurrent,
-    r.acPower,
-    r.cosPhi,
-    r.apparentPower,
-    r.totalEnergy,
-    r.frequency,
-    r.reactivePower,
-    r.temperature,
-    r.humidity,
-    r.tempComfort,
-    r.energyStatus,
-  ]);
-  const ext = format === "tsv" ? "tsv" : "csv";
-  const filename = `sensor-data-${ts}.${ext}`;
-  if (format === "tsv") {
-    const tsv = [headers.join("\t"), ...rows.map((r) => r.join("\t"))].join(
-      "\n",
-    );
-    return reply
-      .header("Content-Type", "text/tab-separated-values")
-      .header("Content-Disposition", `attachment; filename=${filename}`)
-      .send(tsv);
-  }
-  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-  return reply
-    .header("Content-Type", "text/csv")
-    .header("Content-Disposition", `attachment; filename=${filename}`)
-    .send(csv);
-});
-
-app.get("/api/analytics/summary", async (request) => {
-  const query = request.query as { range?: string };
-  const range = query.range ?? "7d";
-  const data = await fetchSheetData();
-  if (data.length === 0) return { error: "No data" };
-  const valid = data.filter((r: Reading) => r.parsedTs);
-  if (valid.length === 0) return { error: "No valid timestamps" };
-  valid.sort(
-    (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
-  );
-  const { from } = getRangeConfig(range);
-  const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
-  if (filtered.length === 0) return { error: "No data in range" };
-  const powers = filtered.map((r: Reading) => r.acPower).sort((a, b) => a - b);
-  const voltages = filtered.map((r: Reading) => r.acVoltage);
-  const cosPhis = filtered.map((r: Reading) => r.cosPhi);
-  const reactivePowers = filtered.map((r: Reading) => r.reactivePower);
-  const avgPower = mean(powers),
-    medPower = median(powers),
-    stdPower = stdDev(powers, avgPower);
-  const avgVoltage = mean(voltages),
-    avgCosPhi = mean(cosPhis),
-    avgReactive = mean(reactivePowers);
-  let totalEnergyKwh = 0;
-  for (let i = 1; i < filtered.length; i++) {
-    const dt =
-      (filtered[i].parsedTs!.getTime() - filtered[i - 1].parsedTs!.getTime()) /
-      3600000;
-    totalEnergyKwh +=
-      ((filtered[i].acPower + filtered[i - 1].acPower) / 2000) * dt;
-  }
-  const hourlyUsage = new Map<number, { power: number; count: number }>();
-  for (const r of filtered) {
-    const hour = r.parsedTs!.getHours();
-    const h = hourlyUsage.get(hour) || { power: 0, count: 0 };
-    h.power += r.acPower;
-    h.count++;
-    hourlyUsage.set(hour, h);
-  }
-  const peakHours = Array.from(hourlyUsage.entries())
-    .map(([hour, data]) => ({
-      hour,
-      avgPower: +(data.power / data.count).toFixed(2),
-    }))
-    .sort((a, b) => b.avgPower - a.avgPower)
-    .slice(0, 3);
-  return {
-    range,
-    dataPoints: filtered.length,
-    timeSpan: {
-      from: filtered[0].parsedTs!.toISOString(),
-      to: filtered[filtered.length - 1].parsedTs!.toISOString(),
-    },
-    power: {
-      average: +avgPower.toFixed(2),
-      median: +medPower.toFixed(2),
-      stdDeviation: +stdPower.toFixed(2),
-      min: powers[0],
-      max: powers[powers.length - 1],
-    },
-    voltage: { average: +avgVoltage.toFixed(2) },
-    powerFactor: { average: +avgCosPhi.toFixed(2) },
-    reactivePower: {
-      average: +avgReactive.toFixed(2),
-      ratio: +(avgReactive / (avgPower || 1)).toFixed(3),
-    },
-    energy: {
-      totalKwh: +totalEnergyKwh.toFixed(3),
-      estimatedCost: `Rp ${Math.round(totalEnergyKwh * 1444.7).toLocaleString()}`,
-    },
-    peakHours,
-  };
-});
-
-app.get("/api/analytics/climate", async (request) => {
-  const query = request.query as { range?: string };
-  const range = query.range ?? "7d";
-  const data = await fetchSheetData();
-  if (data.length === 0) return { error: "No data" };
-  const valid = data.filter((r: Reading) => r.parsedTs);
-  if (valid.length === 0) return { error: "No valid timestamps" };
-  valid.sort(
-    (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
-  );
-  const { from } = getRangeConfig(range);
-  const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
-  if (filtered.length === 0) return { error: "No data in range" };
-  const temps = filtered
-    .map((r: Reading) => r.temperature)
-    .sort((a, b) => a - b);
-  const hums = filtered.map((r: Reading) => r.humidity).sort((a, b) => a - b);
-  const avgTemp = mean(temps),
-    avgHum = mean(hums);
-  const dewPoints = filtered.map((r: Reading) => {
-    const a = 17.27,
-      b = 237.7;
-    const alpha =
-      (a * r.temperature) / (b + r.temperature) + Math.log(r.humidity / 100);
-    return +((b * alpha) / (a - alpha)).toFixed(1);
-  });
-  const avgDewPoint = mean(dewPoints);
-  let corrTempHum = 0;
-  const n = filtered.length;
-  const sumTemp = sum(temps),
-    sumHum = sum(hums);
-  const sumTempHum = filtered.reduce(
-    (s, r) => s + r.temperature * r.humidity,
-    0,
-  );
-  const sumTempSq = filtered.reduce((s, r) => s + r.temperature ** 2, 0);
-  const sumHumSq = filtered.reduce((s, r) => s + r.humidity ** 2, 0);
-  const num = n * sumTempHum - sumTemp * sumHum;
-  const den = Math.sqrt(
-    (n * sumTempSq - sumTemp ** 2) * (n * sumHumSq - sumHum ** 2),
-  );
-  corrTempHum = den === 0 ? 0 : +(num / den).toFixed(3);
-  let degreeHours = 0;
-  for (let i = 1; i < filtered.length; i++) {
-    const dt =
-      (filtered[i].parsedTs!.getTime() - filtered[i - 1].parsedTs!.getTime()) /
-      3600000;
-    degreeHours +=
-      Math.max(
-        0,
-        (filtered[i].temperature + filtered[i - 1].temperature) / 2 - 18,
-      ) * dt;
-  }
-  const comfortDist: Record<string, number> = {};
-  for (const r of filtered)
-    comfortDist[r.tempComfort] = (comfortDist[r.tempComfort] || 0) + 1;
-  const hourlyClimate = new Map<
-    number,
-    { temp: number; hum: number; count: number }
-  >();
-  for (const r of filtered) {
-    const hour = r.parsedTs!.getHours();
-    const h = hourlyClimate.get(hour) || { temp: 0, hum: 0, count: 0 };
-    h.temp += r.temperature;
-    h.hum += r.humidity;
-    h.count++;
-    hourlyClimate.set(hour, h);
-  }
-  const hourlyData = Array.from(hourlyClimate.entries())
-    .map(([hour, data]) => ({
-      hour,
-      temperature: +(data.temp / data.count).toFixed(1),
-      humidity: +(data.hum / data.count).toFixed(0),
-    }))
-    .sort((a, b) => a.hour - b.hour);
-  return {
-    range,
-    dataPoints: filtered.length,
-    temperature: {
-      average: +avgTemp.toFixed(2),
-      median: +median(temps).toFixed(2),
-      stdDeviation: +stdDev(temps, avgTemp).toFixed(2),
-      min: temps[0],
-      max: temps[temps.length - 1],
-      degreeHours: +degreeHours.toFixed(1),
-    },
-    humidity: {
-      average: +avgHum.toFixed(2),
-      median: +median(hums).toFixed(2),
-      stdDeviation: +stdDev(hums, avgHum).toFixed(2),
-      min: hums[0],
-      max: hums[hums.length - 1],
-    },
-    dewPoint: { average: +avgDewPoint.toFixed(1) },
-    correlation: { tempHumidity: corrTempHum },
-    comfortDistribution: Object.entries(comfortDist).map(([status, count]) => ({
-      status,
-      count,
-      percentage: +((count / filtered.length) * 100).toFixed(1),
-    })),
-    hourlyData,
-  };
-});
-
-app.get("/api/analytics/fuzzy-distribution", async (request) => {
-  const query = request.query as { range?: string };
-  const range = query.range ?? "7d";
-  const data = await fetchSheetData();
-  if (data.length === 0) return { error: "No data" };
-  const valid = data.filter((r: Reading) => r.parsedTs);
-  valid.sort(
-    (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
-  );
-  let filtered = valid;
-  if (range !== "all") {
-    const { from } = getRangeConfig(range);
-    filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
-  }
-  const results = filtered.map((r: Reading) => ({
-    ...classifyEnergyFuzzy(r.acVoltage, r.acPower, r.cosPhi, r.reactivePower),
-    timestamp: r.parsedTs?.toISOString() || r.timestamp,
-    power: r.acPower,
-    powerFactor: r.cosPhi,
-    voltage: r.acVoltage,
-    reactivePower: r.reactivePower,
-  }));
-  const distribution: Record<string, number> = {
-    ECONOMICAL: 0,
-    NORMAL: 0,
-    WASTEFUL: 0,
-  };
-  const scatterData: Array<{
-    power: number;
-    powerFactor: number;
-    category: string;
-  }> = [];
-  for (const r of results) {
-    distribution[r.category]++;
-    scatterData.push({
-      power: r.power,
-      powerFactor: r.powerFactor,
-      category: r.category,
-    });
-  }
-  return { distribution, total: filtered.length, scatterData, results };
-});
-
-app.get("/api/analytics/membership", async () => generateMembershipData());
-app.get("/api/analytics/decision-surface", async () =>
-  generateDecisionSurface(),
+  },
 );
 
-app.get("/api/analytics/box-plot", async (request) => {
-  const query = request.query as { range?: string };
-  const range = query.range ?? "7d";
-  const data = await fetchSheetData();
-  const valid = data.filter((r: Reading) => r.parsedTs);
-  valid.sort(
-    (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
-  );
-  let filtered = valid;
-  if (range !== "all") {
-    const { from } = getRangeConfig(range);
-    filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
-  }
-  const categorized = filtered.map((r: Reading) => ({
-    power: r.acPower,
-    category: classifyEnergyFuzzy(
+app.get(
+  "/api/readings/latest",
+  {
+    schema: {
+      description: "Get the most recent sensor reading",
+      tags: ["Readings"],
+    },
+  },
+  async (request, reply) => {
+    const data = await fetchSheetData();
+    if (data.length === 0)
+      return reply.code(404).send({ error: "No readings found" });
+    const latest = data[data.length - 1];
+    return {
+      timestamp: latest.parsedTs?.toISOString() || latest.timestamp,
+      acVoltage: latest.acVoltage,
+      acCurrent: latest.acCurrent,
+      acPower: latest.acPower,
+      cosPhi: latest.cosPhi,
+      apparentPower: latest.apparentPower,
+      totalEnergy: latest.totalEnergy,
+      frequency: latest.frequency,
+      reactivePower: latest.reactivePower,
+      temperature: latest.temperature,
+      humidity: latest.humidity,
+      tempComfort: latest.tempComfort,
+      energyStatus: normalizeEnergyStatus(latest.energyStatus),
+      powerQualityScore: latest.powerQualityScore,
+      voltageStability: latest.voltageStability,
+      currentPerKW: latest.currentPerKW,
+      energyCost: latest.energyCost,
+    };
+  },
+);
+
+app.get(
+  "/api/readings/history",
+  {
+    schema: {
+      description: "Get aggregated historical sensor data with bucketing",
+      tags: ["Readings"],
+      querystring: {
+        type: "object",
+        properties: {
+          range: {
+            type: "string",
+            enum: ["1h", "24h", "7d", "30d", "3m", "6m", "1y"],
+            default: "24h",
+          },
+        },
+      },
+    },
+  },
+  async (request) => {
+    const query = request.query as { range?: string };
+    const range = query.range ?? "24h";
+    const data = await fetchSheetData();
+    if (data.length === 0) return [];
+    const valid = data.filter((r: Reading) => r.parsedTs);
+    if (valid.length === 0) return [];
+    valid.sort(
+      (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
+    );
+    const { from, bucketSize } = getRangeConfig(range);
+    const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
+    if (filtered.length === 0)
+      return valid.slice(-50).map((r: Reading) => ({
+        timestamp: r.parsedTs!.toISOString(),
+        voltage: r.acVoltage,
+        power: r.acPower,
+        current: r.acCurrent,
+        temperature: r.temperature,
+        humidity: r.humidity,
+      }));
+    const buckets = new Map<
+      string,
+      {
+        voltage: number;
+        power: number;
+        current: number;
+        temperature: number;
+        humidity: number;
+        count: number;
+        timestamp: string;
+      }
+    >();
+    for (const row of filtered) {
+      let key: string;
+      if (bucketSize === "month") key = row.parsedTs!.toISOString().slice(0, 7);
+      else if (bucketSize === "day")
+        key = row.parsedTs!.toISOString().slice(0, 10);
+      else key = row.parsedTs!.toISOString().slice(0, 13);
+      const existing = buckets.get(key);
+      if (existing) {
+        existing.voltage += row.acVoltage;
+        existing.power += row.acPower;
+        existing.current += row.acCurrent;
+        existing.temperature += row.temperature;
+        existing.humidity += row.humidity;
+        existing.count++;
+      } else {
+        let bucketTimestamp: string;
+        if (bucketSize === "month") bucketTimestamp = `${key}-01T12:00:00.000Z`;
+        else if (bucketSize === "day") bucketTimestamp = `${key}T12:00:00.000Z`;
+        else bucketTimestamp = `${key}:00:00.000Z`;
+        buckets.set(key, {
+          timestamp: bucketTimestamp,
+          voltage: row.acVoltage,
+          power: row.acPower,
+          current: row.acCurrent,
+          temperature: row.temperature,
+          humidity: row.humidity,
+          count: 1,
+        });
+      }
+    }
+    let result = Array.from(buckets.values())
+      .map((b) => ({
+        timestamp: b.timestamp,
+        voltage: +(b.voltage / b.count).toFixed(2),
+        power: +(b.power / b.count).toFixed(2),
+        current: +(b.current / b.count).toFixed(3),
+        temperature: +(b.temperature / b.count).toFixed(2),
+        humidity: +(b.humidity / b.count).toFixed(2),
+      }))
+      .sort(
+        (a, b) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+    if (result.length > 2000) {
+      const step = Math.ceil(result.length / 2000);
+      result = result.filter((_, i) => i % step === 0);
+    }
+    return result;
+  },
+);
+
+app.get(
+  "/api/readings/logs",
+  {
+    schema: {
+      description: "Get recent sensor readings for data log table",
+      tags: ["Readings"],
+      querystring: {
+        type: "object",
+        properties: {
+          pageSize: { type: "string", default: "20" },
+        },
+      },
+    },
+  },
+  async (request) => {
+    const query = request.query as { pageSize?: string };
+    const pageSize = Number(query.pageSize ?? "20");
+    const data = await fetchSheetData();
+    return data
+      .slice(-pageSize)
+      .reverse()
+      .map((r: Reading) => ({
+        timestamp: r.parsedTs?.toISOString() || r.timestamp,
+        acVoltage: r.acVoltage,
+        acCurrent: r.acCurrent,
+        acPower: r.acPower,
+        cosPhi: r.cosPhi,
+        apparentPower: r.apparentPower,
+        totalEnergy: r.totalEnergy,
+        frequency: r.frequency,
+        reactivePower: r.reactivePower,
+        temperature: r.temperature,
+        humidity: r.humidity,
+        tempComfort: r.tempComfort,
+        energyStatus: normalizeEnergyStatus(r.energyStatus),
+        powerQualityScore: r.powerQualityScore,
+        voltageStability: r.voltageStability,
+      }));
+  },
+);
+
+app.get(
+  "/api/readings/export",
+  {
+    schema: {
+      description: "Export all sensor data as CSV or TSV file",
+      tags: ["Readings"],
+      querystring: {
+        type: "object",
+        properties: {
+          format: { type: "string", enum: ["csv", "tsv"], default: "csv" },
+        },
+      },
+    },
+  },
+  async (request, reply) => {
+    const query = request.query as { format?: string };
+    const format = query.format ?? "csv";
+    const data = await fetchSheetData();
+    if (data.length === 0)
+      return reply.code(404).send({ error: "No data available" });
+    const now = new Date();
+    const ts = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+      "-",
+      String(now.getHours()).padStart(2, "0"),
+      String(now.getMinutes()).padStart(2, "0"),
+      String(now.getSeconds()).padStart(2, "0"),
+    ].join("");
+    const headers = [
+      "Timestamp",
+      "AC Voltage (V)",
+      "AC Current (A)",
+      "AC Power (W)",
+      "Cos Phi",
+      "Apparent Power (VA)",
+      "Total Energy (Wh)",
+      "Frequency (Hz)",
+      "Reactive Power (VAR)",
+      "Temperature (°C)",
+      "Humidity (%)",
+      "Temp Comfort",
+      "Energy Status",
+    ];
+    const rows = data.map((r: Reading) => [
+      r.timestamp,
       r.acVoltage,
+      r.acCurrent,
       r.acPower,
       r.cosPhi,
+      r.apparentPower,
+      r.totalEnergy,
+      r.frequency,
       r.reactivePower,
-    ).category,
-  }));
-  return generateBoxPlotData(categorized);
-});
+      r.temperature,
+      r.humidity,
+      r.tempComfort,
+      r.energyStatus,
+    ]);
+    const ext = format === "tsv" ? "tsv" : "csv";
+    const filename = `sensor-data-${ts}.${ext}`;
+    if (format === "tsv") {
+      const tsv = [headers.join("\t"), ...rows.map((r) => r.join("\t"))].join(
+        "\n",
+      );
+      return reply
+        .header("Content-Type", "text/tab-separated-values")
+        .header("Content-Disposition", `attachment; filename=${filename}`)
+        .send(tsv);
+    }
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    return reply
+      .header("Content-Type", "text/csv")
+      .header("Content-Disposition", `attachment; filename=${filename}`)
+      .send(csv);
+  },
+);
 
-app.get("/api/analytics/bland-altman", async (request) => {
-  const query = request.query as { range?: string };
-  const range = query.range ?? "7d";
-  const data = await fetchSheetData();
-  const valid = data.filter((r: Reading) => r.parsedTs);
-  valid.sort(
-    (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
-  );
-  let filtered = valid;
-  if (range !== "all") {
+app.get(
+  "/api/analytics/summary",
+  {
+    schema: {
+      description: "Statistical summary of energy data (power, voltage, cost)",
+      tags: ["Analytics"],
+      querystring: {
+        type: "object",
+        properties: {
+          range: {
+            type: "string",
+            enum: ["1h", "24h", "7d", "30d", "3m", "6m", "1y"],
+            default: "7d",
+          },
+        },
+      },
+    },
+  },
+  async (request) => {
+    const query = request.query as { range?: string };
+    const range = query.range ?? "7d";
+    const data = await fetchSheetData();
+    if (data.length === 0) return { error: "No data" };
+    const valid = data.filter((r: Reading) => r.parsedTs);
+    if (valid.length === 0) return { error: "No valid timestamps" };
+    valid.sort(
+      (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
+    );
     const { from } = getRangeConfig(range);
-    filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
-  }
-  const input = filtered.map((r: Reading) => ({
-    voltage: r.acVoltage,
-    power: r.acPower,
-    pf: r.cosPhi,
-    reactive: r.reactivePower,
-  }));
-  return generateBlandAltmanData(input);
-});
+    const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
+    if (filtered.length === 0) return { error: "No data in range" };
+    const powers = filtered
+      .map((r: Reading) => r.acPower)
+      .sort((a, b) => a - b);
+    const voltages = filtered.map((r: Reading) => r.acVoltage);
+    const cosPhis = filtered.map((r: Reading) => r.cosPhi);
+    const reactivePowers = filtered.map((r: Reading) => r.reactivePower);
+    const avgPower = mean(powers),
+      medPower = median(powers),
+      stdPower = stdDev(powers, avgPower);
+    const avgVoltage = mean(voltages),
+      avgCosPhi = mean(cosPhis),
+      avgReactive = mean(reactivePowers);
+    let totalEnergyKwh = 0;
+    for (let i = 1; i < filtered.length; i++) {
+      const dt =
+        (filtered[i].parsedTs!.getTime() -
+          filtered[i - 1].parsedTs!.getTime()) /
+        3600000;
+      totalEnergyKwh +=
+        ((filtered[i].acPower + filtered[i - 1].acPower) / 2000) * dt;
+    }
+    const hourlyUsage = new Map<number, { power: number; count: number }>();
+    for (const r of filtered) {
+      const hour = r.parsedTs!.getHours();
+      const h = hourlyUsage.get(hour) || { power: 0, count: 0 };
+      h.power += r.acPower;
+      h.count++;
+      hourlyUsage.set(hour, h);
+    }
+    const peakHours = Array.from(hourlyUsage.entries())
+      .map(([hour, data]) => ({
+        hour,
+        avgPower: +(data.power / data.count).toFixed(2),
+      }))
+      .sort((a, b) => b.avgPower - a.avgPower)
+      .slice(0, 3);
+    return {
+      range,
+      dataPoints: filtered.length,
+      timeSpan: {
+        from: filtered[0].parsedTs!.toISOString(),
+        to: filtered[filtered.length - 1].parsedTs!.toISOString(),
+      },
+      power: {
+        average: +avgPower.toFixed(2),
+        median: +medPower.toFixed(2),
+        stdDeviation: +stdPower.toFixed(2),
+        min: powers[0],
+        max: powers[powers.length - 1],
+      },
+      voltage: { average: +avgVoltage.toFixed(2) },
+      powerFactor: { average: +avgCosPhi.toFixed(2) },
+      reactivePower: {
+        average: +avgReactive.toFixed(2),
+        ratio: +(avgReactive / (avgPower || 1)).toFixed(3),
+      },
+      energy: {
+        totalKwh: +totalEnergyKwh.toFixed(3),
+        estimatedCost: `Rp ${Math.round(totalEnergyKwh * 1444.7).toLocaleString()}`,
+      },
+      peakHours,
+    };
+  },
+);
 
-app.get("/api/analytics/climate-fuzzy-distribution", async (request) => {
-  const query = request.query as { range?: string };
-  const range = query.range ?? "7d";
-  const data = await fetchSheetData();
-  if (data.length === 0) return { error: "No data" };
-
-  const valid = data.filter((r: Reading) => r.parsedTs);
-  valid.sort(
-    (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
-  );
-  let filtered = valid;
-  if (range !== "all") {
+app.get(
+  "/api/analytics/climate",
+  {
+    schema: {
+      description:
+        "Climate analytics including temperature, humidity, dew point, and comfort distribution",
+      tags: ["Analytics"],
+      querystring: {
+        type: "object",
+        properties: {
+          range: {
+            type: "string",
+            enum: ["1h", "24h", "7d", "30d", "3m", "6m", "1y"],
+            default: "7d",
+          },
+        },
+      },
+    },
+  },
+  async (request) => {
+    const query = request.query as { range?: string };
+    const range = query.range ?? "7d";
+    const data = await fetchSheetData();
+    if (data.length === 0) return { error: "No data" };
+    const valid = data.filter((r: Reading) => r.parsedTs);
+    if (valid.length === 0) return { error: "No valid timestamps" };
+    valid.sort(
+      (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
+    );
     const { from } = getRangeConfig(range);
-    filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
-  }
+    const filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
+    if (filtered.length === 0) return { error: "No data in range" };
+    const temps = filtered
+      .map((r: Reading) => r.temperature)
+      .sort((a, b) => a - b);
+    const hums = filtered.map((r: Reading) => r.humidity).sort((a, b) => a - b);
+    const avgTemp = mean(temps),
+      avgHum = mean(hums);
+    const dewPoints = filtered.map((r: Reading) => {
+      const a = 17.27,
+        b = 237.7;
+      const alpha =
+        (a * r.temperature) / (b + r.temperature) + Math.log(r.humidity / 100);
+      return +((b * alpha) / (a - alpha)).toFixed(1);
+    });
+    const avgDewPoint = mean(dewPoints);
+    let corrTempHum = 0;
+    const n = filtered.length;
+    const sumTemp = sum(temps),
+      sumHum = sum(hums);
+    const sumTempHum = filtered.reduce(
+      (s, r) => s + r.temperature * r.humidity,
+      0,
+    );
+    const sumTempSq = filtered.reduce((s, r) => s + r.temperature ** 2, 0);
+    const sumHumSq = filtered.reduce((s, r) => s + r.humidity ** 2, 0);
+    const num = n * sumTempHum - sumTemp * sumHum;
+    const den = Math.sqrt(
+      (n * sumTempSq - sumTemp ** 2) * (n * sumHumSq - sumHum ** 2),
+    );
+    corrTempHum = den === 0 ? 0 : +(num / den).toFixed(3);
+    let degreeHours = 0;
+    for (let i = 1; i < filtered.length; i++) {
+      const dt =
+        (filtered[i].parsedTs!.getTime() -
+          filtered[i - 1].parsedTs!.getTime()) /
+        3600000;
+      degreeHours +=
+        Math.max(
+          0,
+          (filtered[i].temperature + filtered[i - 1].temperature) / 2 - 18,
+        ) * dt;
+    }
+    const comfortDist: Record<string, number> = {};
+    for (const r of filtered)
+      comfortDist[r.tempComfort] = (comfortDist[r.tempComfort] || 0) + 1;
+    const hourlyClimate = new Map<
+      number,
+      { temp: number; hum: number; count: number }
+    >();
+    for (const r of filtered) {
+      const hour = r.parsedTs!.getHours();
+      const h = hourlyClimate.get(hour) || { temp: 0, hum: 0, count: 0 };
+      h.temp += r.temperature;
+      h.hum += r.humidity;
+      h.count++;
+      hourlyClimate.set(hour, h);
+    }
+    const hourlyData = Array.from(hourlyClimate.entries())
+      .map(([hour, data]) => ({
+        hour,
+        temperature: +(data.temp / data.count).toFixed(1),
+        humidity: +(data.hum / data.count).toFixed(0),
+      }))
+      .sort((a, b) => a.hour - b.hour);
+    return {
+      range,
+      dataPoints: filtered.length,
+      temperature: {
+        average: +avgTemp.toFixed(2),
+        median: +median(temps).toFixed(2),
+        stdDeviation: +stdDev(temps, avgTemp).toFixed(2),
+        min: temps[0],
+        max: temps[temps.length - 1],
+        degreeHours: +degreeHours.toFixed(1),
+      },
+      humidity: {
+        average: +avgHum.toFixed(2),
+        median: +median(hums).toFixed(2),
+        stdDeviation: +stdDev(hums, avgHum).toFixed(2),
+        min: hums[0],
+        max: hums[hums.length - 1],
+      },
+      dewPoint: { average: +avgDewPoint.toFixed(1) },
+      correlation: { tempHumidity: corrTempHum },
+      comfortDistribution: Object.entries(comfortDist).map(
+        ([status, count]) => ({
+          status,
+          count,
+          percentage: +((count / filtered.length) * 100).toFixed(1),
+        }),
+      ),
+      hourlyData,
+    };
+  },
+);
 
-  const results = filtered.map((r: Reading) => ({
-    ...classifyClimateFuzzy(r.temperature, r.humidity),
-    timestamp: r.parsedTs?.toISOString() || r.timestamp,
-    temperature: r.temperature,
-    humidity: r.humidity,
-  }));
+app.get(
+  "/api/analytics/fuzzy-distribution",
+  {
+    schema: {
+      description:
+        "Energy fuzzy classification distribution with scatter plot data",
+      tags: ["Analytics"],
+      querystring: {
+        type: "object",
+        properties: {
+          range: {
+            type: "string",
+            enum: ["1h", "24h", "7d", "30d", "3m", "6m", "1y", "all"],
+            default: "7d",
+          },
+        },
+      },
+    },
+  },
+  async (request) => {
+    const query = request.query as { range?: string };
+    const range = query.range ?? "7d";
+    const data = await fetchSheetData();
+    if (data.length === 0) return { error: "No data" };
+    const valid = data.filter((r: Reading) => r.parsedTs);
+    valid.sort(
+      (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
+    );
+    let filtered = valid;
+    if (range !== "all") {
+      const { from } = getRangeConfig(range);
+      filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
+    }
+    const results = filtered.map((r: Reading) => ({
+      ...classifyEnergyFuzzy(r.acVoltage, r.acPower, r.cosPhi, r.reactivePower),
+      timestamp: r.parsedTs?.toISOString() || r.timestamp,
+      power: r.acPower,
+      powerFactor: r.cosPhi,
+      voltage: r.acVoltage,
+      reactivePower: r.reactivePower,
+    }));
+    const distribution: Record<string, number> = {
+      ECONOMICAL: 0,
+      NORMAL: 0,
+      WASTEFUL: 0,
+    };
+    const scatterData: Array<{
+      power: number;
+      powerFactor: number;
+      category: string;
+    }> = [];
+    for (const r of results) {
+      distribution[r.category]++;
+      scatterData.push({
+        power: r.power,
+        powerFactor: r.powerFactor,
+        category: r.category,
+      });
+    }
+    return { distribution, total: filtered.length, scatterData, results };
+  },
+);
 
-  const distribution: Record<string, number> = {
-    COLD: 0,
-    COOL: 0,
-    COMFORTABLE: 0,
-    WARM: 0,
-    HOT: 0,
-  };
-  const scatterData: Array<{
-    temperature: number;
-    humidity: number;
-    category: string;
-  }> = [];
-  for (const r of results) {
-    distribution[r.category]++;
-    scatterData.push({
+app.get(
+  "/api/analytics/membership",
+  {
+    schema: {
+      description:
+        "Generate fuzzy membership function data for voltage and power",
+      tags: ["Analytics"],
+    },
+  },
+  async () => generateMembershipData(),
+);
+
+app.get(
+  "/api/analytics/decision-surface",
+  {
+    schema: {
+      description: "Generate fuzzy decision surface grid data",
+      tags: ["Analytics"],
+    },
+  },
+  async () => generateDecisionSurface(),
+);
+
+app.get(
+  "/api/analytics/box-plot",
+  {
+    schema: {
+      description: "Box plot data for power distribution by energy category",
+      tags: ["Analytics"],
+      querystring: {
+        type: "object",
+        properties: {
+          range: {
+            type: "string",
+            enum: ["1h", "24h", "7d", "30d", "3m", "6m", "1y", "all"],
+            default: "7d",
+          },
+        },
+      },
+    },
+  },
+  async (request) => {
+    const query = request.query as { range?: string };
+    const range = query.range ?? "7d";
+    const data = await fetchSheetData();
+    const valid = data.filter((r: Reading) => r.parsedTs);
+    valid.sort(
+      (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
+    );
+    let filtered = valid;
+    if (range !== "all") {
+      const { from } = getRangeConfig(range);
+      filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
+    }
+    const categorized = filtered.map((r: Reading) => ({
+      power: r.acPower,
+      category: classifyEnergyFuzzy(
+        r.acVoltage,
+        r.acPower,
+        r.cosPhi,
+        r.reactivePower,
+      ).category,
+    }));
+    return generateBoxPlotData(categorized);
+  },
+);
+
+app.get(
+  "/api/analytics/bland-altman",
+  {
+    schema: {
+      description:
+        "Bland-Altman analysis comparing fuzzy vs threshold classification",
+      tags: ["Analytics"],
+      querystring: {
+        type: "object",
+        properties: {
+          range: {
+            type: "string",
+            enum: ["1h", "24h", "7d", "30d", "3m", "6m", "1y", "all"],
+            default: "7d",
+          },
+        },
+      },
+    },
+  },
+  async (request) => {
+    const query = request.query as { range?: string };
+    const range = query.range ?? "7d";
+    const data = await fetchSheetData();
+    const valid = data.filter((r: Reading) => r.parsedTs);
+    valid.sort(
+      (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
+    );
+    let filtered = valid;
+    if (range !== "all") {
+      const { from } = getRangeConfig(range);
+      filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
+    }
+    const input = filtered.map((r: Reading) => ({
+      voltage: r.acVoltage,
+      power: r.acPower,
+      pf: r.cosPhi,
+      reactive: r.reactivePower,
+    }));
+    return generateBlandAltmanData(input);
+  },
+);
+
+app.get(
+  "/api/analytics/climate-fuzzy-distribution",
+  {
+    schema: {
+      description:
+        "Climate fuzzy classification distribution with scatter plot data",
+      tags: ["Analytics"],
+      querystring: {
+        type: "object",
+        properties: {
+          range: {
+            type: "string",
+            enum: ["1h", "24h", "7d", "30d", "3m", "6m", "1y", "all"],
+            default: "7d",
+          },
+        },
+      },
+    },
+  },
+  async (request) => {
+    const query = request.query as { range?: string };
+    const range = query.range ?? "7d";
+    const data = await fetchSheetData();
+    if (data.length === 0) return { error: "No data" };
+
+    const valid = data.filter((r: Reading) => r.parsedTs);
+    valid.sort(
+      (a: Reading, b: Reading) => a.parsedTs!.getTime() - b.parsedTs!.getTime(),
+    );
+    let filtered = valid;
+    if (range !== "all") {
+      const { from } = getRangeConfig(range);
+      filtered = valid.filter((r: Reading) => r.parsedTs! >= from);
+    }
+
+    const results = filtered.map((r: Reading) => ({
+      ...classifyClimateFuzzy(r.temperature, r.humidity),
+      timestamp: r.parsedTs?.toISOString() || r.timestamp,
       temperature: r.temperature,
       humidity: r.humidity,
-      category: r.category,
-    });
-  }
+    }));
 
-  return { distribution, total: filtered.length, scatterData, results };
-});
+    const distribution: Record<string, number> = {
+      COLD: 0,
+      COOL: 0,
+      COMFORTABLE: 0,
+      WARM: 0,
+      HOT: 0,
+    };
+    const scatterData: Array<{
+      temperature: number;
+      humidity: number;
+      category: string;
+    }> = [];
+    for (const r of results) {
+      distribution[r.category]++;
+      scatterData.push({
+        temperature: r.temperature,
+        humidity: r.humidity,
+        category: r.category,
+      });
+    }
 
-app.get("/health", async () => ({
-  status: "ok",
-  cachedRows: cachedData.length,
-}));
+    return { distribution, total: filtered.length, scatterData, results };
+  },
+);
+
+app.get(
+  "/health",
+  {
+    schema: {
+      description: "Health check endpoint",
+      tags: ["Health"],
+    },
+  },
+  async () => ({
+    status: "ok",
+    cachedRows: cachedData.length,
+  }),
+);
 
 const port = Number(process.env.PORT ?? 8787);
 try {

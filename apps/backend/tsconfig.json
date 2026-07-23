@@ -6,7 +6,10 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "lib": ["ES2022"]
+    "lib": ["ES2022"],
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true
   },
   "include": ["src"]
 }
