@@ -26,8 +26,9 @@ export function SidebarContent() {
   const { user } = useAuth();
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2.5 px-5 pt-6 pb-8 shrink-0">
+    <div className="flex flex-col h-full min-h-0">
+      {/* Logo — fixed at top */}
+      <div className="flex items-center gap-2.5 px-5 pt-6 pb-4 shrink-0">
         <img
           src="/icon.png"
           alt="Selene"
@@ -43,11 +44,12 @@ export function SidebarContent() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {/* Navigation — scrollable if needed */}
+      <div className="flex-1 overflow-y-auto min-h-0">
         <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
           Main
         </p>
-        <nav className="px-3 space-y-0.5">
+        <nav className="px-3 space-y-0.5 pb-4">
           {mainItems.map((item) => (
             <Link
               key={item.label}
@@ -64,10 +66,10 @@ export function SidebarContent() {
           ))}
         </nav>
 
-        <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-6">
+        <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
           Information
         </p>
-        <nav className="px-3 space-y-0.5">
+        <nav className="px-3 space-y-0.5 pb-4">
           {infoItems.map((item) => (
             <Link
               key={item.label}
@@ -84,6 +86,7 @@ export function SidebarContent() {
         </nav>
       </div>
 
+      {/* Account — fixed at bottom */}
       <div className="border-t border-gray-100 dark:border-gray-800 px-3 pt-3 pb-6 shrink-0">
         {user ? (
           <AccountMenu />
