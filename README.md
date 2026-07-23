@@ -6,7 +6,7 @@ A real-time monitoring and analytics platform for ESP32-based IoT sensors. Built
 
 ## Overview
 
-Selene provides live dashboards, historical data logging, and advanced analytics for electrical parameters (voltage, current, power, power factor, frequency) and environmental conditions (temperature, humidity). The system implements a 15-rule Mamdani fuzzy inference engine for energy consumption classification and a 14-rule climate fuzzy engine for thermal comfort assessment. Statistical tools include Bland-Altman analysis, box plots, decision surface visualization, and membership function charts.
+Selene provides live dashboards, historical data logging, and advanced analytics for electrical parameters (voltage, current, power, power factor, frequency) and environmental conditions (temperature, humidity). The system implements a 15-rule Mamdani fuzzy inference engine for energy consumption classification and a 14-rule climate fuzzy engine for thermal comfort assessment. Statistical tools include Bland-Altman analysis, box plots, decision surface visualization, membership function charts, and ML-powered time-series forecasting.
 
 ## Architecture
 
@@ -31,9 +31,14 @@ ESP32 + PZEM-004T + DHT11
 ### Real-Time Dashboard
 
 - AC voltage, current, power, temperature, and humidity readouts
-- Power quality panel with composite score, cos phi, and frequency
-- Energy consumption and power usage analytics with range selectors (1h to 1y)
+- Power quality overview with composite score, cos phi, frequency, cost, and consumption
+- Energy usage chart with power and current trends
+- Climate history chart with temperature and humidity
+- ML-powered 24-hour forecast with confidence bands for all metrics
+- Adaptive forecast horizon based on selected range (1h to 1y)
+- "Now" divider line separating actual data from predictions
 - Data refreshes every 3 seconds via Blynk IoT proxy
+- Automatic Blynk-to-TimescaleDB polling every 30 seconds
 
 ### Data Log
 
@@ -44,10 +49,12 @@ ESP32 + PZEM-004T + DHT11
 
 ### Analytics
 
-- **Energy**: Power distribution charts, peak usage hours, statistical summaries
-- **Environment**: Hourly climate patterns, comfort distribution, dew point, correlation
+- **Energy**: Multi-line power chart (Power, Current, Apparent, Reactive), hourly usage pattern, energy consumption (Wh) with time-weighted integration
+- **Environment**: Climate history with temperature and humidity, comfort distribution
 - **Energy Fuzzy**: Pie charts, scatter plots, membership functions, box plots, Bland-Altman analysis, decision surface
 - **Climate Fuzzy**: ASHRAE 55 & SNI 03-6572 based thermal comfort classification with scatter plots and distribution charts
+- **ML Forecasting**: Linear regression + exponential smoothing + pattern matching ensemble model for all energy and climate charts
+- Key metrics cards with statistical summaries
 
 ### Authentication & Authorization
 
@@ -64,6 +71,7 @@ ESP32 + PZEM-004T + DHT11
 - Theme switching (light, dark, system) from both sidebar and settings
 - Account deletion with confirmation flow
 - Admin-only Administration tab for user management
+- Logout accessible from settings sidebar
 
 ### Additional Features
 
@@ -81,12 +89,13 @@ ESP32 + PZEM-004T + DHT11
 - React 18 with TypeScript
 - TanStack Router for type-safe routing
 - TanStack Query for server state management
-- Recharts for bar, line, and pie charts
-- Observable Plot for statistical visualizations
+- Recharts for interactive charts (ComposedChart, Line, Bar, Area, Pie)
+- Observable Plot for statistical visualizations (scatter, box plot, Bland-Altman, decision surface)
 - Radix UI primitives (Dialog, DropdownMenu, Popover, HoverCard, ScrollArea, Separator)
 - Tailwind CSS with class-based dark mode
 - Lucide React for iconography
 - html2canvas for chart export
+- Custom ML forecasting engine (Linear Regression + EMA + Pattern Matching)
 
 ### Backend
 
@@ -96,7 +105,7 @@ ESP32 + PZEM-004T + DHT11
 - @fastify/swagger + @fastify/swagger-ui for API documentation
 - bcryptjs for password hashing (12 rounds)
 - jsonwebtoken for JWT signing and verification
-- Blynk IoT proxy for live sensor data
+- Blynk IoT proxy for live sensor data with automatic TimescaleDB ingestion
 
 ### Hardware
 
@@ -264,12 +273,13 @@ Admin users have access to:
 
 ### Readings
 
-| Method | Path                              | Description                | Auth |
-| ------ | --------------------------------- | -------------------------- | ---- |
-| GET    | `/api/readings/latest`            | Latest sensor reading      | No   |
-| GET    | `/api/readings/history?range=24h` | Aggregated historical data | No   |
-| GET    | `/api/readings/logs?pageSize=20`  | Recent readings            | No   |
-| GET    | `/api/readings/export?format=csv` | Export data                | No   |
+| Method | Path                                         | Description                | Auth |
+| ------ | -------------------------------------------- | -------------------------- | ---- |
+| GET    | `/api/readings/latest`                       | Latest sensor reading      | No   |
+| GET    | `/api/readings/history?range=24h`            | Aggregated historical data | No   |
+| GET    | `/api/readings/history?range=7d&type=energy` | Energy consumption data    | No   |
+| GET    | `/api/readings/logs?pageSize=20`             | Recent readings            | No   |
+| GET    | `/api/readings/export?format=csv`            | Export data                | No   |
 
 ### Analytics
 
@@ -320,7 +330,29 @@ Admin users have access to:
 | PostgreSQL  | User accounts, auth, glossary, notifications | Standard PostgreSQL                |
 | TimescaleDB | Sensor readings (time-series data)           | PostgreSQL + TimescaleDB extension |
 
-Sensor readings are stored in a TimescaleDB hypertable (`sensor_readings`), automatically partitioned into 7-day chunks. Queries use `time_bucket()` for efficient time-based aggregation.
+Sensor readings are stored in a TimescaleDB hypertable (`sensor_readings`), automatically partitioned into 7-day chunks. Queries use `time_bucket()` for efficient time-based aggregation. Live data from Blynk is automatically polled every 30 seconds and inserted into TimescaleDB.
+
+## ML Forecasting
+
+The dashboard includes a lightweight machine learning forecasting engine that runs entirely in the browser:
+
+- **Linear Regression with Gradient Descent**: Learns trend from recent data
+- **Exponential Moving Average with Trend Detection**: Smooths noise and detects direction
+- **Hourly Pattern Matching**: Extracts average patterns by hour of day from all history
+- **Ensemble Method**: Dynamically weights methods based on horizon length
+
+Forecast horizons adapt to the selected range:
+| Range | Forecast Points | Interval |
+|-------|----------------|----------|
+| 1 Hour | 12 points | 5 minutes |
+| 24 Hours | 24 points | 1 hour |
+| 7 Days | 48 points | 1 hour |
+| 30 Days | 30 points | 1 day |
+| 3 Months | 12 points | 1 week |
+| 6 Months | 12 points | 2 weeks |
+| 1 Year | 12 points | 1 month |
+
+All computation runs client-side in under 10ms with zero additional dependencies.
 
 ## Fuzzy Energy Classification
 
@@ -354,7 +386,7 @@ selene/
 │   │   │   ├── components/   # Reusable UI components, overlays
 │   │   │   ├── pages/        # Route-level page components
 │   │   │   ├── services/     # API hooks, auth context
-│   │   │   ├── lib/          # Utility functions
+│   │   │   ├── lib/          # Utility functions, ML forecasting
 │   │   │   └── types/        # TypeScript interfaces
 │   │   ├── Dockerfile
 │   │   ├── serve.ts          # Production server
