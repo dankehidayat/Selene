@@ -1,4 +1,4 @@
-// [apps/frontend] src/pages/Glossary.tsx
+// apps/frontend/src/pages/Glossary.tsx
 import { useState, useEffect } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Search, Plus, X, Trash2 } from "lucide-react";
@@ -68,7 +68,7 @@ const defaultTerms: GlossaryTerm[] = [
     id: "8",
     term: "Fuzzy Logic",
     definition:
-      "A computing approach based on degrees of truth rather than binary true/false. Used for energy classification.",
+      "A computing approach based on degrees of truth rather than binary true/false. Used for energy and climate classification.",
     category: "Computing",
   },
   {
@@ -96,7 +96,7 @@ const defaultTerms: GlossaryTerm[] = [
     id: "12",
     term: "Mamdani Inference",
     definition:
-      "A fuzzy logic inference method using fuzzy sets for both inputs and outputs. Used in the 15-rule energy classification system.",
+      "A fuzzy logic inference method using fuzzy sets for both inputs and outputs. Used in the 15-rule energy and 14-rule climate classification systems.",
     category: "Computing",
   },
   {
@@ -154,6 +154,76 @@ const defaultTerms: GlossaryTerm[] = [
     definition:
       "A statistical measure (r) indicating the strength and direction of a linear relationship between two variables.",
     category: "Statistics",
+  },
+  {
+    id: "21",
+    term: "TimescaleDB",
+    definition:
+      "An open-source time-series database extension for PostgreSQL. Optimized for storing and querying sensor readings with automatic time-based partitioning.",
+    category: "Database",
+  },
+  {
+    id: "22",
+    term: "Hypertable",
+    definition:
+      "A TimescaleDB feature that automatically partitions large tables by time into chunks for faster queries and efficient storage.",
+    category: "Database",
+  },
+  {
+    id: "23",
+    term: "Blynk",
+    definition:
+      "An IoT platform that enables communication between microcontrollers and cloud services. Used as the bridge between the ESP32 sensor and the Selene backend.",
+    category: "IoT",
+  },
+  {
+    id: "24",
+    term: "JWT",
+    definition:
+      "JSON Web Token — a compact, URL-safe means of representing claims between parties. Used for authentication with 7-day expiry.",
+    category: "Computing",
+  },
+  {
+    id: "25",
+    term: "Linear Regression",
+    definition:
+      "A machine learning algorithm that models the relationship between variables by fitting a linear equation. Used in the forecasting engine for trend prediction.",
+    category: "Machine Learning",
+  },
+  {
+    id: "26",
+    term: "Exponential Smoothing",
+    definition:
+      "A time-series forecasting method that applies decreasing weights to older observations. Used for short-term energy and climate predictions.",
+    category: "Machine Learning",
+  },
+  {
+    id: "27",
+    term: "Ensemble Forecast",
+    definition:
+      "A prediction method that combines multiple models (linear regression, pattern matching, exponential smoothing) weighted by forecast horizon for improved accuracy.",
+    category: "Machine Learning",
+  },
+  {
+    id: "28",
+    term: "Confidence Band",
+    definition:
+      "A shaded range around a forecast line representing the prediction uncertainty. Wider bands indicate lower confidence in the prediction.",
+    category: "Statistics",
+  },
+  {
+    id: "29",
+    term: "Swagger",
+    definition:
+      "An open-source framework for designing and documenting REST APIs. Selene uses it to provide interactive API documentation at /docs.",
+    category: "Computing",
+  },
+  {
+    id: "30",
+    term: "Time-Weighted Integration",
+    definition:
+      "A method for calculating energy consumption by multiplying average power between readings by the time interval. Prevents overcounting with frequent sensor readings.",
+    category: "Electrical",
   },
 ];
 
@@ -231,7 +301,7 @@ export function Glossary() {
         <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
           Glossary
         </h2>
-        <p className="text-sm text-gray-900 dark:text-white mt-1 font-medium">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
           Technical terms and definitions
         </p>
       </div>
@@ -304,10 +374,6 @@ export function Glossary() {
                   onClick={addTerm}
                   disabled={!newTerm || !newDefinition}
                   className="w-full text-sm font-semibold rounded-xl px-4 py-2.5 transition text-white bg-gray-900 hover:bg-gray-800 dark:text-gray-900 dark:bg-white dark:hover:bg-gray-100 disabled:opacity-40"
-                  style={{
-                    backgroundColor:
-                      !newTerm || !newDefinition ? undefined : undefined,
-                  }}
                 >
                   Add Term
                 </button>
@@ -319,7 +385,7 @@ export function Glossary() {
 
       <ChartCard title="All Terms">
         {loading ? (
-          <div className="py-8 text-center text-sm text-gray-900 dark:text-white font-medium">
+          <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400 font-medium">
             Loading...
           </div>
         ) : (
@@ -344,7 +410,7 @@ export function Glossary() {
                   <tr>
                     <td
                       colSpan={4}
-                      className="py-8 text-center text-sm text-gray-900 dark:text-white font-medium"
+                      className="py-8 text-center text-sm text-gray-500 dark:text-gray-400 font-medium"
                     >
                       No terms found
                     </td>
@@ -358,11 +424,11 @@ export function Glossary() {
                       <td className="py-3 px-2 text-gray-900 dark:text-white font-semibold">
                         {t.term}
                       </td>
-                      <td className="py-3 px-2 text-gray-900 dark:text-white">
+                      <td className="py-3 px-2 text-gray-600 dark:text-gray-400">
                         {t.definition}
                       </td>
                       <td className="py-3 px-2">
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
                           {t.category}
                         </span>
                       </td>
