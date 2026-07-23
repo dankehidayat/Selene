@@ -2,7 +2,6 @@
 import { useState } from "react";
 import {
   ResponsiveContainer,
-  LineChart,
   Line,
   XAxis,
   YAxis,
@@ -12,16 +11,11 @@ import {
   Area,
   ComposedChart,
 } from "recharts";
-import {
-  Zap,
-  Activity,
-  Gauge,
-  Thermometer,
-  Droplets,
-  DollarSign,
-} from "lucide-react";
+import { Zap, Activity, Gauge, DollarSign } from "lucide-react";
 import { StatCard } from "@/components/StatCard";
 import { ChartCard, RangeSelect } from "@/components/ChartCard";
+import { PowerOverview } from "@/components/PowerOverview";
+import { ClimateOverview } from "@/components/ClimateOverview";
 import {
   useLiveReading,
   useReadingHistory,
@@ -111,14 +105,7 @@ function UnifiedTooltip({
           />
           {entry.name}:{" "}
           <span className="text-gray-900 dark:text-white font-semibold">
-            {entry.value}{" "}
-            {entry.name === "Power"
-              ? "W"
-              : entry.name === "Current"
-                ? "A"
-                : entry.name === "Temperature"
-                  ? "°C"
-                  : "%"}
+            {entry.value} W
           </span>
         </p>
       ))}
@@ -154,7 +141,8 @@ function ClimateTooltip({
           />
           {entry.name}:{" "}
           <span className="text-gray-900 dark:text-white font-semibold">
-            {entry.value} {entry.name === "Temperature" ? "°C" : "%"}
+            {entry.value}
+            {entry.name === "Temperature" ? "°C" : "%"}
           </span>
         </p>
       ))}
@@ -245,7 +233,7 @@ export function Dashboard() {
 
         <div className="grid lg:grid-cols-[1fr_320px] gap-4">
           <ChartCard
-            title="Energy Usage"
+            title="Power Usage Past History"
             chartId="chart-energy-usage"
             action={
               <RangeSelect
@@ -326,11 +314,20 @@ export function Dashboard() {
                       fontSize: 11,
                       fontFamily: "Inter, sans-serif",
                     }}
-                    formatter={(value: string) => (
-                      <span className="text-gray-600 dark:text-gray-300">
-                        {value}
-                      </span>
-                    )}
+                    payload={[
+                      {
+                        value: "Power (W)",
+                        type: "line",
+                        color: "#3B82F6",
+                        id: "power",
+                      },
+                      {
+                        value: "Current (A)",
+                        type: "line",
+                        color: "#F59E0B",
+                        id: "current",
+                      },
+                    ]}
                   />
                   <Area
                     yAxisId="left"
@@ -338,6 +335,7 @@ export function Dashboard() {
                     dataKey="power"
                     fill="url(#powerGradient)"
                     stroke="none"
+                    hide
                   />
                   <Line
                     yAxisId="left"
@@ -355,6 +353,7 @@ export function Dashboard() {
                     dataKey="current"
                     fill="url(#currentGradient)"
                     stroke="none"
+                    hide
                   />
                   <Line
                     yAxisId="right"
@@ -371,54 +370,14 @@ export function Dashboard() {
             )}
           </ChartCard>
 
-          <ChartCard title="Power Quality">
-            <div className="space-y-4 mt-1">
-              <div>
-                <p className="text-3xl font-semibold text-gray-900 dark:text-white">
-                  {live?.powerQualityScore?.toFixed(0) ?? "—"}
-                  <span className="text-base text-gray-400 dark:text-gray-500">
-                    /100
-                  </span>
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Composite quality score
-                </p>
-              </div>
-              <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">
-                    cos φ
-                  </span>
-                  <span className="font-semibold text-gray-900 dark:text-white">
-                    {live?.cosPhi?.toFixed(2) ?? "—"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">
-                    Frequency
-                  </span>
-                  <span className="font-semibold text-gray-900 dark:text-white">
-                    {live?.frequency?.toFixed(1) ?? "—"} Hz
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">
-                    Energy Cost (24h)
-                  </span>
-                  <span className="font-semibold text-gray-900 dark:text-white">
-                    {estimatedCost}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">
-                    Consumption (24h)
-                  </span>
-                  <span className="font-semibold text-gray-900 dark:text-white">
-                    {totalKwh !== "—" ? `${totalKwh} kWh` : "—"}
-                  </span>
-                </div>
-              </div>
-            </div>
+          <ChartCard title="Power Overview">
+            <PowerOverview
+              qualityScore={live?.powerQualityScore}
+              cosPhi={live?.cosPhi}
+              frequency={live?.frequency}
+              estimatedCost={estimatedCost}
+              totalKwh={totalKwh}
+            />
           </ChartCard>
         </div>
       </div>
@@ -428,161 +387,153 @@ export function Dashboard() {
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-3">
           Environment
         </p>
-        <div className="grid lg:grid-cols-2 gap-4 mb-4">
-          <ChartCard title="Temperature">
-            <div className="flex items-center gap-3 mb-4">
-              <Thermometer size={18} className="text-rose-500 shrink-0" />
-              <div>
-                <span className="text-xl font-semibold text-gray-900 dark:text-white tabular-nums">
-                  {live?.temperature?.toFixed(1) ?? "—"}
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white ml-0.5">
-                    °C
-                  </span>
-                </span>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                  {live?.tempComfort
-                    ? `Feels ${live.tempComfort.toLowerCase()}`
-                    : "—"}
-                </p>
+        <div className="grid lg:grid-cols-[1fr_320px] gap-4">
+          <ChartCard
+            title="Climate Past History"
+            chartId="chart-climate"
+            action={
+              <RangeSelect
+                options={RANGE_OPTIONS}
+                value={chartRange}
+                onChange={setChartRange}
+              />
+            }
+          >
+            {climateHistory.length === 0 ? (
+              <div className="flex h-[260px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                No data available
               </div>
-            </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <ComposedChart data={climateHistory}>
+                  <defs>
+                    <linearGradient
+                      id="tempGradient"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stopColor="#EF4444"
+                        stopOpacity={0.15}
+                      />
+                      <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient
+                      id="humidGradient"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stopColor="#3B82F6"
+                        stopOpacity={0.15}
+                      />
+                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    vertical={false}
+                    stroke="#E5E7EB"
+                    strokeOpacity={0.3}
+                  />
+                  <XAxis
+                    dataKey="timestamp"
+                    tick={CHART_FONT}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v: string) => formatTick(v, chartRange)}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={CHART_FONT}
+                    axisLine={false}
+                    tickLine={false}
+                    width={45}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={CHART_FONT}
+                    axisLine={false}
+                    tickLine={false}
+                    width={40}
+                  />
+                  <Tooltip content={<ClimateTooltip range={chartRange} />} />
+                  <Legend
+                    wrapperStyle={{
+                      fontSize: 11,
+                      fontFamily: "Inter, sans-serif",
+                    }}
+                    payload={[
+                      {
+                        value: "Temperature (°C)",
+                        type: "line",
+                        color: "#EF4444",
+                        id: "temperature",
+                      },
+                      {
+                        value: "Humidity (%)",
+                        type: "line",
+                        color: "#3B82F6",
+                        id: "humidity",
+                      },
+                    ]}
+                  />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="temperature"
+                    fill="url(#tempGradient)"
+                    stroke="none"
+                    hide
+                  />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="temperature"
+                    stroke="#EF4444"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#EF4444" }}
+                    name="Temperature (°C)"
+                  />
+                  <Area
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="humidity"
+                    fill="url(#humidGradient)"
+                    stroke="none"
+                    hide
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="humidity"
+                    stroke="#3B82F6"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: "#3B82F6" }}
+                    name="Humidity (%)"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
           </ChartCard>
-          <ChartCard title="Humidity">
-            <div className="flex items-center gap-3 mb-4">
-              <Droplets size={18} className="text-blue-500 shrink-0" />
-              <div>
-                <span className="text-xl font-semibold text-gray-900 dark:text-white tabular-nums">
-                  {live?.humidity?.toFixed(0) ?? "—"}
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white ml-0.5">
-                    %
-                  </span>
-                </span>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                  {live?.humidity !== undefined
-                    ? live.humidity > 70
-                      ? "High humidity"
-                      : live.humidity < 40
-                        ? "Low humidity"
-                        : "Normal range"
-                    : "—"}
-                </p>
-              </div>
-            </div>
+
+          <ChartCard title="Climate Overview">
+            <ClimateOverview
+              temperature={live?.temperature}
+              humidity={live?.humidity}
+              comfort={live?.tempComfort}
+            />
           </ChartCard>
         </div>
-
-        <ChartCard
-          title="Temperature & Humidity"
-          chartId="chart-climate"
-          action={
-            <RangeSelect
-              options={RANGE_OPTIONS}
-              value={chartRange}
-              onChange={setChartRange}
-            />
-          }
-        >
-          {climateHistory.length === 0 ? (
-            <div className="flex h-[260px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-              No data available
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={climateHistory}>
-                <defs>
-                  <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#EF4444" stopOpacity={0.15} />
-                    <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient
-                    id="humidGradient"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.15} />
-                    <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  vertical={false}
-                  stroke="#E5E7EB"
-                  strokeOpacity={0.3}
-                />
-                <XAxis
-                  dataKey="timestamp"
-                  tick={CHART_FONT}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v: string) => formatTick(v, chartRange)}
-                  interval="preserveStartEnd"
-                />
-                <YAxis
-                  yAxisId="left"
-                  tick={CHART_FONT}
-                  axisLine={false}
-                  tickLine={false}
-                  width={45}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  tick={CHART_FONT}
-                  axisLine={false}
-                  tickLine={false}
-                  width={40}
-                />
-                <Tooltip content={<ClimateTooltip range={chartRange} />} />
-                <Legend
-                  wrapperStyle={{
-                    fontSize: 11,
-                    fontFamily: "Inter, sans-serif",
-                  }}
-                  formatter={(value: string) => (
-                    <span className="text-gray-600 dark:text-gray-300">
-                      {value}
-                    </span>
-                  )}
-                />
-                <Area
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="temperature"
-                  fill="url(#tempGradient)"
-                  stroke="none"
-                />
-                <Line
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="temperature"
-                  stroke="#EF4444"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, fill: "#EF4444" }}
-                  name="Temperature (°C)"
-                />
-                <Area
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="humidity"
-                  fill="url(#humidGradient)"
-                  stroke="none"
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="humidity"
-                  stroke="#3B82F6"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, fill: "#3B82F6" }}
-                  name="Humidity (%)"
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          )}
-        </ChartCard>
       </div>
     </div>
   );
