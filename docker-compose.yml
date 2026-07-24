@@ -44,7 +44,6 @@ services:
     volumes:
       - emqx_data:/opt/emqx/data
       - emqx_log:/opt/emqx/log
-      - ./emqx.conf:/opt/emqx/etc/emqx.conf:ro
     networks:
       - selene
 
