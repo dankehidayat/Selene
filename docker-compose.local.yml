@@ -1,8 +1,19 @@
-# Local development stack for macOS (including Apple Silicon).
+# =============================================================================
+# LOCAL DEVELOPMENT (Mac / Apple Silicon)
+# =============================================================================
+#   docker compose -f docker-compose.local.yml up -d
 #
-# IMPORTANT: Host port 5432 is often taken by Homebrew PostgreSQL.
-# Docker Postgres is published on 5434 so Prisma/psql hit the container DB
-# (selene), not the local brew instance (which causes Prisma P1010).
+# Then run backend/frontend with Bun (not in this compose):
+#   cp apps/backend/.env.local.example apps/backend/.env
+#   cp apps/frontend/.env.local.example apps/frontend/.env
+#   bun run dev:backend && bun run dev:frontend
+#
+# Ports: Postgres 5434 | Timescale 5433 | EMQX 1883 | dashboard 18083
+# (5434 avoids Homebrew PostgreSQL on 5432 / Prisma P1010)
+#
+# VPS production: docker-compose.yml → sudo docker compose up -d --build
+# =============================================================================
+
 services:
   postgres:
     image: postgres:16-alpine

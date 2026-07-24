@@ -1,7 +1,6 @@
-# Production stack (VPS layout — same as docker-compose.yml)
-# Env: .env + apps/backend/.env
-#   docker compose build backend --no-cache
-#   docker compose up -d
+# Alias of docker-compose.yml (production / VPS).
+# Prefer: sudo docker compose up -d --build
+# See docs/DEPLOYMENT.md
 
 services:
   postgres:

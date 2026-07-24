@@ -213,33 +213,40 @@ MQTT_TOPIC=selene/+/telemetry
 
 If the tunnel fails, on the VPS check that EMQX is listening on host port 1883 (`ss -lntp | grep 1883`). Adjust `REMOTE_MQTT` if needed: `REMOTE_MQTT=127.0.0.1:1883 ./scripts/mqtt-tunnel.sh`.
 
-### Docker Deployment (production / VPS)
+### Docker: VPS vs local Mac
 
-Matches the live VPS layout (`docker-compose.yml` + root `.env` + `apps/backend/.env`).
+Full detail: **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)**
 
-Production uses the **monolith backend** plus Postgres, Timescale, and EMQX. Modular packages (`@selene/shared`, `@selene/sensors`) are **built into** the backend image — you do **not** need separate microservices on the VPS yet.
+| Where | Compose | Command |
+|-------|---------|---------|
+| **VPS** | `docker-compose.yml` | `sudo docker compose up -d --build` |
+| **Mac** | `docker-compose.local.yml` | `docker compose -f docker-compose.local.yml up -d` then Bun for apps |
+
+**VPS** (keep existing secrets; plain compose is correct):
 
 ```bash
-# On the VPS (repo root) — keep existing secrets; only create if missing
-cp -n .env.example .env
-cp -n apps/backend/.env.example apps/backend/.env
-cp -n apps/frontend/.env.example apps/frontend/.env
-# Edit .env / apps/backend/.env with the SAME passwords already on the server
-
-docker compose build backend
-docker compose up -d
-docker exec selene-backend bunx prisma generate
+cd ~/Developer/Selene
+sudo docker compose up -d --build
+sudo docker exec selene-backend bunx prisma generate
 ```
 
-| File on VPS | Purpose |
-|-------------|---------|
-| `.env` | Compose + Postgres/Timescale/EMQX/MQTT/JWT/ports |
-| `apps/backend/.env` | Backend process env (compose overrides DB/MQTT URLs) |
-| `apps/frontend/.env` | Documents `VITE_API_BASE_URL` (also set via compose build arg) |
+**Mac local** (infra in Docker, apps in Bun):
 
-**Production MQTT:** `MQTT_HOST=emqx`, `MQTT_USER=selene`, topic `selene/+/telemetry`. ESP32 keeps publishing to the VPS public IP:1883.
+```bash
+docker compose -f docker-compose.local.yml up -d
+cp apps/backend/.env.local.example apps/backend/.env
+cp apps/frontend/.env.local.example apps/frontend/.env
+bun install && bun run dev:backend   # :8787
+bun run dev:frontend                 # :5173
+```
 
-**Do not** use `docker-compose.modular.yml` on the VPS until a full service split. Local Mac: `docker-compose.local.yml` + optional `./scripts/mqtt-tunnel.sh`.
+| Env example | Use |
+|-------------|-----|
+| `.env.example` → `.env` | Production / VPS |
+| `apps/backend/.env.local.example` → `apps/backend/.env` | Mac backend |
+| `apps/frontend/.env.local.example` → `apps/frontend/.env` | Mac frontend (`VITE_API_BASE_URL=/api`) |
+
+Do **not** use `docker-compose.modular.yml` on the VPS (future multi-service only).
 
 ### Data Import (one-time)
 

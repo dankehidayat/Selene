@@ -10,9 +10,9 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[#F7F8FA] dark:bg-gray-950 flex">
       <aside
-        className={`hidden lg:block bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 shrink-0 transition-all duration-300 overflow-hidden sticky top-0 h-screen ${sidebarOpen ? "w-[248px]" : "w-0"}`}
+        className={`hidden lg:block bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 shrink-0 transition-all duration-300 overflow-hidden sticky top-0 h-dvh max-h-dvh ${sidebarOpen ? "w-[248px]" : "w-0"}`}
       >
-        <div className="w-[248px] h-full flex flex-col">
+        <div className="w-[248px] h-full min-h-0 flex flex-col overflow-hidden">
           <SidebarContent />
         </div>
       </aside>
@@ -22,7 +22,8 @@ export function Layout({ children }: { children: ReactNode }) {
             className="absolute inset-0 bg-gray-900/30 dark:bg-black/50"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute inset-y-0 left-0 w-[248px] bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 shadow-xl animate-slideIn h-screen flex flex-col">
+          {/* h-dvh: mobile browser chrome — h-screen hid the account bar until scroll */}
+          <aside className="absolute left-0 top-0 w-[248px] h-dvh max-h-dvh bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 shadow-xl animate-slideIn flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom,0px)]">
             <SidebarContent />
           </aside>
         </div>

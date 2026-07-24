@@ -1,7 +1,14 @@
-# Production stack (VPS layout — same as docker-compose.yml)
-# Env: .env + apps/backend/.env
-#   docker compose build backend --no-cache
-#   docker compose up -d
+# =============================================================================
+# PRODUCTION / VPS  (default file — plain `docker compose` uses this)
+# =============================================================================
+#   sudo docker compose up -d --build
+#
+# Env (gitignored, create from examples):
+#   .env                 ← from .env.example
+#   apps/backend/.env    ← from apps/backend/.env.example
+#
+# Local Mac: use docker-compose.local.yml instead (see docs/DEPLOYMENT.md)
+# =============================================================================
 
 services:
   postgres:

@@ -78,9 +78,9 @@ export function SidebarContent() {
     : user?.email?.charAt(0).toUpperCase() || "U";
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 pt-6 pb-4 shrink-0">
+      <div className="flex items-center gap-2.5 px-5 pt-5 pb-3 shrink-0">
         <img
           src="/icon.png"
           alt="Selene"
@@ -159,8 +159,8 @@ export function SidebarContent() {
         </nav>
       </div>
 
-      {/* Bottom bar — avatar + settings + theme */}
-      <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2.5 shrink-0">
+      {/* Bottom bar — always pinned (do not put inside scroll region) */}
+      <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2.5 shrink-0 bg-white dark:bg-gray-900 z-10">
         {user ? (
           <div className="flex items-center gap-1.5">
             {/* Avatar — opens settings */}
