@@ -25,7 +25,11 @@ COPY apps/backend ./apps/backend
 WORKDIR /app/apps/backend
 RUN bunx prisma generate
 
+# Sync schema on container start (adds columns like passwordChangedAt)
+COPY apps/backend/docker-entrypoint.sh /app/apps/backend/docker-entrypoint.sh
+RUN chmod +x /app/apps/backend/docker-entrypoint.sh
+
 EXPOSE 8787
 
-# Production should load env from compose/env_file, not .env.local
-CMD ["bun", "run", "src/index.ts"]
+# Production loads env from compose/env_file
+ENTRYPOINT ["/app/apps/backend/docker-entrypoint.sh"]

@@ -61,9 +61,11 @@ git pull   # e.g. feat/modular-microservices
 sudo docker compose up -d --build
 # same as: sudo docker compose -f docker-compose.yml up -d --build
 
-# Apply Prisma schema (password reset tokens + 2FA columns)
-sudo docker exec selene-backend bunx prisma generate
+# Schema sync: new images run `prisma db push` on start (see docker-entrypoint.sh).
+# If login fails with P2022 / missing column, push once immediately:
 sudo docker exec selene-backend bunx prisma db push
+sudo docker restart selene-backend
+
 sudo docker logs -f selene-backend
 ```
 
