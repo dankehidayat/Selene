@@ -772,7 +772,7 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
   if (isMobile) {
     return (
       <div
-        className={`fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col transition-opacity duration-250 ${isClosing ? "opacity-0" : "opacity-100"}`}
+        className={`fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col ${isClosing ? "animate-settingsOverlayOut" : "animate-settingsOverlayIn"}`}
       >
         <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
           {mobileView === "content" ? (
@@ -854,14 +854,14 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
   // ── Desktop: Large modal overlay ────────────────────────
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-6 transition-all duration-200 ${isClosing ? "opacity-0" : "opacity-100"}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-6 ${isClosing ? "animate-settingsOverlayOut" : "animate-settingsOverlayIn"}`}
       style={{ backgroundColor: "rgba(0, 0, 0, 0.4)" }}
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div
-        className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex overflow-hidden transition-all duration-200 w-full max-w-6xl ${isClosing ? "scale-95 opacity-0" : "scale-100 opacity-100"}`}
+        className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex overflow-hidden w-full max-w-6xl ${isClosing ? "animate-modalOut" : "animate-fadeScaleIn"}`}
         style={{ height: "min(90vh, 780px)" }}
       >
         <button

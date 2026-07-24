@@ -12,6 +12,7 @@ import {
 import { insertReading } from "./timescale";
 import { classifyEnergyFuzzy, classifyClimateFuzzy } from "./analytics/fuzzy";
 import { emitNewReading } from "./events";
+import { evaluateSensorAlerts } from "./alerts";
 
 const MQTT_HOST = process.env.MQTT_HOST || "localhost";
 const MQTT_PORT = parseInt(process.env.MQTT_PORT || "1883");
@@ -183,6 +184,17 @@ export function startMqttIngestor() {
         energyStatus,
         powerQualityScore: null,
         voltageStability: null,
+      });
+
+      // Non-blocking sensor alerts (energy / climate notifications)
+      void evaluateSensorAlerts({
+        nodeId,
+        acPower: flat.acPower,
+        cosPhi: flat.cosPhi,
+        temperature: flat.temperature,
+        humidity: flat.humidity,
+        energyCategory: energyFuzzy.category,
+        climateCategory: climateFuzzy.category,
       });
     } catch (err) {
       console.error(`[MQTT] Failed to insert reading for ${nodeId}:`, err);

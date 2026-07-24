@@ -1010,7 +1010,8 @@ export function Analytics() {
             Energy, environment, and fuzzy intelligence across your fleet
           </p>
         </div>
-        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit flex-wrap">
+        {/* Mobile: equal-width grid; desktop: compact pills */}
+        <div className="w-full sm:w-auto grid grid-cols-4 sm:flex sm:items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
           {analyticsTabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -1018,15 +1019,14 @@ export function Analytics() {
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg transition ${
+                className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 min-w-0 px-1 sm:px-3.5 py-2 text-[10px] sm:text-sm font-semibold rounded-lg transition-all duration-200 active:scale-[0.97] ${
                   activeTab === tab.key
                     ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
                     : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
-                <Icon size={15} />
-                <span className="hidden sm:inline">{tab.label}</span>
-                <span className="sm:hidden">
+                <Icon size={15} className="shrink-0" />
+                <span className="truncate w-full text-center sm:w-auto sm:text-left">
                   {tab.key === "energy"
                     ? "Energy"
                     : tab.key === "environment"
@@ -1040,6 +1040,8 @@ export function Analytics() {
           })}
         </div>
       </div>
+
+      <div key={activeTab} className="animate-pageIn">
 
       {/* ═════ ENERGY ═════ */}
       {activeTab === "energy" && (
@@ -2546,6 +2548,7 @@ export function Analytics() {
           </div>
         </section>
       )}
+      </div>
     </div>
   );
 }

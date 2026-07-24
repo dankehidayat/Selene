@@ -43,10 +43,15 @@ const infoItems = [
   { label: "Glossary", to: "/glossary", icon: BookOpen },
 ] as const;
 
-export function SidebarContent() {
+export function SidebarContent({
+  onNavigate,
+}: {
+  onNavigate?: () => void;
+} = {}) {
   const { user } = useAuth();
   const { openSettings } = useSettings();
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
+  const [themePulse, setThemePulse] = useState(false);
 
   useEffect(() => {
     applyTheme(theme);
@@ -60,9 +65,11 @@ export function SidebarContent() {
   }, [theme]);
 
   const cycleTheme = () => {
+    setThemePulse(true);
     setTheme((prev) =>
       prev === "light" ? "dark" : prev === "dark" ? "system" : "light",
     );
+    window.setTimeout(() => setThemePulse(false), 280);
   };
 
   const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
@@ -106,11 +113,12 @@ export function SidebarContent() {
             <Link
               key={item.label}
               to={item.to}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition"
+              onClick={() => onNavigate?.()}
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 active:scale-[0.98]"
               activeOptions={{ exact: item.to === "/" }}
               activeProps={{
                 className:
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
               }}
             >
               <item.icon size={16} /> {item.label}
@@ -127,10 +135,11 @@ export function SidebarContent() {
             <nav className="px-3 space-y-0.5 pb-4">
               <Link
                 to="/admin"
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition"
+                onClick={() => onNavigate?.()}
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 active:scale-[0.98]"
                 activeProps={{
                   className:
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
                 }}
               >
                 <Shield size={16} /> Admin Tools
@@ -147,10 +156,11 @@ export function SidebarContent() {
             <Link
               key={item.label}
               to={item.to}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition"
+              onClick={() => onNavigate?.()}
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 active:scale-[0.98]"
               activeProps={{
                 className:
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
+                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
               }}
             >
               <item.icon size={16} /> {item.label}
@@ -195,10 +205,12 @@ export function SidebarContent() {
             {/* Theme toggle */}
             <button
               onClick={cycleTheme}
-              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition shrink-0"
+              className={`p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200 shrink-0 active:scale-90 ${
+                themePulse ? "animate-themePop" : ""
+              }`}
               title={themeTooltip}
             >
-              <ThemeIcon size={15} />
+              <ThemeIcon size={15} className="transition-transform duration-200" />
             </button>
           </div>
         ) : (
