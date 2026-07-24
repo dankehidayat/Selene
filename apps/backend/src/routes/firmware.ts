@@ -55,21 +55,18 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
         const parts = request.parts();
 
         for await (const part of parts) {
-          if (part.type === "file" && (part as any).file) {
+          if (part.type === "file") {
             filename = part.filename || "firmware.bin";
             const chunks: Buffer[] = [];
-            for await (const chunk of (part as any).file) {
+            for await (const chunk of part.file) {
               chunks.push(
                 Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)),
               );
             }
             buffer = Buffer.concat(chunks);
-          } else if (part.fieldname === "node_id") {
-            let value = "";
-            for await (const chunk of (part as any).file || []) {
-              value += String(chunk);
-            }
-            if (value) nodeId = value.trim();
+          } else if (part.type === "field" && part.fieldname === "node_id") {
+            const value = String(part.value ?? "").trim();
+            if (value) nodeId = value;
           }
         }
       } catch (err: any) {

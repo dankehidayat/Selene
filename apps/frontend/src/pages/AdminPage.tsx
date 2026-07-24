@@ -1,5 +1,5 @@
 // apps/frontend/src/pages/AdminPage.tsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/services/auth";
 import {
@@ -12,8 +12,8 @@ import {
   FileWarning,
   Upload,
   Clock,
-  Zap,
   RefreshCw,
+  Terminal,
 } from "lucide-react";
 import { ChartCard } from "@/components/ChartCard";
 import { UserManagement } from "@/components/UserManagement";
@@ -27,6 +27,12 @@ interface FirmwareStatus {
   message: string | null;
   error: string | null;
   otaSent: boolean;
+}
+
+interface OtaLogLine {
+  t: string;
+  level: "info" | "ok" | "warn" | "err";
+  text: string;
 }
 
 interface OtaHistoryEntry {
@@ -128,11 +134,22 @@ export function AdminPage() {
   });
   const [otaHistory, setOtaHistory] = useState<OtaHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [otaLog, setOtaLog] = useState<OtaLogLine[]>([]);
+  const otaLogRef = useRef<HTMLDivElement>(null);
 
   if (user?.role !== "ADMIN") {
     navigate({ to: "/" });
     return null;
   }
+
+  const appendLog = (level: OtaLogLine["level"], text: string) => {
+    const t = new Date().toLocaleTimeString();
+    setOtaLog((prev) => [...prev.slice(-200), { t, level, text }]);
+  };
+
+  useEffect(() => {
+    otaLogRef.current?.scrollTo({ top: otaLogRef.current.scrollHeight });
+  }, [otaLog]);
 
   const loadHistory = async () => {
     if (!token) return;
@@ -143,19 +160,26 @@ export function AdminPage() {
       });
       const data = await res.json();
       if (data.history) setOtaHistory(data.history);
+      return (data.history ?? []) as OtaHistoryEntry[];
     } catch {
+      return [] as OtaHistoryEntry[];
     } finally {
       setHistoryLoading(false);
     }
   };
 
-  const loadNodes = async (historyHint?: OtaHistoryEntry[]) => {
+  const loadNodes = async (
+    historyHint?: OtaHistoryEntry[],
+    opts?: { silent?: boolean },
+  ) => {
     if (!token) return;
+    const silent = opts?.silent ?? false;
     setNodesLoading(true);
     try {
       const res = await fetch(`${API_BASE}/mqtt/nodes`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!res.ok) throw new Error(`MQTT nodes HTTP ${res.status}`);
       const data = await res.json();
       const fromMqtt: {
         nodeId: string;
@@ -163,7 +187,6 @@ export function AdminPage() {
         messageCount: number;
       }[] = Array.isArray(data.nodes) ? data.nodes : [];
 
-      // Also surface node IDs from OTA history (session) if not yet on MQTT map
       const merged = new Map(fromMqtt.map((n) => [n.nodeId, n]));
       for (const h of historyHint ?? otaHistory) {
         if (h.nodeId && !merged.has(h.nodeId)) {
@@ -177,14 +200,44 @@ export function AdminPage() {
       const nodes = Array.from(merged.values()).sort((a, b) =>
         a.lastSeen < b.lastSeen ? 1 : -1,
       );
-      setMqttNodes(nodes);
-      setSelectedNode((prev) => {
-        if (prev && nodes.some((n) => n.nodeId === prev)) return prev;
-        if (nodes.length > 0) return nodes[0].nodeId;
-        return prev || "";
-      });
-    } catch {
-      setMqttNodes([]);
+
+      // Keep last-known nodes if refresh returns empty (in-memory map / brief blip)
+      if (nodes.length === 0) {
+        setMqttNodes((prev) => (prev.length > 0 ? prev : []));
+        if (!silent) {
+          appendLog(
+            "warn",
+            "No nodes from backend right now — keeping previous list if any.",
+          );
+        }
+      } else {
+        setMqttNodes(nodes);
+        setSelectedNode((prev) => {
+          if (
+            prev &&
+            prev !== "__manual__" &&
+            nodes.some((n) => n.nodeId === prev)
+          ) {
+            return prev;
+          }
+          if (nodes.length > 0) return nodes[0].nodeId;
+          return prev || "";
+        });
+        if (!silent) {
+          appendLog(
+            "info",
+            `Discovered ${nodes.length} node(s): ${nodes.map((n) => n.nodeId).join(", ")}`,
+          );
+        }
+      }
+    } catch (e: any) {
+      if (!silent) {
+        appendLog(
+          "err",
+          `Node refresh failed: ${e?.message || "network error"}`,
+        );
+      }
+      // Do not clear mqttNodes on error
     } finally {
       setNodesLoading(false);
     }
@@ -208,7 +261,7 @@ export function AdminPage() {
       } finally {
         setHistoryLoading(false);
       }
-      await loadNodes(history);
+      await loadNodes(history, { silent: true });
     })();
   }, [activeTab, token]);
 
@@ -258,12 +311,19 @@ export function AdminPage() {
     }
 
     setFwStatus({ loading: true, message: null, error: null, otaSent: false });
+    setOtaLog([]);
+    appendLog("info", `Target node: ${targetNodeId}`);
+    appendLog(
+      "info",
+      `Validating ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)} KB)…`,
+    );
 
     try {
       const formData = new FormData();
       formData.append("firmware", selectedFile);
       formData.append("node_id", targetNodeId);
 
+      appendLog("info", "Uploading binary to backend…");
       const res = await fetch(`${API_BASE}/firmware/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
@@ -274,16 +334,62 @@ export function AdminPage() {
 
       if (!res.ok) throw new Error(data.error || "Upload failed");
 
+      appendLog(
+        "ok",
+        `Stored on server (${data.filename || selectedFile.name}, ${((data.size || selectedFile.size) / 1024).toFixed(1)} KB). Expires in ~5 min.`,
+      );
+
+      if (data.otaCommandSent) {
+        appendLog(
+          "ok",
+          `MQTT command published → selene/${targetNodeId}/command { command: "ota", url, size }`,
+        );
+        appendLog(
+          "info",
+          "Waiting for ESP32 to download firmware over HTTPS (if OTA handler is in firmware)…",
+        );
+        appendLog(
+          "warn",
+          "If the device has no OTA handler yet, it will ignore the command — serial/monitor will show nothing.",
+        );
+      } else {
+        appendLog(
+          "warn",
+          "Firmware stored but MQTT command was NOT sent (broker disconnected).",
+        );
+      }
+
       setFwStatus({
         loading: false,
         message: data.message || `OTA initiated for ${targetNodeId}.`,
         error: null,
-        otaSent: data.otaCommandSent,
+        otaSent: !!data.otaCommandSent,
       });
       setSelectedFile(null);
-      loadHistory();
-      loadNodes();
+      await loadHistory();
+      await loadNodes(undefined, { silent: true });
+
+      // Poll history a few times for status transitions (pending → downloading → success/failed)
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const hist = await loadHistory();
+        const entry = hist.find((e) => e.nodeId === targetNodeId);
+        if (!entry) continue;
+        if (entry.status === "downloading") {
+          appendLog("info", `Device is downloading firmware…`);
+        } else if (entry.status === "success") {
+          appendLog("ok", `OTA success reported by ${targetNodeId}.`);
+          break;
+        } else if (entry.status === "failed") {
+          appendLog(
+            "err",
+            `OTA failed${entry.error ? `: ${entry.error}` : ""}.`,
+          );
+          break;
+        }
+      }
     } catch (err: any) {
+      appendLog("err", err.message || "Upload failed");
       setFwStatus({
         loading: false,
         message: null,
@@ -352,7 +458,7 @@ export function AdminPage() {
                   </label>
                   <button
                     type="button"
-                    onClick={loadNodes}
+                    onClick={() => loadNodes(undefined, { silent: false })}
                     disabled={nodesLoading || fwStatus.loading}
                     className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition disabled:opacity-50"
                   >
@@ -360,11 +466,17 @@ export function AdminPage() {
                       size={11}
                       className={nodesLoading ? "animate-spin" : ""}
                     />
-                    Refresh from MQTT
+                    Refresh nodes
                   </button>
                 </div>
                 <select
-                  value={selectedNode}
+                  value={
+                    mqttNodes.some((n) => n.nodeId === selectedNode)
+                      ? selectedNode
+                      : selectedNode === "__manual__" || mqttNodes.length === 0
+                        ? selectedNode || ""
+                        : selectedNode || mqttNodes[0]?.nodeId || ""
+                  }
                   onChange={(e) => setSelectedNode(e.target.value)}
                   disabled={fwStatus.loading}
                   className="w-full text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition disabled:opacity-50"
@@ -400,10 +512,11 @@ export function AdminPage() {
                   />
                 ) : null}
                 <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400 font-medium">
-                  Nodes appear when the backend receives{" "}
-                  <code className="text-[10px]">selene/&lt;nodeId&gt;/telemetry</code>{" "}
-                  (from your ESP32 via the VPS MQTT tunnel). Matches Arduino{" "}
-                  <code className="text-[10px]">NODE_ID</code>.
+                  Nodes appear after the backend receives MQTT telemetry on{" "}
+                  <code className="text-[10px]">selene/&lt;nodeId&gt;/telemetry</code>
+                  . The ID must match Arduino{" "}
+                  <code className="text-[10px]">NODE_ID</code> (e.g.{" "}
+                  <code className="text-[10px]">office-main</code>).
                 </p>
               </div>
 
@@ -522,20 +635,60 @@ export function AdminPage() {
                 {fwStatus.loading ? (
                   <>
                     <Spinner className="h-4 w-4" />
-                    Uploading...
+                    Uploading…
                   </>
                 ) : (
                   <>
-                    <Zap size={15} />
+                    <Upload size={15} />
                     Upload & Deploy
                   </>
                 )}
               </button>
 
               <p className="text-xs text-gray-400 dark:text-gray-500 text-center leading-relaxed">
-                Do not power off the ESP32 during OTA. The device will reboot
-                automatically when flashing completes.
+                Do not power off the ESP32 during a real OTA flash. Progress
+                below is server-side; device serial is the source of truth for
+                flash success.
               </p>
+
+              {/* Terminal-style activity log */}
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Terminal size={13} className="text-gray-400" />
+                  <span className="text-xs font-semibold text-gray-900 dark:text-white">
+                    OTA activity log
+                  </span>
+                </div>
+                <div
+                  ref={otaLogRef}
+                  className="h-40 overflow-y-auto rounded-xl bg-gray-950 text-[11px] font-mono leading-relaxed px-3 py-2.5 border border-gray-800"
+                >
+                  {otaLog.length === 0 ? (
+                    <p className="text-gray-500">
+                      Idle — upload a .bin to see server steps here.
+                    </p>
+                  ) : (
+                    otaLog.map((line, i) => (
+                      <div key={i} className="flex gap-2">
+                        <span className="text-gray-500 shrink-0">{line.t}</span>
+                        <span
+                          className={
+                            line.level === "ok"
+                              ? "text-emerald-400"
+                              : line.level === "err"
+                                ? "text-red-400"
+                                : line.level === "warn"
+                                  ? "text-amber-400"
+                                  : "text-gray-300"
+                          }
+                        >
+                          {line.text}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </ChartCard>
 
@@ -560,8 +713,16 @@ export function AdminPage() {
                     2
                   </span>
                   <p>
-                    Upload the .bin file here. The backend stores it temporarily
-                    in memory and sends an OTA command via MQTT.
+                    Upload here. Backend stores the binary in memory (~5 min)
+                    and publishes MQTT{" "}
+                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                      selene/&lt;nodeId&gt;/command
+                    </code>{" "}
+                    with{" "}
+                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                      {`{ command: "ota", url, size }`}
+                    </code>
+                    .
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -569,8 +730,13 @@ export function AdminPage() {
                     3
                   </span>
                   <p>
-                    The ESP32 downloads the firmware over HTTPS and flashes
-                    itself. It reboots when done.
+                    ESP32 must <strong>subscribe</strong> to that command topic
+                    and run an HTTP(S) update (e.g.{" "}
+                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                      HTTPUpdate
+                    </code>
+                    ) from the URL. Without that code in your sketch, the device
+                    will ignore the command — UI cannot force a flash.
                   </p>
                 </div>
                 <div className="flex gap-3">
@@ -578,8 +744,12 @@ export function AdminPage() {
                     4
                   </span>
                   <p>
-                    Firmware is deleted from server memory after download or
-                    after 5 minutes. Nothing persists on disk.
+                    On download, status becomes <em>downloading</em>. Optional{" "}
+                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                      POST /api/firmware/result
+                    </code>{" "}
+                    reports success/fail. Binary is cleared after download or
+                    expiry.
                   </p>
                 </div>
               </div>
