@@ -2,6 +2,7 @@
 
 > **Branch:** `feat/modular-microservices`  
 > **Field hardware today:** ESP32 + **PZEM-004T** + **DHT11**  
+> **Edge firmware:** [Eco-Office `feat/selene-mqtt-ota`](https://github.com/dankehidayat/Eco-Office/tree/feat/selene-mqtt-ota) (`Energy_Monitor/`) — secrets blank in git  
 > Extension examples (lux, soil, …) are **contracts only** until hardware exists.
 
 ---
@@ -203,9 +204,19 @@ services/{auth,energy,climate,firmware}/  # Phase 2 scaffolds
 services/{soil,lux,gps,gas,generic}/      # extension stubs
 deploy/Caddyfile.modular
 docker-compose.modular.yml
+docker-compose.yml        # VPS / production stack
 apps/backend/             # monolith (still primary HTTP API)
 apps/frontend/
 ```
+
+### Edge firmware (separate repo)
+
+| Repo | Branch | Path |
+|------|--------|------|
+| [dankehidayat/Eco-Office](https://github.com/dankehidayat/Eco-Office) | `feat/selene-mqtt-ota` | `Energy_Monitor/` |
+| Eco-Office `main` | — | Final report only — do not put Selene secrets there |
+
+Configure MQTT/Blynk placeholders in the sketch locally; never commit tokens.
 
 ### Commands
 

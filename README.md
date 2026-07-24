@@ -107,13 +107,13 @@ ESP32 + PZEM-004T + DHT11
 - jsonwebtoken for JWT signing and verification
 - Blynk IoT proxy for live sensor data with automatic TimescaleDB ingestion
 
-### Hardware
+### Hardware / edge firmware
 
-- ESP32 microcontroller
-- PZEM-004T AC measurement module
-- DHT11 temperature and humidity sensor
-- Arduino Framework
-- Blynk IoT platform
+- ESP32 DevKit V1, PZEM-004T, DHT11, LCD I2C  
+- **Firmware lives in a separate repository** (not in Selene):  
+  **[dankehidayat/Eco-Office](https://github.com/dankehidayat/Eco-Office)** branch **`feat/selene-mqtt-ota`** → [`Energy_Monitor/`](https://github.com/dankehidayat/Eco-Office/tree/feat/selene-mqtt-ota/Energy_Monitor)  
+- Eco-Office **`main`** is reserved for the final report / original sketch — use `feat/selene-mqtt-ota` for Selene MQTT + OTA  
+- Secrets in the sketch must stay blank in git; configure MQTT/Blynk locally before flash  
 
 ## Modular microservices architecture
 
@@ -127,14 +127,18 @@ Work continues on branch **`feat/modular-microservices`**.
 | `services/{auth,energy,climate,firmware}` | Domain scaffolds (:3001–3004) |
 | `services/{soil,lux,…}` | Extension stubs |
 | `apps/backend` | Transition monolith (full HTTP API :8787) |
-| `deploy/Caddyfile.modular` | API gateway routes |
+| `apps/frontend` | Dashboard + Admin OTA UI |
+| `deploy/Caddyfile.modular` | API gateway routes (future multi-service) |
+| **Eco-Office** (external) | ESP32 firmware |
 
-Canonical doc: **[docs/MODULAR_MICROSERVICES.md](./docs/MODULAR_MICROSERVICES.md)**
+Canonical doc: **[docs/MODULAR_MICROSERVICES.md](./docs/MODULAR_MICROSERVICES.md)**  
+Backend notes: **[apps/backend/README.md](./apps/backend/README.md)** · Frontend: **[apps/frontend/README.md](./apps/frontend/README.md)**
 
 ```bash
 bun install
 bun run test:sensors
 bun run dev:backend      # monolith + ingest
+bun run dev:frontend
 bun run dev:ingestor     # optional standalone ingestor
 curl -s localhost:8787/api/sensors/catalog
 ```
