@@ -212,24 +212,31 @@ If the tunnel fails, on the VPS check that EMQX is listening on host port 1883 (
 
 ### Docker Deployment (production / VPS)
 
-Production uses the **monolith backend** plus Postgres, Timescale, and EMQX. Modular packages (`@selene/shared`, `@selene/sensors`) are **built into** the backend image — you do **not** need to deploy microservices yet.
+Matches the live VPS layout (`docker-compose.yml` + root `.env` + `apps/backend/.env`).
+
+Production uses the **monolith backend** plus Postgres, Timescale, and EMQX. Modular packages (`@selene/shared`, `@selene/sensors`) are **built into** the backend image — you do **not** need separate microservices on the VPS yet.
 
 ```bash
-# On the VPS (repo root)
-cp .env.production.example .env.production
-cp apps/backend/.env.production.example apps/backend/.env.production
-# Edit both files: passwords, JWT, MQTT user/pass matching EMQX, VITE_API_BASE_URL
+# On the VPS (repo root) — keep existing secrets; only create if missing
+cp -n .env.example .env
+cp -n apps/backend/.env.example apps/backend/.env
+cp -n apps/frontend/.env.example apps/frontend/.env
+# Edit .env / apps/backend/.env with the SAME passwords already on the server
 
-# docker-compose.yml → docker-compose.production.yml (symlink)
 docker compose build backend
 docker compose up -d
-docker exec selene-backend bunx prisma db push
 docker exec selene-backend bunx prisma generate
 ```
 
-**Production MQTT:** set `MQTT_HOST=emqx` (compose service name), not a local SSH tunnel. ESP32 continues publishing to the VPS public IP:1883.
+| File on VPS | Purpose |
+|-------------|---------|
+| `.env` | Compose + Postgres/Timescale/EMQX/MQTT/JWT/ports |
+| `apps/backend/.env` | Backend process env (compose overrides DB/MQTT URLs) |
+| `apps/frontend/.env` | Documents `VITE_API_BASE_URL` (also set via compose build arg) |
 
-**Do not** switch to `docker-compose.modular.yml` on the VPS until Phase 4 (full service split). Local Mac dev: `docker-compose.local.yml` + optional `./scripts/mqtt-tunnel.sh`.
+**Production MQTT:** `MQTT_HOST=emqx`, `MQTT_USER=selene`, topic `selene/+/telemetry`. ESP32 keeps publishing to the VPS public IP:1883.
+
+**Do not** use `docker-compose.modular.yml` on the VPS until a full service split. Local Mac: `docker-compose.local.yml` + optional `./scripts/mqtt-tunnel.sh`.
 
 ### Data Import (one-time)
 

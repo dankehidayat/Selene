@@ -1,10 +1,14 @@
+# Alias of production stack — same as docker-compose.yml (VPS layout).
+# Prefer: docker compose up -d
+# Or:     docker compose -f docker-compose.production.yml up -d
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: selene-postgres
     restart: unless-stopped
     env_file:
-      - .env.production
+      - .env
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -24,7 +28,7 @@ services:
     container_name: selene-timescaledb
     restart: unless-stopped
     env_file:
-      - .env.production
+      - .env
     environment:
       - POSTGRES_USER=${TIMESCALE_USER}
       - POSTGRES_PASSWORD=${TIMESCALE_PASSWORD}
@@ -44,7 +48,7 @@ services:
     container_name: selene-emqx
     restart: unless-stopped
     env_file:
-      - .env.production
+      - .env
     environment:
       - EMQX_NAME=${EMQX_NAME}
       - EMQX_ALLOW_ANONYMOUS=${EMQX_ALLOW_ANONYMOUS}
@@ -65,22 +69,20 @@ services:
 
   backend:
     build:
-      # Monorepo root so @selene/shared + @selene/sensors are available
       context: .
       dockerfile: apps/backend/Dockerfile
     container_name: selene-backend
     restart: unless-stopped
     env_file:
-      - ./apps/backend/.env.production
+      - ./apps/backend/.env
     environment:
-      - PORT=${BACKEND_PORT:-8787}
+      - PORT=${BACKEND_PORT}
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - TIMESCALE_URL=postgresql://${TIMESCALE_USER}:${TIMESCALE_PASSWORD}@timescaledb:5432/${TIMESCALE_DB}
       - JWT_SECRET=${JWT_SECRET}
-      # Production MQTT is the in-compose EMQX service (not local tunnel)
-      - MQTT_HOST=${MQTT_HOST:-emqx}
-      - MQTT_PORT=${MQTT_PORT:-1883}
-      - MQTT_TOPIC=${MQTT_TOPIC:-selene/+/telemetry}
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT}
+      - MQTT_TOPIC=${MQTT_TOPIC}
       - MQTT_USER=${MQTT_USER}
       - MQTT_PASSWORD=${MQTT_PASSWORD}
     ports:
@@ -100,6 +102,24 @@ services:
       context: ./apps/frontend
       dockerfile: Dockerfile
       args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+    container_name: selene-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT}:3000"
+    networks:
+      - selene
+
+networks:
+  selene:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  timescale_data:
+  emqx_data:
+  emqx_log:
+ args:
         - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     container_name: selene-frontend
     restart: unless-stopped
