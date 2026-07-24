@@ -1,6 +1,7 @@
-# Alias of production stack — same as docker-compose.yml (VPS layout).
-# Prefer: docker compose up -d
-# Or:     docker compose -f docker-compose.production.yml up -d
+# Production stack (VPS layout — same as docker-compose.yml)
+# Env: .env + apps/backend/.env
+#   docker compose build backend --no-cache
+#   docker compose up -d
 
 services:
   postgres:
@@ -69,6 +70,7 @@ services:
 
   backend:
     build:
+      # Monorepo root required for @selene/shared + @selene/sensors
       context: .
       dockerfile: apps/backend/Dockerfile
     container_name: selene-backend
@@ -102,24 +104,6 @@ services:
       context: ./apps/frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-    container_name: selene-frontend
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:${FRONTEND_PORT}:3000"
-    networks:
-      - selene
-
-networks:
-  selene:
-    driver: bridge
-
-volumes:
-  postgres_data:
-  timescale_data:
-  emqx_data:
-  emqx_log:
- args:
         - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     container_name: selene-frontend
     restart: unless-stopped

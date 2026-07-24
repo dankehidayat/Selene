@@ -1,1 +1,123 @@
-docker-compose.production.yml
+# Production stack (VPS layout — same as docker-compose.yml)
+# Env: .env + apps/backend/.env
+#   docker compose build backend --no-cache
+#   docker compose up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: selene-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - selene
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: selene-timescaledb
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${TIMESCALE_USER}
+      - POSTGRES_PASSWORD=${TIMESCALE_PASSWORD}
+      - POSTGRES_DB=${TIMESCALE_DB}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    networks:
+      - selene
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TIMESCALE_USER} -d ${TIMESCALE_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  emqx:
+    image: emqx/emqx:5.7.0
+    container_name: selene-emqx
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - EMQX_NAME=${EMQX_NAME}
+      - EMQX_ALLOW_ANONYMOUS=${EMQX_ALLOW_ANONYMOUS}
+      - EMQX_AUTHENTICATION__1__MECHANISM=${EMQX_AUTH_MECHANISM}
+      - EMQX_AUTHENTICATION__1__BACKEND=${EMQX_AUTH_BACKEND}
+      - EMQX_AUTHENTICATION__1__USER_ID_TYPE=${EMQX_AUTH_USER_ID_TYPE}
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=${EMQX_DASHBOARD_USER}
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=${EMQX_DASHBOARD_PASSWORD}
+    ports:
+      - "1883:1883"
+      - "127.0.0.1:18083:18083"
+      - "127.0.0.1:8083:8083"
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    networks:
+      - selene
+
+  backend:
+    build:
+      # Monorepo root required for @selene/shared + @selene/sensors
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    container_name: selene-backend
+    restart: unless-stopped
+    env_file:
+      - ./apps/backend/.env
+    environment:
+      - PORT=${BACKEND_PORT}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - TIMESCALE_URL=postgresql://${TIMESCALE_USER}:${TIMESCALE_PASSWORD}@timescaledb:5432/${TIMESCALE_DB}
+      - JWT_SECRET=${JWT_SECRET}
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT}
+      - MQTT_TOPIC=${MQTT_TOPIC}
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT}:${BACKEND_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+      emqx:
+        condition: service_started
+    networks:
+      - selene
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+    container_name: selene-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT}:3000"
+    networks:
+      - selene
+
+networks:
+  selene:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  timescale_data:
+  emqx_data:
+  emqx_log:
