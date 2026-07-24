@@ -812,10 +812,6 @@ await initTimescaleDB();
 // ── Start MQTT Ingestor (primary data source) ─────────────
 startMqttIngestor();
 
-// ── Blynk polling disabled — MQTT is now primary ──────────
-// The pollBlynkToTimescale function and Blynk proxy endpoint
-// have been removed. All data comes via MQTT.
-
 try {
   await prisma.$connect();
   console.log("Connected to database");

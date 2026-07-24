@@ -45,7 +45,6 @@ export function startMqttIngestor() {
   });
 
   client.on("message", async (topic, message) => {
-    // Extract node_id from topic: selene/{node_id}/telemetry
     const topicParts = topic.split("/");
     const nodeId = topicParts.length >= 2 ? topicParts[1] : "unknown";
 
@@ -57,36 +56,36 @@ export function startMqttIngestor() {
       return;
     }
 
-    // Only process if we have valid sensor data
-    const hasEnergyData =
-      payload.voltage !== undefined || payload.power !== undefined;
-    const hasClimateData =
-      payload.temperature !== undefined || payload.humidity !== undefined;
-
-    if (!hasEnergyData && !hasClimateData) {
-      return; // No sensor data in payload
-    }
-
-    const timestamp = new Date().toISOString();
-    const acVoltage = Number(payload.voltage ?? 0);
+    // ── Parse fields matching Arduino's JSON format ────────
+    // Arduino sends: node_id, voltage, current, power, pf, energy,
+    //               frequency, apparent_power, reactive_power,
+    //               temperature, humidity, comfort, energy_status
+    const voltage = Number(payload.voltage ?? 0);
     const acCurrent = Number(payload.current ?? 0);
     const acPower = Number(payload.power ?? 0);
-    const cosPhi = Number(payload.pf ?? payload.powerFactor ?? 0);
+    const cosPhi = Number(payload.pf ?? 0);
     const frequency = Number(payload.frequency ?? 0);
-    const totalEnergy = Number(payload.energy ?? payload.totalEnergy ?? 0);
+    const totalEnergy = Number(payload.energy ?? 0);
     const temperature = Number(payload.temperature ?? 0);
     const humidity = Number(payload.humidity ?? 0);
-    const reactivePower = Number(payload.reactivePower ?? 0);
-    const apparentPower = cosPhi > 0 ? acPower / cosPhi : 0;
 
-    // Only insert if we have meaningful data (voltage > 100V or power > 0)
-    if (acVoltage < 100 && acPower === 0) {
+    // Arduino uses snake_case: apparent_power, reactive_power
+    const reactivePower = Number(
+      payload.reactive_power ?? payload.reactivePower ?? 0,
+    );
+    const apparentPower = Number(
+      payload.apparent_power ??
+        payload.apparentPower ??
+        (cosPhi > 0 ? acPower / cosPhi : 0),
+    );
+
+    if (voltage < 100 && acPower === 0) {
       return;
     }
 
-    // Run fuzzy classification
+    // Run fuzzy classification (backend computes independently)
     const energyFuzzy = classifyEnergyFuzzy(
-      acVoltage,
+      voltage,
       acPower,
       cosPhi,
       reactivePower,
@@ -94,7 +93,6 @@ export function startMqttIngestor() {
 
     const climateFuzzy = classifyClimateFuzzy(temperature, humidity);
 
-    // Map energy status to numeric string
     const energyStatus =
       energyFuzzy.category === "ECONOMICAL"
         ? "1"
@@ -103,15 +101,15 @@ export function startMqttIngestor() {
           : "3";
 
     console.log(
-      `[MQTT] ${nodeId} | V:${acVoltage.toFixed(1)}V P:${acPower.toFixed(1)}W ` +
+      `[MQTT] ${nodeId} | V:${voltage.toFixed(1)}V P:${acPower.toFixed(1)}W ` +
         `T:${temperature.toFixed(1)}°C H:${humidity.toFixed(0)}% ` +
         `Energy:${energyFuzzy.category} Climate:${climateFuzzy.category}`,
     );
 
     try {
       await insertReading({
-        time: timestamp,
-        acVoltage,
+        time: new Date().toISOString(),
+        acVoltage: voltage,
         acCurrent,
         acPower,
         cosPhi,
