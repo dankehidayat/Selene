@@ -260,8 +260,6 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
       : {
           essential: true,
           functional: true,
-          analytics: false,
-          marketing: false,
           decidedAt: null,
         },
   );
@@ -1325,9 +1323,9 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
             Privacy & Cookies
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-            Aligned with common EU expectations (ePrivacy / GDPR): essential
-            processing always on; optional categories are your choice and can be
-            changed anytime.
+            Preferences comply with GDPR requirements for transparent processing.
+            Essential cookies remain required; functional preferences are optional
+            and can be updated at any time.
           </p>
 
           <SectionHeading>Cookie categories</SectionHeading>
@@ -1360,36 +1358,6 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
                 onChange={(v) => updatePrivacyPref("functional", v)}
               />
             </div>
-            <div className="flex items-center justify-between gap-4 py-4">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Analytics
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Anonymous product metrics (reserved — not loaded today)
-                </p>
-              </div>
-              <ToggleSwitch
-                label="Analytics cookies"
-                checked={privacyPrefs.analytics}
-                onChange={(v) => updatePrivacyPref("analytics", v)}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4 py-4">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Marketing
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Third-party ads — Selene does not use these
-                </p>
-              </div>
-              <ToggleSwitch
-                label="Marketing cookies"
-                checked={privacyPrefs.marketing}
-                onChange={(v) => updatePrivacyPref("marketing", v)}
-              />
-            </div>
           </div>
           {privacyPrefs.decidedAt && (
             <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-4">
@@ -1406,8 +1374,8 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
             Data & Export
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-            Download a copy of your data or permanently remove your account
-            (GDPR-style access & erasure).
+            Download a copy of your data or permanently remove your account, in
+            line with GDPR regulations on access and erasure.
           </p>
 
           <SectionHeading>Export</SectionHeading>
@@ -1443,16 +1411,18 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
                   type="button"
                   disabled={exportLoading === "csv"}
                   onClick={() => exportMeasurements("csv")}
-                  className="px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50"
                 >
+                  <Download size={14} />
                   {exportLoading === "csv" ? "…" : "CSV"}
                 </button>
                 <button
                   type="button"
                   disabled={exportLoading === "tsv"}
                   onClick={() => exportMeasurements("tsv")}
-                  className="px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50"
                 >
+                  <Download size={14} />
                   {exportLoading === "tsv" ? "…" : "TSV"}
                 </button>
               </div>

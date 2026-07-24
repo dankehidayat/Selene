@@ -1,5 +1,5 @@
 // apps/frontend/src/components/PowerOverview.tsx
-import { Activity, Gauge, Waves, Zap } from "lucide-react";
+import { Activity, Gauge, Waves } from "lucide-react";
 import { InfoTip } from "@/components/InfoTip";
 
 interface PowerOverviewProps {
@@ -137,7 +137,7 @@ function MetricStory({
   label,
   story,
 }: {
-  icon: typeof Zap;
+  icon: typeof Gauge;
   iconClass: string;
   label: string;
   story: string;
@@ -183,19 +183,6 @@ export function PowerOverview({
   return (
     <div className="space-y-4 mt-1">
       <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Zap size={16} className={`shrink-0 ${scoreTextColor(derived)}`} />
-          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-            Power quality
-          </p>
-          {estimated ? (
-            <InfoTip
-              title="How this score is estimated"
-              content="The device didn't send a quality score directly, so we estimated it from efficiency (how cleanly the load uses power) and grid frequency. It's a helpful guide until a full score arrives from the sensor path."
-              iconSize={13}
-            />
-          ) : null}
-        </div>
         <div className="flex items-baseline gap-1.5">
           <span
             className={`text-3xl font-semibold tabular-nums tracking-tight ${scoreTextColor(derived)}`}
@@ -205,6 +192,14 @@ export function PowerOverview({
           <span className="text-sm font-medium text-gray-400 dark:text-gray-500">
             / 100
           </span>
+          {estimated ? (
+            <InfoTip
+              title="How this score is estimated"
+              content="The device didn't send a quality score directly, so we estimated it from efficiency (how cleanly the load uses power) and grid frequency. It's a helpful guide until a full score arrives from the sensor path."
+              iconSize={14}
+              className="ml-0.5 translate-y-0.5"
+            />
+          ) : null}
         </div>
         <div
           className="mt-2.5 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden"

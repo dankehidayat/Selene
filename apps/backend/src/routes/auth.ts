@@ -10,7 +10,7 @@ import {
   extractTokenFromHeader,
   verifyToken,
 } from "../auth";
-import { sendPasswordResetEmail } from "../mail";
+import { getMailConfigStatus, sendPasswordResetEmail } from "../mail";
 import {
   encryptTotpSecret,
   decryptTotpSecret,
@@ -267,6 +267,17 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: "Email is required" });
     }
 
+    const mailStatus = getMailConfigStatus();
+    console.info(
+      "[auth] forgot-password request",
+      JSON.stringify({
+        hasUserLookupEmail: Boolean(email),
+        hasApiKey: mailStatus.hasApiKey,
+        from: mailStatus.from,
+        appPublicUrl: mailStatus.appPublicUrl,
+      }),
+    );
+
     const user = await prisma.user.findUnique({ where: { email } });
     if (user && user.isActive) {
       // Invalidate previous unused tokens
@@ -288,9 +299,14 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         await sendPasswordResetEmail(user.email, raw);
       } catch (err: any) {
         console.error("[auth] forgot-password mail failed:", err?.message);
-        return reply
-          .code(503)
-          .send({ error: "Could not send email. Try again later." });
+        return reply.code(503).send({
+          error:
+            err?.message?.includes("RESEND_API_KEY")
+              ? "Email is not configured on the server (missing RESEND_API_KEY in backend process)."
+              : err?.message?.includes("only send testing emails")
+                ? "Resend is in test mode: you can only send to your verified Resend account email until you verify a domain."
+                : "Could not send email. Check backend logs and Resend dashboard.",
+        });
       }
     }
 

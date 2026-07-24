@@ -133,7 +133,7 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] dark:bg-gray-950 flex items-center justify-center p-4 font-sans">
+    <div className="min-h-screen bg-app-surface flex items-center justify-center p-4 font-sans">
       <button
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
         className="fixed top-4 right-4 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition z-10"

@@ -1,15 +1,11 @@
 // apps/frontend/src/lib/privacyPrefs.ts
-// EU-oriented cookie / privacy preferences (client-side until backend consent API).
+// Privacy preferences: essential + functional only (no analytics/marketing).
 
 export type PrivacyPrefs = {
   /** Always required — auth, security, load balancing. */
   essential: true;
   /** Theme, notification prefs, UI layout (localStorage). */
   functional: boolean;
-  /** Anonymous product analytics (not used yet — reserved). */
-  analytics: boolean;
-  /** Third-party marketing (off by default; Selene does not load ads). */
-  marketing: boolean;
   /** ISO timestamp of last choice, or null if never set. */
   decidedAt: string | null;
 };
@@ -17,8 +13,6 @@ export type PrivacyPrefs = {
 export const DEFAULT_PRIVACY_PREFS: PrivacyPrefs = {
   essential: true,
   functional: true,
-  analytics: false,
-  marketing: false,
   decidedAt: null,
 };
 
@@ -31,7 +25,11 @@ export function loadPrivacyPrefs(): PrivacyPrefs {
     const parsed = JSON.parse(raw) as Partial<PrivacyPrefs>;
     return {
       ...DEFAULT_PRIVACY_PREFS,
-      ...parsed,
+      functional:
+        typeof parsed.functional === "boolean"
+          ? parsed.functional
+          : DEFAULT_PRIVACY_PREFS.functional,
+      decidedAt: parsed.decidedAt ?? null,
       essential: true,
     };
   } catch {
@@ -40,7 +38,11 @@ export function loadPrivacyPrefs(): PrivacyPrefs {
 }
 
 export function savePrivacyPrefs(prefs: PrivacyPrefs): void {
-  const next = { ...prefs, essential: true as const };
+  const next = {
+    essential: true as const,
+    functional: prefs.functional,
+    decidedAt: prefs.decidedAt,
+  };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(
     new CustomEvent("selene:privacy-prefs", { detail: next }),
@@ -55,8 +57,6 @@ export function acceptAllPrivacy(): PrivacyPrefs {
   const next: PrivacyPrefs = {
     essential: true,
     functional: true,
-    analytics: true,
-    marketing: false,
     decidedAt: new Date().toISOString(),
   };
   savePrivacyPrefs(next);
@@ -66,9 +66,7 @@ export function acceptAllPrivacy(): PrivacyPrefs {
 export function rejectOptionalPrivacy(): PrivacyPrefs {
   const next: PrivacyPrefs = {
     essential: true,
-    functional: true,
-    analytics: false,
-    marketing: false,
+    functional: false,
     decidedAt: new Date().toISOString(),
   };
   savePrivacyPrefs(next);

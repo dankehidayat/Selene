@@ -17,9 +17,11 @@ import { ForgotPassword } from "@/pages/ForgotPassword";
 import { ResetPassword } from "@/pages/ResetPassword";
 import { Impressum } from "@/pages/Impressum";
 import { Glossary } from "@/pages/Glossary";
+import { NotFound } from "@/pages/NotFound";
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
+  notFoundComponent: () => <NotFound />,
 });
 
 const indexRoute = createRoute({
@@ -131,7 +133,10 @@ const routeTree = rootRoute.addChildren([
   resetPasswordRoute,
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({
+  routeTree,
+  defaultNotFoundComponent: () => <NotFound />,
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

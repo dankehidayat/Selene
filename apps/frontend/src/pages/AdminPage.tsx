@@ -437,34 +437,36 @@ export function AdminPage() {
 
   return (
     <div className="space-y-6 font-sans">
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-          Admin Tools
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
-          Manage users, deploy firmware updates, and monitor system health
-        </p>
-      </div>
-
-      {/* Tab Bar */}
-      <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 active:scale-[0.97] ${
-                activeTab === tab.key
-                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                  : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-              }`}
-            >
-              <Icon size={15} />
-              {tab.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+            Admin Tools
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
+            Manage users, deploy firmware updates, and monitor system health
+          </p>
+        </div>
+        {/* Tabs aligned right (same pattern as Analytics) */}
+        <div className="w-full sm:w-auto flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex flex-1 sm:flex-initial items-center justify-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg transition-all duration-200 active:scale-[0.97] ${
+                  activeTab === tab.key
+                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                    : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                <Icon size={15} className="shrink-0" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div key={activeTab} className="animate-tabIn">

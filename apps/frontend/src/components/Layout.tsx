@@ -44,7 +44,7 @@ function LayoutShell({ children }: { children: ReactNode }) {
   }, [mobileOpen, mobileClosing]);
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] dark:bg-gray-950 overflow-x-hidden">
+    <div className="min-h-screen bg-app-surface overflow-x-hidden">
       {/*
         Sidebar slides with transform; main margin animates in the same duration
         so content shrinks/grows. Charts freeze resize via StableResponsiveContainer

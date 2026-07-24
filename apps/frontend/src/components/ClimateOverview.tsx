@@ -191,15 +191,6 @@ export function ClimateOverview({
     <div className="space-y-4 mt-1">
       {/* Comfort level hero + slider */}
       <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Thermometer
-            size={16}
-            className={`shrink-0 ${getComfortColor(comfort)}`}
-          />
-          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-            Comfort level
-          </p>
-        </div>
         <p className={`text-2xl font-semibold tracking-tight ${getComfortColor(comfort)}`}>
           {prettyComfort(comfort)}
         </p>

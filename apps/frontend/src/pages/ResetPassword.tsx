@@ -52,7 +52,7 @@ export function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] dark:bg-gray-950 flex items-center justify-center p-4 font-sans">
+    <div className="min-h-screen bg-app-surface flex items-center justify-center p-4 font-sans">
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-card p-8 w-full max-w-md">
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-white tracking-tight">
           Choose a new password

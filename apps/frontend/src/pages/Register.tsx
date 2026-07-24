@@ -61,7 +61,7 @@ export function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] dark:bg-gray-950 flex items-center justify-center p-4 font-sans">
+    <div className="min-h-screen bg-app-surface flex items-center justify-center p-4 font-sans">
       {/* Theme toggle - top right */}
       <button
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}

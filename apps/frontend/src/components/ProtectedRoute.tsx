@@ -20,7 +20,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F7F8FA] flex items-center justify-center">
+      <div className="min-h-screen bg-app-surface flex items-center justify-center">
         <div className="text-sm text-gray-400">Loading...</div>
       </div>
     );

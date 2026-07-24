@@ -76,10 +76,19 @@ Caddy on the host still proxies:
 
 | Variable | Where | Purpose |
 |----------|--------|---------|
-| `RESEND_API_KEY` | root `.env` + `apps/backend/.env` | Send password-reset mail |
-| `RESEND_FROM` | same | Verified sender (or `onboarding@resend.dev` for tests) |
+| `RESEND_API_KEY` | **`apps/backend/.env` only** (compose `env_file`) | Send password-reset mail |
+| `RESEND_FROM` | same — quote it: `"Selene <onboarding@resend.dev>"` | Sender (verify a domain for real users) |
 | `APP_PUBLIC_URL` | same | Base URL for reset links (no trailing slash) |
 | `TOTP_ISSUER` | same | Label in authenticator apps (`Selene`) |
+
+**Important:** Do not put empty `RESEND_API_KEY=` in Compose `environment:` overrides. Empty host/root values **overwrite** `apps/backend/.env` and silence mail. Verify inside the container:
+
+```bash
+sudo docker exec selene-backend printenv RESEND_API_KEY | head -c 8   # should show re_…
+sudo docker logs selene-backend 2>&1 | grep -i mail | tail -20
+```
+
+**Resend free / test mode:** with `onboarding@resend.dev` you can usually only email the address on your Resend account until you verify a custom domain.
 
 ---
 

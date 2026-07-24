@@ -41,7 +41,7 @@ export function CookieBanner() {
             }}
             className="px-4 py-2 text-sm font-semibold rounded-xl bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 transition"
           >
-            Accept all
+            Accept
           </button>
           <button
             type="button"
