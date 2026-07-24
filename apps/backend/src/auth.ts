@@ -10,6 +10,8 @@ export interface JWTPayload {
   email: string;
   role?: string;
   purpose?: "session" | "2fa_pending" | "2fa_setup";
+  /** Seconds since epoch (set by jwt.sign). */
+  iat?: number;
 }
 
 export async function hashPassword(password: string): Promise<string> {

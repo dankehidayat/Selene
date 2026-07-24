@@ -12,7 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Zap, Activity, Gauge, DollarSign, Info, Clock } from "lucide-react";
-import { StatCard } from "@/components/StatCard";
+import { StatCard, EST_COST_INFO } from "@/components/StatCard";
 import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { PowerOverview } from "@/components/PowerOverview";
 import { ClimateOverview } from "@/components/ClimateOverview";
@@ -24,6 +24,7 @@ import {
 } from "@/services/api";
 import { useAuth } from "@/services/auth";
 import { ensembleForecast, confidenceBands } from "@/lib/forecast";
+import { paddedYDomain } from "@/lib/chartDomain";
 
 const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
 const RANGE_LABELS: Record<string, string> = {
@@ -361,7 +362,7 @@ export function Dashboard() {
             <Clock size={14} className="text-violet-500 shrink-0" />
             <div className="leading-tight">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                Project · Jakarta
+                Jakarta (WIB)
               </p>
               <p className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
                 {formatClock(nowClock, JAKARTA_TZ)}
@@ -428,6 +429,8 @@ export function Dashboard() {
             iconColor="text-emerald-500 dark:text-emerald-400"
             sub={tk !== "—" ? `${tk} kWh` : undefined}
             subTone="text-gray-500 dark:text-gray-400"
+            infoTitle={EST_COST_INFO.title}
+            infoContent={EST_COST_INFO.content}
           />
         </div>
         <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
@@ -449,7 +452,7 @@ export function Dashboard() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <ComposedChart data={history}>
+                <ComposedChart data={history} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
                       <stop
@@ -503,6 +506,8 @@ export function Dashboard() {
                     axisLine={false}
                     tickLine={false}
                     width={45}
+                    domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                    allowDataOverflow={false}
                   />
                   <YAxis
                     yAxisId="right"
@@ -511,6 +516,8 @@ export function Dashboard() {
                     axisLine={false}
                     tickLine={false}
                     width={45}
+                    domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                    allowDataOverflow={false}
                   />
                   <Tooltip content={<UnifiedTooltip range={chartRange} />} />
                   <Legend
@@ -713,7 +720,7 @@ export function Dashboard() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
-                <ComposedChart data={ch}>
+                <ComposedChart data={ch} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
                       <stop
@@ -767,6 +774,8 @@ export function Dashboard() {
                     axisLine={false}
                     tickLine={false}
                     width={45}
+                    domain={paddedYDomain({ topPad: 0.15, bottomPad: 0.1 })}
+                    allowDataOverflow={false}
                   />
                   <YAxis
                     yAxisId="right"
@@ -775,6 +784,12 @@ export function Dashboard() {
                     axisLine={false}
                     tickLine={false}
                     width={40}
+                    domain={paddedYDomain({
+                      clampZero: true,
+                      topPad: 0.12,
+                      minPad: 2,
+                    })}
+                    allowDataOverflow={false}
                   />
                   <Tooltip content={<ClimateTooltip range={chartRange} />} />
                   <Legend

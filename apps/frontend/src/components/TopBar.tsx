@@ -1,6 +1,5 @@
 // apps/frontend/src/components/TopBar.tsx
 import {
-  BookOpen,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -256,14 +255,11 @@ export function TopBar({
       <div className="flex items-center justify-end gap-0.5 shrink-0">
         <a
           href="/docs"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 p-2 sm:px-2.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+          className="inline-flex items-center px-2.5 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
           title="API documentation (Swagger)"
           aria-label="API documentation"
         >
-          <BookOpen size={18} />
-          <span className="hidden sm:inline text-sm font-medium">Docs</span>
+          Docs
         </a>
         <NotificationBell />
       </div>

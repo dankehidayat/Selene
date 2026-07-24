@@ -39,9 +39,10 @@ import {
   CloudSun,
 } from "lucide-react";
 import { ChartCard, RangeSelect } from "@/components/ChartCard";
-import { StatCard } from "@/components/StatCard";
+import { StatCard, EST_COST_INFO } from "@/components/StatCard";
 import { InfoTip } from "@/components/InfoTip";
 import { useTabFromSearch } from "@/hooks/useTabFromSearch";
+import { paddedYDomain } from "@/lib/chartDomain";
 import {
   useAnalyticsSummary,
   useReadingHistory,
@@ -53,6 +54,7 @@ import {
   useEnergyHistory,
 } from "@/services/api";
 import { ensembleForecast, confidenceBands } from "@/lib/forecast";
+import { cn } from "@/lib/utils";
 
 const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
 const RANGE_LABELS: Record<string, string> = {
@@ -801,22 +803,29 @@ function MetricRow({
   unit,
   icon: Icon,
   color,
+  infoTitle,
+  infoContent,
 }: {
   label: string;
   value: string | number;
   unit?: string;
   icon: typeof Zap;
   color: string;
+  infoTitle?: string;
+  infoContent?: string;
 }) {
   return (
-    <div className="flex items-center justify-between py-3">
-      <div className="flex items-center gap-2.5">
-        <Icon size={15} className={color} />
-        <span className="text-sm text-gray-600 dark:text-gray-400">
+    <div className="flex items-center justify-between py-3 gap-3">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <Icon size={15} className={cn(color, "shrink-0")} />
+        <span className="text-sm text-gray-600 dark:text-gray-400 inline-flex items-center gap-1">
           {label}
+          {infoTitle && infoContent ? (
+            <InfoTip title={infoTitle} content={infoContent} iconSize={12} />
+          ) : null}
         </span>
       </div>
-      <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
+      <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums shrink-0">
         {value}
         {unit ? (
           <span className="text-gray-400 dark:text-gray-500 ml-0.5 font-medium">
@@ -1104,6 +1113,8 @@ export function Analytics() {
               }
               icon={DollarSign}
               iconColor="text-emerald-500 dark:text-emerald-400"
+              infoTitle={EST_COST_INFO.title}
+              infoContent={EST_COST_INFO.content}
             />
             <StatCard
               label="Data Points"
@@ -1124,7 +1135,10 @@ export function Analytics() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={300}>
-                <ComposedChart data={enrichedHistory}>
+                <ComposedChart
+                  data={enrichedHistory}
+                  margin={{ top: 12, right: 4, left: 0, bottom: 0 }}
+                >
                   <defs>
                     <linearGradient id="ePowerGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop
@@ -1196,6 +1210,8 @@ export function Analytics() {
                     axisLine={false}
                     tickLine={false}
                     width={50}
+                    domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                    allowDataOverflow={false}
                   />
                   <YAxis
                     yAxisId="right"
@@ -1204,6 +1220,8 @@ export function Analytics() {
                     axisLine={false}
                     tickLine={false}
                     width={45}
+                    domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                    allowDataOverflow={false}
                   />
                   <Tooltip content={<PowerTooltip range={energyRange} />} />
                   <Legend
@@ -1486,6 +1504,8 @@ export function Analytics() {
                       axisLine={false}
                       tickLine={false}
                       width={50}
+                      domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                      allowDataOverflow={false}
                       label={{
                         value: "Wh",
                         position: "insideTopLeft",
@@ -1654,6 +1674,8 @@ export function Analytics() {
                   value={summary?.energy?.estimatedCost ?? "..."}
                   icon={DollarSign}
                   color="text-emerald-600"
+                  infoTitle={EST_COST_INFO.title}
+                  infoContent={EST_COST_INFO.content}
                 />
                 <MetricRow
                   label="Sample Size"
@@ -1845,6 +1867,8 @@ export function Analytics() {
                       axisLine={false}
                       tickLine={false}
                       width={36}
+                      domain={paddedYDomain({ topPad: 0.15, bottomPad: 0.1 })}
+                      allowDataOverflow={false}
                     />
                     <YAxis
                       yAxisId="right"
@@ -1853,6 +1877,12 @@ export function Analytics() {
                       axisLine={false}
                       tickLine={false}
                       width={36}
+                      domain={paddedYDomain({
+                        clampZero: true,
+                        topPad: 0.12,
+                        minPad: 2,
+                      })}
+                      allowDataOverflow={false}
                     />
                     <Tooltip content={<EnvTooltip range={climateRange} />} />
                     <Legend

@@ -233,7 +233,7 @@ interface SettingsOverlayProps {
 }
 
 function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
-  const { user, token, logout, refreshUser } = useAuth();
+  const { user, token, logout, refreshUser, setSessionToken } = useAuth();
   const navigate = useNavigate();
   const { history: loginHistory, loading: historyLoading } = useLoginHistory();
   const isMobile = useIsMobile();
@@ -556,6 +556,8 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      // Fresh JWT so this device stays signed in; other sessions are revoked
+      if (data.token) setSessionToken(data.token);
       setPwMsg({ type: "success", text: "Password changed" });
       setCurrentPassword("");
       setNewPassword("");
@@ -1606,12 +1608,14 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
       }}
     >
       <div
-        className={`bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex overflow-hidden w-full max-w-6xl ${isClosing ? "animate-modalOut" : "animate-fadeScaleIn"}`}
+        className={`relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex overflow-hidden w-full max-w-6xl ${isClosing ? "animate-modalOut" : "animate-fadeScaleIn"}`}
         style={{ height: "min(90vh, 780px)" }}
       >
         <button
+          type="button"
           onClick={handleClose}
-          className="absolute top-4 right-4 z-10 h-9 w-9 flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600 transition bg-white dark:bg-gray-900"
+          className="absolute top-3 right-3 z-20 h-9 w-9 flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-gray-600 transition bg-white dark:bg-gray-900 shadow-sm"
+          aria-label="Close settings"
         >
           <X size={16} />
         </button>

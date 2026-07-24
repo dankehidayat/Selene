@@ -16,6 +16,7 @@ import {
 import { useAuth } from "@/services/auth";
 import { useState, useEffect } from "react";
 import { useSettings } from "@/components/SettingsOverlay";
+import { SeleneMark } from "@/components/SeleneMark";
 
 type Theme = "light" | "dark" | "system";
 
@@ -95,11 +96,7 @@ export function SidebarContent({
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 pt-5 pb-3 shrink-0">
-        <img
-          src="/icon.png"
-          alt="Selene"
-          className="h-9 w-9 rounded-xl shrink-0"
-        />
+        <SeleneMark size={36} className="shrink-0 rounded-xl" />
         <div>
           <p className="text-[15px] font-semibold text-gray-900 dark:text-white">
             Selene

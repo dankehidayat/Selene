@@ -24,11 +24,28 @@ export async function authenticate(
     }
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, role: true, isActive: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isActive: true,
+        passwordChangedAt: true,
+      },
     });
 
     if (!user || !user.isActive) {
       return reply.code(401).send({ error: "Account not found or disabled" });
+    }
+
+    // Invalidate sessions issued before a password reset/change
+    if (user.passwordChangedAt && payload.iat) {
+      const issuedMs = payload.iat * 1000;
+      // 2s skew tolerance
+      if (issuedMs < user.passwordChangedAt.getTime() - 2000) {
+        return reply
+          .code(401)
+          .send({ error: "Session expired. Please sign in again." });
+      }
     }
 
     (request as AuthenticatedRequest).userId = user.id;

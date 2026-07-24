@@ -19,6 +19,8 @@ model User {
   name          String?
   role          UserRole       @default(USER)
   isActive      Boolean        @default(true)
+  /// When set, JWTs issued before this timestamp are rejected (password reset / change).
+  passwordChangedAt DateTime?
   /// TOTP second factor
   totpEnabled   Boolean        @default(false)
   /// AES-GCM ciphertext (base64) of the authenticator secret

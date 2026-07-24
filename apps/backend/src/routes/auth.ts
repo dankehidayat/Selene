@@ -347,18 +347,23 @@ export async function registerAuthRoutes(app: FastifyInstance) {
     }
 
     const hashedPassword = await hashPassword(newPassword);
+    const now = new Date();
     await prisma.$transaction([
       prisma.user.update({
         where: { id: row.userId },
-        data: { password: hashedPassword },
+        data: {
+          password: hashedPassword,
+          // Invalidate all existing JWTs on every device/tab
+          passwordChangedAt: now,
+        },
       }),
       prisma.passwordResetToken.update({
         where: { id: row.id },
-        data: { usedAt: new Date() },
+        data: { usedAt: now },
       }),
       prisma.passwordResetToken.updateMany({
         where: { userId: row.userId, usedAt: null },
-        data: { usedAt: new Date() },
+        data: { usedAt: now },
       }),
     ]);
 
@@ -367,7 +372,8 @@ export async function registerAuthRoutes(app: FastifyInstance) {
         userId: row.userId,
         type: "security",
         title: "Password reset",
-        message: "Your password was reset via email link.",
+        message:
+          "Your password was reset via email link. All other sessions were signed out.",
       },
     });
 
@@ -670,12 +676,30 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           role: true,
           createdAt: true,
           totpEnabled: true,
+          passwordChangedAt: true,
         },
       });
 
       if (!user) return reply.code(404).send({ error: "User not found" });
 
-      return { user };
+      if (user.passwordChangedAt && payload.iat) {
+        if (payload.iat * 1000 < user.passwordChangedAt.getTime() - 2000) {
+          return reply
+            .code(401)
+            .send({ error: "Session expired. Please sign in again." });
+        }
+      }
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          createdAt: user.createdAt,
+          totpEnabled: user.totpEnabled,
+        },
+      };
     } catch {
       return reply.code(401).send({ error: "Invalid token" });
     }
@@ -801,7 +825,10 @@ export async function registerAuthRoutes(app: FastifyInstance) {
       const hashedPassword = await hashPassword(newPassword);
       await prisma.user.update({
         where: { id: payload.userId },
-        data: { password: hashedPassword },
+        data: {
+          password: hashedPassword,
+          passwordChangedAt: new Date(),
+        },
       });
 
       await prisma.notification.create({
@@ -809,11 +836,29 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           userId: payload.userId,
           type: "security",
           title: "Password changed",
-          message: "Your password has been updated successfully.",
+          message:
+            "Your password has been updated. Other sessions will need to sign in again.",
         },
       });
 
-      return { message: "Password changed successfully" };
+      // Issue fresh session so this device stays signed in
+      const fresh = await prisma.user.findUnique({
+        where: { id: payload.userId },
+      });
+      if (!fresh) {
+        return { message: "Password changed successfully" };
+      }
+      const newToken = generateToken({
+        userId: fresh.id,
+        email: fresh.email,
+        role: fresh.role,
+        purpose: "session",
+      });
+
+      return {
+        message: "Password changed successfully",
+        token: newToken,
+      };
     } catch (err: any) {
       return reply.code(400).send({ error: err.message || "Change failed" });
     }

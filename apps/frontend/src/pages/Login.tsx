@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/services/auth";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Eye, EyeOff, Sun, Moon } from "lucide-react";
+import { SeleneMark } from "@/components/SeleneMark";
 
 type Theme = "light" | "dark" | "system";
 
@@ -36,7 +37,7 @@ function SeleneMoonPanel() {
       />
 
       <div className="relative z-10 flex items-center gap-2.5">
-        <img src="/icon.png" alt="" className="h-9 w-9 rounded-xl" />
+        <SeleneMark size={36} className="rounded-xl" />
         <div>
           <p className="text-lg font-semibold tracking-tight">Selene</p>
           <p className="text-xs text-white/60">Smart Energy & Climate</p>
@@ -147,7 +148,7 @@ export function Login() {
 
         <div className="p-8 sm:p-10 flex flex-col justify-center">
           <div className="md:hidden flex items-center gap-2.5 mb-6">
-            <img src="/icon.png" alt="Selene" className="h-9 w-9 rounded-xl" />
+            <SeleneMark size={36} className="rounded-xl" />
             <div>
               <p className="text-[15px] font-semibold text-gray-900 dark:text-white">
                 Selene

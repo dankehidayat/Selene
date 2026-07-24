@@ -3,6 +3,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   type ReactNode,
 } from "react";
 
@@ -36,10 +37,13 @@ interface AuthContextType {
   register: (email: string, password: string, name?: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  /** Apply a new JWT (e.g. after password change on this device). */
+  setSessionToken: (token: string, user?: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const SESSION_CHECK_MS = 12_000;
 
 export function AuthProvider({
   children,
@@ -52,13 +56,28 @@ export function AuthProvider({
   );
   const [isLoading, setIsLoading] = useState(true);
 
-  const applySession = (t: string, u: User) => {
+  const clearSession = useCallback(() => {
+    localStorage.removeItem("token");
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  const applySession = useCallback((t: string, u: User) => {
     localStorage.setItem("token", t);
     setToken(t);
     setUser(u);
-  };
+  }, []);
 
-  const refreshUser = async () => {
+  const setSessionToken = useCallback(
+    (t: string, u?: User) => {
+      localStorage.setItem("token", t);
+      setToken(t);
+      if (u) setUser(u);
+    },
+    [],
+  );
+
+  const refreshUser = useCallback(async () => {
     const t = localStorage.getItem("token");
     if (!t) {
       setUser(null);
@@ -67,32 +86,91 @@ export function AuthProvider({
     const res = await fetch(`${API_BASE}/auth/me`, {
       headers: { Authorization: `Bearer ${t}` },
     });
+    if (res.status === 401) {
+      clearSession();
+      return;
+    }
     const data = await res.json();
     if (data.user) setUser(data.user);
-  };
+  }, [clearSession]);
 
+  const validateSession = useCallback(async () => {
+    const t = localStorage.getItem("token");
+    if (!t) return;
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      if (res.status === 401) {
+        clearSession();
+        return;
+      }
+      const data = await res.json();
+      if (data.user) setUser(data.user);
+      else clearSession();
+    } catch {
+      /* network blip — keep session */
+    }
+  }, [clearSession]);
+
+  // Initial load
   useEffect(() => {
     if (token) {
       fetch(`${API_BASE}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.user) setUser(data.user);
-          else {
-            setToken(null);
-            localStorage.removeItem("token");
+        .then(async (res) => {
+          if (res.status === 401) {
+            clearSession();
+            return null;
           }
+          return res.json();
+        })
+        .then((data) => {
+          if (data?.user) setUser(data.user);
+          else if (data) clearSession();
         })
         .catch(() => {
-          setToken(null);
-          localStorage.removeItem("token");
+          clearSession();
         })
         .finally(() => setIsLoading(false));
     } else {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, clearSession]);
+
+  // Poll + focus check so password reset on another device lands everyone on login
+  useEffect(() => {
+    if (!token) return;
+
+    const id = window.setInterval(() => {
+      void validateSession();
+    }, SESSION_CHECK_MS);
+
+    const onVis = () => {
+      if (document.visibilityState === "visible") void validateSession();
+    };
+    const onFocus = () => void validateSession();
+
+    // Cross-tab logout when token is cleared elsewhere
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "token" && !e.newValue) {
+        setToken(null);
+        setUser(null);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [token, validateSession]);
 
   const login = async (
     email: string,
@@ -137,9 +215,7 @@ export function AuthProvider({
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
-    setToken(null);
-    setUser(null);
+    clearSession();
   };
 
   return (
@@ -154,6 +230,7 @@ export function AuthProvider({
         register,
         logout,
         refreshUser,
+        setSessionToken,
       }}
     >
       {children}
