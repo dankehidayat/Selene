@@ -2,6 +2,7 @@
 import mqtt from "mqtt";
 import { insertReading } from "./timescale";
 import { classifyEnergyFuzzy, classifyClimateFuzzy } from "./analytics/fuzzy";
+import { emitNewReading } from "./events";
 
 const MQTT_HOST = process.env.MQTT_HOST || "localhost";
 const MQTT_PORT = parseInt(process.env.MQTT_PORT || "1883");
@@ -57,9 +58,6 @@ export function startMqttIngestor() {
     }
 
     // ── Parse fields matching Arduino's JSON format ────────
-    // Arduino sends: node_id, voltage, current, power, pf, energy,
-    //               frequency, apparent_power, reactive_power,
-    //               temperature, humidity, comfort, energy_status
     const voltage = Number(payload.voltage ?? 0);
     const acCurrent = Number(payload.current ?? 0);
     const acPower = Number(payload.power ?? 0);
@@ -69,7 +67,6 @@ export function startMqttIngestor() {
     const temperature = Number(payload.temperature ?? 0);
     const humidity = Number(payload.humidity ?? 0);
 
-    // Arduino uses snake_case: apparent_power, reactive_power
     const reactivePower = Number(
       payload.reactive_power ?? payload.reactivePower ?? 0,
     );
@@ -83,7 +80,6 @@ export function startMqttIngestor() {
       return;
     }
 
-    // Run fuzzy classification (backend computes independently)
     const energyFuzzy = classifyEnergyFuzzy(
       voltage,
       acPower,
@@ -121,6 +117,24 @@ export function startMqttIngestor() {
         humidity,
         tempComfort: climateFuzzy.category,
         energyStatus,
+      });
+
+      // ── Broadcast to SSE clients ──────────────────────
+      emitNewReading({
+        acVoltage: voltage,
+        acCurrent,
+        acPower,
+        cosPhi,
+        apparentPower,
+        totalEnergy,
+        frequency,
+        reactivePower,
+        temperature,
+        humidity,
+        tempComfort: climateFuzzy.category,
+        energyStatus,
+        powerQualityScore: null,
+        voltageStability: null,
       });
     } catch (err) {
       console.error(`[MQTT] Failed to insert reading for ${nodeId}:`, err);

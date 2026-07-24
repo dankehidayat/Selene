@@ -1,10 +1,53 @@
 // apps/frontend/src/services/api.ts
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import type { EnergyReading } from "@/types/energy";
-import { useMqttLive } from "./mqtt";
-import type { MqttSensorData } from "./mqtt";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
+
+// ── SSE Live Data (replaces Blynk polling) ────────────────
+export function useLiveReading() {
+  const [data, setData] = useState<EnergyReading | null>(null);
+
+  useEffect(() => {
+    const eventSource = new EventSource(`${API_BASE}/readings/stream`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data);
+        setData({
+          timestamp: new Date().toISOString(),
+          acVoltage: parsed.acVoltage,
+          acCurrent: parsed.acCurrent,
+          acPower: parsed.acPower,
+          cosPhi: parsed.cosPhi,
+          apparentPower: parsed.apparentPower,
+          totalEnergy: parsed.totalEnergy,
+          frequency: parsed.frequency,
+          reactivePower: parsed.reactivePower,
+          temperature: parsed.temperature,
+          humidity: parsed.humidity,
+          tempComfort: parsed.tempComfort ?? "COMFORTABLE",
+          energyStatus: parsed.energyStatus ?? "2",
+          powerQualityScore: parsed.powerQualityScore ?? undefined,
+          voltageStability: parsed.voltageStability ?? undefined,
+        });
+      } catch {
+        // Ignore malformed SSE data
+      }
+    };
+
+    eventSource.onerror = () => {
+      // EventSource auto-reconnects, no action needed
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
+
+  return { data, isLoading: false };
+}
 
 export interface AnalyticsSummary {
   range: string;
@@ -106,101 +149,6 @@ export interface BlandAltmanResult {
   lowerLoA: number;
 }
 
-// ── Blynk proxy through backend ────────────────────────────
-async function fetchPin(pin: number): Promise<number> {
-  const url = `${API_BASE}/blynk/${pin}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch v${pin}: ${res.status}`);
-  const data = await res.json();
-  const value = Array.isArray(data) ? data[0] : data;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-/** @deprecated Use useMqttLive() instead for live data */
-async function fetchLiveReading(): Promise<EnergyReading> {
-  const [
-    acVoltage,
-    acCurrent,
-    acPower,
-    cosPhi,
-    apparentPower,
-    totalEnergy,
-    frequency,
-    reactivePower,
-    temperature,
-    humidity,
-    tempComfortRaw,
-    energyStatusRaw,
-  ] = await Promise.all([
-    fetchPin(0),
-    fetchPin(1),
-    fetchPin(2),
-    fetchPin(3),
-    fetchPin(4),
-    fetchPin(5),
-    fetchPin(6),
-    fetchPin(7),
-    fetchPin(8),
-    fetchPin(9),
-    fetchPin(10),
-    fetchPin(11),
-  ]);
-  let energyStatus: "1" | "2" | "3" = "2";
-  if (energyStatusRaw === 1) energyStatus = "1";
-  else if (energyStatusRaw === 2) energyStatus = "2";
-  else if (energyStatusRaw === 3) energyStatus = "3";
-  const comfortMap: Record<string, EnergyReading["tempComfort"]> = {
-    COLD: "COLD",
-    COOL: "COOL",
-    COMFORTABLE: "COMFORTABLE",
-    WARM: "WARM",
-    HOT: "HOT",
-  };
-  const tempComfort =
-    comfortMap[String(tempComfortRaw)?.toUpperCase()] ?? "COMFORTABLE";
-  const voltage = Number(acVoltage);
-  const power = Number(acPower);
-  const powerQuality = Math.max(
-    0,
-    Math.min(
-      100,
-      100 - Math.abs(power - 400) / 6 + Math.abs(voltage - 220) / 6,
-    ),
-  );
-  const stability = Math.max(
-    0.5,
-    Math.min(1, 1 - Math.abs(voltage - 220) / 220),
-  );
-  return {
-    timestamp: new Date().toISOString(),
-    acVoltage: voltage,
-    acCurrent: Number(acCurrent),
-    acPower: power,
-    cosPhi: Number(cosPhi),
-    apparentPower: Number(apparentPower),
-    totalEnergy: Number(totalEnergy),
-    frequency: Number(frequency),
-    reactivePower: Number(reactivePower),
-    temperature: Number(temperature),
-    humidity: Number(humidity),
-    tempComfort,
-    energyStatus,
-    powerQualityScore: Number(powerQuality.toFixed(2)),
-    voltageStability: Number(stability.toFixed(3)),
-  };
-}
-
-/** @deprecated Use useMqttLive() instead for live data */
-export function useLiveReading() {
-  return useQuery<EnergyReading>({
-    queryKey: ["live-reading"],
-    queryFn: fetchLiveReading,
-    refetchInterval: 3000,
-    staleTime: 0,
-  });
-}
-
 async function fetchHistory(range: string) {
   const res = await fetch(`${API_BASE}/readings/history?range=${range}`);
   if (!res.ok) throw new Error("Failed to fetch history");
@@ -275,6 +223,7 @@ export function useReadingHistory(
       timestamp: string;
       voltage: number;
       power: number;
+      current: number;
       temperature: number;
       humidity: number;
     }>
@@ -495,7 +444,3 @@ export function useAdminStats() {
 }
 
 export { updateUserRole, toggleUserActive };
-
-// Re-export MQTT live hook for centralized data access
-export { useMqttLive };
-export type { MqttSensorData };

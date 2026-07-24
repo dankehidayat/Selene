@@ -18,7 +18,7 @@ import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { PowerOverview } from "@/components/PowerOverview";
 import { ClimateOverview } from "@/components/ClimateOverview";
 import {
-  useMqttLive,
+  useLiveReading,
   useReadingHistory,
   useAnalyticsSummary,
 } from "@/services/api";
@@ -204,28 +204,8 @@ export function Dashboard() {
   const [showForecast, setShowForecast] = useState(false);
   const { user } = useAuth();
 
-  // ── MQTT Live Data ──────────────────────────────────
-  const { data: liveMqtt } = useMqttLive();
-
-  // ── Compatibility mapping: MQTT data → old shape ─────
-  const live = liveMqtt
-    ? {
-        acVoltage: liveMqtt.voltage,
-        acCurrent: liveMqtt.current,
-        acPower: liveMqtt.power,
-        cosPhi: liveMqtt.pf,
-        apparentPower: liveMqtt.apparentPower,
-        totalEnergy: liveMqtt.energy,
-        frequency: liveMqtt.frequency,
-        reactivePower: liveMqtt.reactivePower,
-        temperature: liveMqtt.temperature,
-        humidity: liveMqtt.humidity,
-        tempComfort: undefined as string | undefined,
-        energyStatus: undefined as string | undefined,
-        powerQualityScore: undefined as number | undefined,
-        voltageStability: undefined as number | undefined,
-      }
-    : null;
+  // ── SSE Live Data ────────────────────────────────────
+  const { data: live } = useLiveReading();
 
   const { data: history = [] } = useReadingHistory(chartRange as any);
   const { data: summary } = useAnalyticsSummary("24h");

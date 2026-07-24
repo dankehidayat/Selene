@@ -26,6 +26,7 @@ import {
   getEnergyInRange,
 } from "./timescale";
 import { startMqttIngestor } from "./mqtt";
+import { onNewReading } from "./events";
 
 const app = Fastify({ logger: true });
 
@@ -184,6 +185,77 @@ app.get(
       broker: `${mqttHost}:${mqttPort}`,
       topic,
     };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════
+//  SSE Stream — Real-time sensor data to dashboard
+// ═══════════════════════════════════════════════════════════
+app.get(
+  "/api/readings/stream",
+  {
+    schema: {
+      description: "SSE stream of real-time sensor readings",
+      tags: ["Readings"],
+    },
+  },
+  async (request, reply) => {
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    reply.raw.write(": connected\n\n");
+
+    // Send latest reading immediately on connect
+    const latest = await getLatestReading();
+    if (latest) {
+      const payload = JSON.stringify({
+        acVoltage: latest.ac_voltage,
+        acCurrent: latest.ac_current,
+        acPower: latest.ac_power,
+        cosPhi: latest.cos_phi,
+        apparentPower: latest.apparent_power,
+        totalEnergy: latest.total_energy,
+        frequency: latest.frequency,
+        reactivePower: latest.reactive_power,
+        temperature: latest.temperature,
+        humidity: latest.humidity,
+        tempComfort: latest.temp_comfort,
+        energyStatus: latest.energy_status,
+        powerQualityScore: latest.power_quality_score,
+        voltageStability: latest.voltage_stability,
+      });
+      reply.raw.write(`data: ${payload}\n\n`);
+    }
+
+    // Subscribe to new readings from MQTT
+    const unsubscribe = onNewReading((data) => {
+      try {
+        reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+      } catch {
+        // Client disconnected
+      }
+    });
+
+    // Keep alive every 15 seconds
+    const keepAlive = setInterval(() => {
+      try {
+        reply.raw.write(": keepalive\n\n");
+      } catch {
+        clearInterval(keepAlive);
+      }
+    }, 15000);
+
+    request.raw.on("close", () => {
+      unsubscribe();
+      clearInterval(keepAlive);
+    });
+
+    // Never resolve — SSE is persistent
+    return new Promise(() => {});
   },
 );
 
