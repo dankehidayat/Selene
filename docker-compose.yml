@@ -27,8 +27,6 @@ services:
       - POSTGRES_DB=selene_measurements
     volumes:
       - timescale_data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
     networks:
       - selene
     healthcheck:
@@ -36,6 +34,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  emqx:
+    image: emqx/emqx:5.7.0
+    container_name: selene-emqx
+    restart: unless-stopped
+    environment:
+      - EMQX_NAME=selene
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    networks:
+      - selene
 
   backend:
     build:
@@ -49,13 +59,16 @@ services:
       - PORT=8787
       - DATABASE_URL=postgresql://selene_admin:x9Fm2KpR7vLq4WnB8cYt3Hj6DsA1Gf5d@postgres:5432/selene
       - TIMESCALE_URL=postgresql://selene_ts:k0iAjJmuzPH3xD8dh25W5Fod7B9PC73rl2qFUdnqrks=@timescaledb:5432/selene_measurements
-    ports:
-      - "8787:8787"
+      - MQTT_HOST=emqx
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=selene/+/telemetry
     depends_on:
       postgres:
         condition: service_healthy
       timescaledb:
         condition: service_healthy
+      emqx:
+        condition: service_started
     networks:
       - selene
 
@@ -79,3 +92,5 @@ networks:
 volumes:
   postgres_data:
   timescale_data:
+  emqx_data:
+  emqx_log:

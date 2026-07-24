@@ -26,6 +26,7 @@ import {
   getExportData,
   getEnergyInRange,
 } from "./timescale";
+import { startMqttIngestor } from "./mqtt";
 
 const app = Fastify({ logger: true });
 
@@ -75,6 +76,7 @@ await app.register(swagger, {
         name: "Blynk Proxy",
         description: "Real-time sensor data from Blynk IoT",
       },
+      { name: "MQTT", description: "MQTT telemetry ingestion" },
       { name: "Notifications", description: "User notification management" },
       { name: "Glossary", description: "Technical term definitions" },
       { name: "Health", description: "Service health check" },
@@ -170,7 +172,7 @@ function getRangeConfig(range: string): {
   }
 }
 
-// ── Blynk Polling → TimescaleDB ──────────────────────────
+// ── Blynk Polling → TimescaleDB (fallback) ──────────────
 async function pollBlynkToTimescale() {
   if (!BLYNK_SERVER_URL || !BLYNK_AUTH_TOKEN) return;
 
@@ -229,6 +231,29 @@ async function pollBlynkToTimescale() {
     // Silently fail — Blynk might be unreachable temporarily
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+//  MQTT Status Endpoint
+// ═══════════════════════════════════════════════════════════
+app.get(
+  "/api/mqtt/status",
+  {
+    schema: {
+      description: "Get MQTT ingestor status",
+      tags: ["MQTT"],
+    },
+  },
+  async () => {
+    const mqttHost = process.env.MQTT_HOST || "localhost";
+    const mqttPort = parseInt(process.env.MQTT_PORT || "1883");
+    const topic = process.env.MQTT_TOPIC || "selene/+/telemetry";
+    return {
+      active: true,
+      broker: `${mqttHost}:${mqttPort}`,
+      topic,
+    };
+  },
+);
 
 // ═══════════════════════════════════════════════════════════
 //  Blynk Proxy
@@ -879,6 +904,10 @@ const port = Number(process.env.PORT ?? 8787);
 
 await initTimescaleDB();
 
+// ── Start MQTT Ingestor ──────────────────────────────────
+startMqttIngestor();
+
+// ── Keep Blynk polling as fallback ───────────────────────
 setInterval(pollBlynkToTimescale, 30_000);
 setTimeout(pollBlynkToTimescale, 5_000);
 
