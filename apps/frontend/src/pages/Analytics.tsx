@@ -418,7 +418,10 @@ function InfoPopover({ title, content }: { title: string; content: string }) {
     </HoverCard.Root>
   );
 }
-/** Lightweight disclosure — no height animation (avoids Recharts reflow lag). */
+/**
+ * Disclosure with enter/exit fade+slide. Charts mount only while open so we
+ * never animate Recharts height (that reflows hard). Close waits for exit anim.
+ */
 function Accordion({
   title,
   defaultOpen,
@@ -431,11 +434,30 @@ function Accordion({
   hint?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
+  const [rendered, setRendered] = useState(defaultOpen ?? false);
+  const [leaving, setLeaving] = useState(false);
+
+  const toggle = () => {
+    if (open) {
+      setLeaving(true);
+      setOpen(false);
+      window.setTimeout(() => {
+        setRendered(false);
+        setLeaving(false);
+      }, 220);
+    } else {
+      setRendered(true);
+      setLeaving(false);
+      setOpen(true);
+    }
+  };
+
   return (
     <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-card overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
+        aria-expanded={open}
         className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition"
       >
         <div className="min-w-0">
@@ -450,12 +472,15 @@ function Accordion({
         </div>
         <ChevronDown
           size={18}
-          className={`text-gray-400 shrink-0 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`text-gray-400 shrink-0 transition-transform duration-200 ease-out ${open ? "rotate-180" : ""}`}
         />
       </button>
-      {/* Mount charts only when open — no CSS grid-row animation (that lagged hard) */}
-      {open ? (
-        <div className="px-5 pb-5 border-t border-gray-100 dark:border-gray-800 pt-4">
+      {rendered ? (
+        <div
+          className={`px-5 pb-5 border-t border-gray-100 dark:border-gray-800 pt-4 ${
+            leaving ? "animate-accordionOut" : "animate-accordionIn"
+          }`}
+        >
           {children}
         </div>
       ) : null}

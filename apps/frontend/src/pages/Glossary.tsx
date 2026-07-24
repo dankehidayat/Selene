@@ -306,8 +306,8 @@ export function Glossary() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-6">
+    <div className="max-w-4xl mx-auto w-full min-w-0 overflow-x-hidden">
+      <div className="text-center mb-6 px-1">
         <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
           Glossary
         </h2>
@@ -316,21 +316,21 @@ export function Glossary() {
         </p>
       </div>
 
-      <div className="flex items-center gap-3 mb-6 max-w-md mx-auto">
-        <div className="flex-1 flex items-center gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-6 w-full max-w-lg mx-auto min-w-0">
+        <div className="flex-1 min-w-0 flex items-center gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5">
           <Search size={14} className="text-gray-400 shrink-0" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 text-sm text-gray-900 dark:text-white bg-transparent outline-none placeholder:text-gray-400"
+            className="flex-1 min-w-0 text-sm text-gray-900 dark:text-white bg-transparent outline-none placeholder:text-gray-400"
             placeholder="Search glossary..."
           />
         </div>
         {isAdmin && (
           <Dialog.Root open={dialogOpen} onOpenChange={setDialogOpen}>
             <Dialog.Trigger asChild>
-              <button className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 dark:text-gray-900 dark:bg-white dark:hover:bg-gray-100 rounded-xl transition shrink-0">
+              <button className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-gray-900 hover:bg-gray-800 dark:text-gray-900 dark:bg-white dark:hover:bg-gray-100 rounded-xl transition shrink-0 w-full sm:w-auto">
                 <Plus size={14} /> Add Term
               </button>
             </Dialog.Trigger>
@@ -401,17 +401,17 @@ export function Glossary() {
             Loading...
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto max-w-full -mx-1 px-1">
+            <table className="w-full text-sm min-w-0">
               <thead>
                 <tr className="text-left text-xs border-b border-gray-200 dark:border-gray-700">
-                  <th className="font-semibold py-3 px-2 text-gray-900 dark:text-white">
+                  <th className="font-semibold py-3 px-2 text-gray-900 dark:text-white w-[28%] sm:w-auto">
                     Term
                   </th>
                   <th className="font-semibold py-3 px-2 text-gray-900 dark:text-white">
                     Definition
                   </th>
-                  <th className="font-semibold py-3 px-2 text-gray-900 dark:text-white">
+                  <th className="font-semibold py-3 px-2 text-gray-900 dark:text-white hidden sm:table-cell">
                     Category
                   </th>
                   {isAdmin && (
@@ -435,19 +435,24 @@ export function Glossary() {
                       key={t.id}
                       className="border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors"
                     >
-                      <td className="py-3 px-2 text-gray-900 dark:text-white font-semibold">
+                      <td className="py-3 px-2 text-gray-900 dark:text-white font-semibold align-top break-words">
                         {t.term}
+                        <span className="sm:hidden block mt-1">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                            {t.category}
+                          </span>
+                        </span>
                       </td>
-                      <td className="py-3 px-2 text-gray-600 dark:text-gray-400">
+                      <td className="py-3 px-2 text-gray-600 dark:text-gray-400 align-top break-words">
                         {t.definition}
                       </td>
-                      <td className="py-3 px-2">
+                      <td className="py-3 px-2 hidden sm:table-cell align-top">
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
                           {t.category}
                         </span>
                       </td>
                       {isAdmin && (
-                        <td className="py-3 px-2">
+                        <td className="py-3 px-2 align-top">
                           <button
                             onClick={() => deleteTerm(t.id)}
                             className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition"

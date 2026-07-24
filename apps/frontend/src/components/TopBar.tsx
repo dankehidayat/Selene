@@ -16,6 +16,32 @@ import {
   type NavSearchItem,
 } from "@/lib/navSearch";
 
+function useIsApplePlatform(): boolean {
+  const [isApple, setIsApple] = useState(false);
+  useEffect(() => {
+    const p = navigator.platform || "";
+    const ua = navigator.userAgent || "";
+    setIsApple(/Mac|iPhone|iPad|iPod/i.test(p) || /Mac OS X/i.test(ua));
+  }, []);
+  return isApple;
+}
+
+/** Keyboard shortcut hint: ⌘K on Apple, Ctrl+K elsewhere. */
+function ShortcutHint({ isApple }: { isApple: boolean }) {
+  if (isApple) {
+    return (
+      <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-1.5 py-0.5 text-[10px] font-medium text-gray-400 dark:text-gray-500 tabular-nums">
+        ⌘K
+      </kbd>
+    );
+  }
+  return (
+    <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-1.5 py-0.5 text-[10px] font-medium text-gray-400 dark:text-gray-500 tabular-nums">
+      Ctrl&nbsp;K
+    </kbd>
+  );
+}
+
 export function TopBar({
   onToggleSidebar,
   onMobileMenu,
@@ -23,12 +49,12 @@ export function TopBar({
 }: {
   onToggleSidebar: () => void;
   onMobileMenu: () => void;
-  /** Desktop left sidebar open state — drives PanelLeft / PanelLeftClose. */
   sidebarOpen: boolean;
 }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
+  const isApple = useIsApplePlatform();
 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -40,6 +66,8 @@ export function TopBar({
     () => searchNavItems(query, { isAdmin }),
     [query, isAdmin],
   );
+
+  const shortcutLabel = isApple ? "⌘K" : "Ctrl+K";
 
   useEffect(() => {
     setActiveIdx(0);
@@ -56,7 +84,6 @@ export function TopBar({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  // ⌘K / Ctrl+K focuses search
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -75,7 +102,6 @@ export function TopBar({
     void (navigate as (opts: { to: string }) => Promise<void>)({
       to: item.to,
     }).then(() => {
-      // Ensure ?tab= is present for deep links (router may strip unknown search).
       if (item.tab) {
         window.history.replaceState(
           window.history.state,
@@ -115,7 +141,8 @@ export function TopBar({
   const DesktopSidebarIcon = sidebarOpen ? PanelLeftClose : PanelLeftOpen;
 
   return (
-    <header className="flex items-center gap-3 px-5 lg:px-8 py-4 border-b border-gray-200/50 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md sticky top-0 z-20">
+    <header className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-5 lg:px-8 py-4 border-b border-gray-200/50 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md sticky top-0 z-20">
+      {/* Left: sidebar toggle */}
       <div className="flex items-center gap-2 shrink-0">
         <button
           type="button"
@@ -137,8 +164,8 @@ export function TopBar({
         </button>
       </div>
 
-      {/* Global search */}
-      <div ref={rootRef} className="relative flex-1 max-w-xl min-w-0">
+      {/* Center: global search */}
+      <div ref={rootRef} className="relative w-full max-w-xl mx-auto min-w-0">
         <div className="relative">
           <Search
             size={16}
@@ -154,24 +181,29 @@ export function TopBar({
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
-            placeholder="Search pages, tabs… (⌘K)"
-            className="w-full h-10 pl-9 pr-9 rounded-xl bg-gray-100/80 dark:bg-gray-800/80 border border-transparent focus:border-blue-300 dark:focus:border-blue-700 focus:bg-white dark:focus:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none transition"
+            placeholder="Search pages, tabs…"
+            className="w-full h-10 pl-9 pr-[4.5rem] rounded-xl bg-gray-100/80 dark:bg-gray-800/80 border border-transparent focus:border-blue-300 dark:focus:border-blue-700 focus:bg-white dark:focus:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none transition"
             autoComplete="off"
             spellCheck={false}
+            aria-label={`Search (${shortcutLabel})`}
           />
-          {query ? (
-            <button
-              type="button"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              onClick={() => {
-                setQuery("");
-                inputRef.current?.focus();
-              }}
-              aria-label="Clear search"
-            >
-              <X size={14} />
-            </button>
-          ) : null}
+          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            {query ? (
+              <button
+                type="button"
+                className="p-0.5 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                onClick={() => {
+                  setQuery("");
+                  inputRef.current?.focus();
+                }}
+                aria-label="Clear search"
+              >
+                <X size={14} />
+              </button>
+            ) : (
+              <ShortcutHint isApple={isApple} />
+            )}
+          </div>
         </div>
 
         {open && query.trim() && (
@@ -183,7 +215,11 @@ export function TopBar({
             ) : (
               <ul className="py-1 max-h-72 overflow-y-auto" role="listbox">
                 {results.map((item, idx) => (
-                  <li key={item.id} role="option" aria-selected={idx === activeIdx}>
+                  <li
+                    key={item.id}
+                    role="option"
+                    aria-selected={idx === activeIdx}
+                  >
                     <button
                       type="button"
                       onMouseEnter={() => setActiveIdx(idx)}
@@ -215,7 +251,8 @@ export function TopBar({
         )}
       </div>
 
-      <div className="shrink-0">
+      {/* Right: notifications (original placement) */}
+      <div className="flex justify-end shrink-0">
         <NotificationBell />
       </div>
     </header>

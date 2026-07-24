@@ -1,5 +1,5 @@
 // apps/frontend/src/components/NotificationBell.tsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import {
   Bell,
@@ -11,6 +11,11 @@ import {
   CheckCheck,
 } from "lucide-react";
 import { useAuth } from "@/services/auth";
+import {
+  isNotificationCategoryAllowed,
+  loadNotificationPrefs,
+  type NotificationPrefs,
+} from "@/lib/notificationPrefs";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 const POLL_INTERVAL = 45_000;
@@ -44,6 +49,17 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [clearing, setClearing] = useState(false);
+  const [prefs, setPrefs] = useState<NotificationPrefs>(() =>
+    typeof window !== "undefined"
+      ? loadNotificationPrefs()
+      : {
+          enabled: true,
+          energy: true,
+          climate: true,
+          security: true,
+          system: true,
+        },
+  );
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
 
@@ -56,10 +72,6 @@ export function NotificationBell() {
       const data = await res.json();
       if (mountedRef.current && data.notifications) {
         setNotifications(data.notifications);
-        setUnreadCount(
-          data.unreadCount ??
-            data.notifications.filter((n: Notification) => !n.read).length,
-        );
       }
     } catch {
       /* ignore */
@@ -73,11 +85,29 @@ export function NotificationBell() {
     fetchNotifications();
     intervalRef.current = setInterval(fetchNotifications, POLL_INTERVAL);
 
+    const onPrefs = () => setPrefs(loadNotificationPrefs());
+    window.addEventListener("selene:notification-prefs", onPrefs);
+    window.addEventListener("storage", onPrefs);
+
     return () => {
       mountedRef.current = false;
       if (intervalRef.current) clearInterval(intervalRef.current);
+      window.removeEventListener("selene:notification-prefs", onPrefs);
+      window.removeEventListener("storage", onPrefs);
     };
   }, [token]);
+
+  const visible = useMemo(
+    () =>
+      notifications.filter((n) =>
+        isNotificationCategoryAllowed(n.type, prefs),
+      ),
+    [notifications, prefs],
+  );
+
+  useEffect(() => {
+    setUnreadCount(visible.filter((n) => !n.read).length);
+  }, [visible]);
 
   const markAsRead = async (id: string) => {
     try {
@@ -94,7 +124,6 @@ export function NotificationBell() {
         setNotifications((prev) =>
           prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
         );
-        setUnreadCount(data.unreadCount ?? Math.max(0, unreadCount - 1));
       }
     } catch {
       /* ignore */
@@ -114,7 +143,6 @@ export function NotificationBell() {
       const data = await res.json();
       if (data.success) {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-        setUnreadCount(0);
       }
     } catch {
       /* ignore */
@@ -185,7 +213,7 @@ export function NotificationBell() {
                   Read all
                 </button>
               )}
-              {notifications.length > 0 && (
+              {visible.length > 0 && (
                 <button
                   type="button"
                   onClick={clearAll}
@@ -200,7 +228,15 @@ export function NotificationBell() {
             </div>
           </div>
           <div className="overflow-y-auto max-h-[340px]">
-            {notifications.length === 0 ? (
+            {!prefs.enabled ? (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400 dark:text-gray-500">
+                <Bell size={32} className="mb-2 opacity-50" />
+                <p className="text-sm">Notifications paused</p>
+                <p className="text-[11px] mt-1 text-center px-6">
+                  Turn them back on in Settings → Notifications
+                </p>
+              </div>
+            ) : visible.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-gray-400 dark:text-gray-500">
                 <Bell size={32} className="mb-2 opacity-50" />
                 <p className="text-sm">No notifications</p>
@@ -209,7 +245,7 @@ export function NotificationBell() {
                 </p>
               </div>
             ) : (
-              notifications.map((n) => {
+              visible.map((n) => {
                 const Icon = typeIcons[n.type] || Activity;
                 return (
                   <button

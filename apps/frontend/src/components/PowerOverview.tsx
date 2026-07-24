@@ -21,14 +21,12 @@ export function computePowerQualityScore(
   let weight = 0;
 
   if (hasPf) {
-    // PF 0.4→0 … 1.0→55
     const pf = Math.min(1, Math.max(0, Number(cosPhi)));
     score += pf * 55;
     weight += 55;
   }
   if (hasF) {
     const f = Number(frequency);
-    // 50 Hz ideal; ±0.2 → full 45 pts, falls off to 0 by ±1.5 Hz
     const dev = Math.abs(f - 50);
     const fScore = Math.max(0, 45 * (1 - dev / 1.5));
     score += fScore;
@@ -37,30 +35,6 @@ export function computePowerQualityScore(
 
   if (weight === 0) return undefined;
   return Math.round((score / weight) * 100);
-}
-
-function getQualityLabel(score: number | undefined): string {
-  if (score === undefined) return "Waiting for live electrical readings";
-  if (score >= 80) return "Excellent — power quality is very good";
-  if (score >= 60) return "Good — within acceptable range";
-  if (score >= 40) return "Fair — some parameters need attention";
-  return "Poor — power quality needs improvement";
-}
-
-function getCosPhiLabel(cp: number | undefined): string {
-  if (cp === undefined) return "No PF sample yet";
-  if (cp >= 0.85) return "Good — efficient power usage";
-  if (cp >= 0.6) return "Fair — consider PF correction";
-  if (cp > 0) return "Low — significant reactive power";
-  return "Near zero — check load / sensor wiring";
-}
-
-function getFrequencyLabel(freq: number | undefined): string {
-  if (freq === undefined) return "No frequency sample yet";
-  if (freq >= 49.8 && freq <= 50.2) return "Stable — within normal range";
-  if (freq >= 49.5 && freq <= 50.5)
-    return "Slight deviation — monitoring recommended";
-  return "Unstable — outside normal grid band";
 }
 
 function scoreBarColor(score: number | undefined): string {
@@ -79,41 +53,113 @@ function scoreTextColor(score: number | undefined): string {
   return "text-red-600 dark:text-red-400";
 }
 
-/** Single row: icon + label/value + short human hint — matches ClimateOverview. */
-function MetricRow({
+function qualityHeadline(score: number | undefined): string {
+  if (score === undefined) return "Tuning in…";
+  if (score >= 80) return "Grid vibes: excellent";
+  if (score >= 60) return "Grid vibes: solid";
+  if (score >= 40) return "Grid vibes: a bit rocky";
+  return "Grid vibes: needs love";
+}
+
+function qualityNarration(
+  score: number | undefined,
+  estimated: boolean,
+): string {
+  if (score === undefined) {
+    return "We're waiting for the first electrical heartbeat from your sensors. Hang tight — the story starts when data arrives.";
+  }
+  let base: string;
+  if (score >= 80) {
+    base =
+      "Your power line is humming along nicely. Factor and frequency are in a happy place — the kind of day an engineer would high-five.";
+  } else if (score >= 60) {
+    base =
+      "Things look healthy overall. Nothing dramatic on the wire, just a steady workday for your circuits.";
+  } else if (score >= 40) {
+    base =
+      "There's a little drama on the grid today. Worth a glance at power factor or frequency when you have a moment.";
+  } else {
+    base =
+      "The electrical side is waving a yellow flag. Check loads, wiring, or the sensor — your gear will thank you.";
+  }
+  if (estimated) {
+    base += " (Score estimated from cos φ and frequency.)";
+  }
+  return base;
+}
+
+function cosPhiNarration(cp: number | undefined): string {
+  if (cp === undefined) {
+    return "Power factor is still shy — no cos φ sample yet. We'll narrate once the meters speak.";
+  }
+  if (cp >= 0.95) {
+    return `cos φ is a crisp ${cp.toFixed(2)} — almost pure real power. Your loads are sipping electricity efficiently.`;
+  }
+  if (cp >= 0.85) {
+    return `cos φ sits at ${cp.toFixed(2)} — a polite, efficient guest at the table. Reactive power is under control.`;
+  }
+  if (cp >= 0.6) {
+    return `cos φ is ${cp.toFixed(2)} — workable, but the grid is carrying extra “imaginary” power. Correction gear could help.`;
+  }
+  if (cp > 0) {
+    return `cos φ is down at ${cp.toFixed(2)}. Lots of reactive power in the mix — the wire is working harder than it needs to.`;
+  }
+  return `cos φ is near zero (${cp.toFixed(2)}). That usually means a sensor glitch, no real load, or something worth investigating.`;
+}
+
+function frequencyNarration(freq: number | undefined): string {
+  if (freq === undefined) {
+    return "Frequency hasn't checked in yet. When it does, we'll tell you if the grid is dancing on beat.";
+  }
+  if (freq >= 49.8 && freq <= 50.2) {
+    return `Frequency is a calm ${freq.toFixed(1)} Hz — right on the 50 Hz beat. The grid is keeping good time.`;
+  }
+  if (freq >= 49.5 && freq <= 50.5) {
+    return `Frequency is ${freq.toFixed(1)} Hz — a slight wobble around 50 Hz. Not an emergency, but worth a casual watch.`;
+  }
+  return `Frequency is ${freq.toFixed(1)} Hz — outside the cozy 50 Hz band. Unstable grids make motors and clocks grumpy.`;
+}
+
+function consumptionNarration(kwh: string | number): string {
+  if (kwh === "—" || kwh === undefined || kwh === null) {
+    return "No 24-hour energy story yet. Once readings accumulate, we'll sum up how hungry the day was.";
+  }
+  const n = typeof kwh === "number" ? kwh : parseFloat(String(kwh));
+  if (!Number.isFinite(n)) {
+    return `Today's energy tally reads ${kwh} kWh — still writing the rest of the chapter.`;
+  }
+  if (n < 0.5) {
+    return `Only ${n} kWh over the last day — a light sip. Either the office is calm or someone unplugged the party.`;
+  }
+  if (n < 2) {
+    return `${n} kWh in the last 24 hours — a moderate day. Enough to keep the lights on without setting records.`;
+  }
+  if (n < 5) {
+    return `${n} kWh in 24 hours — a solid workday appetite. Charts upstairs will show where the watts went.`;
+  }
+  return `${n} kWh over 24 hours — a hungry day on the meter. Peak hours in Analytics can reveal the main characters.`;
+}
+
+function MetricStory({
   icon: Icon,
   iconClass,
   label,
-  value,
-  unit,
-  hint,
+  story,
 }: {
   icon: typeof Zap;
   iconClass: string;
   label: string;
-  value: string;
-  unit?: string;
-  hint: string;
+  story: string;
 }) {
   return (
     <div className="flex items-start gap-3.5">
       <Icon size={20} className={`shrink-0 mt-0.5 ${iconClass}`} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-            {label}
-          </span>
-          <span className="text-xl font-semibold text-gray-900 dark:text-white tabular-nums shrink-0">
-            {value}
-            {unit ? (
-              <span className="text-sm font-semibold text-gray-900 dark:text-white ml-0.5">
-                {unit}
-              </span>
-            ) : null}
-          </span>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
-          {hint}
+        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+          {label}
+        </p>
+        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 leading-relaxed">
+          {story}
         </p>
       </div>
     </div>
@@ -140,21 +186,15 @@ export function PowerOverview({
       ? Number(frequency)
       : undefined;
 
-  const kwhValue =
-    totalKwh !== "—" && totalKwh !== undefined && totalKwh !== null
-      ? String(totalKwh)
-      : "—";
-
-  const barWidth =
-    derived != null ? Math.min(100, Math.max(0, derived)) : 0;
+  const barWidth = derived != null ? Math.min(100, Math.max(0, derived)) : 0;
+  const estimated = qualityScore == null && derived != null;
 
   return (
     <div className="space-y-4 mt-1">
-      {/* Quality narrative — glanceable hero, no tile grid */}
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Zap size={16} className={`shrink-0 ${scoreTextColor(derived)}`} />
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
             Power quality
           </p>
         </div>
@@ -182,52 +222,31 @@ export function PowerOverview({
           />
         </div>
         <p className={`text-sm font-semibold mt-2.5 ${scoreTextColor(derived)}`}>
-          {derived != null
-            ? derived >= 80
-              ? "Excellent"
-              : derived >= 60
-                ? "Good"
-                : derived >= 40
-                  ? "Fair"
-                  : "Poor"
-            : "—"}
+          {qualityHeadline(derived)}
         </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-          {getQualityLabel(derived)}
-          {qualityScore == null && derived != null
-            ? " Estimated from cos φ and frequency."
-            : ""}
+        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1.5 leading-relaxed">
+          {qualityNarration(derived, estimated)}
         </p>
       </div>
 
-      {/* Live electrical + energy summary — same rhythm as ClimateOverview */}
       <div className="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-4">
-        <MetricRow
+        <MetricStory
           icon={Gauge}
           iconClass="text-violet-500"
-          label="cos φ (power factor)"
-          value={pf != null ? pf.toFixed(2) : "—"}
-          hint={getCosPhiLabel(pf)}
+          label="Power factor"
+          story={cosPhiNarration(pf)}
         />
-        <MetricRow
+        <MetricStory
           icon={Waves}
           iconClass="text-sky-500"
           label="Frequency"
-          value={freq != null ? freq.toFixed(1) : "—"}
-          unit={freq != null ? "Hz" : undefined}
-          hint={getFrequencyLabel(freq)}
+          story={frequencyNarration(freq)}
         />
-        <MetricRow
+        <MetricStory
           icon={Activity}
           iconClass="text-amber-500"
           label="Consumption (24h)"
-          value={kwhValue}
-          unit={kwhValue !== "—" ? "kWh" : undefined}
-          hint={
-            kwhValue !== "—"
-              ? "Integrated active power over the last 24 hours"
-              : "No energy summary yet"
-          }
+          story={consumptionNarration(totalKwh)}
         />
       </div>
     </div>

@@ -215,3 +215,31 @@
 .animate-tabIn {
   animation: tabIn 0.28s ease-out;
 }
+
+@keyframes accordionIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-accordionIn {
+  animation: accordionIn 0.22s ease-out;
+}
+
+@keyframes accordionOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+.animate-accordionOut {
+  animation: accordionOut 0.2s ease-in forwards;
+}

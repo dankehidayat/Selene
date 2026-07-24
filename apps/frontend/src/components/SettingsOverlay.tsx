@@ -19,7 +19,17 @@ import {
   User as UserIcon,
   Key,
   LogOut,
+  Bell,
+  Zap,
+  Thermometer,
+  Shield,
+  Activity,
 } from "lucide-react";
+import {
+  loadNotificationPrefs,
+  saveNotificationPrefs,
+  type NotificationPrefs,
+} from "@/lib/notificationPrefs";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -156,7 +166,44 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 const navItems = [
   { key: "general", label: "General", icon: UserIcon },
   { key: "security", label: "Login & Security", icon: Key },
+  { key: "notifications", label: "Notifications", icon: Bell },
 ] as const;
+
+type SettingsTab = (typeof navItems)[number]["key"];
+
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-40 ${
+        checked
+          ? "bg-blue-600 dark:bg-blue-500"
+          : "bg-gray-200 dark:bg-gray-700"
+      }`}
+    >
+      <span
+        className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ${
+          checked ? "translate-x-5" : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  );
+}
 
 // ── Main Overlay Component ────────────────────────────────
 
@@ -172,10 +219,21 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
   const isMobile = useIsMobile();
 
   const [editing, setEditing] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"general" | "security">("general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [mobileView, setMobileView] = useState<"nav" | "content">("nav");
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>(() =>
+    typeof window !== "undefined"
+      ? loadNotificationPrefs()
+      : {
+          enabled: true,
+          energy: true,
+          climate: true,
+          security: true,
+          system: true,
+        },
+  );
 
   const [name, setName] = useState(user?.name || "");
   const [nameLoading, setNameLoading] = useState(false);
@@ -213,12 +271,24 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
       setIsVisible(true);
       setIsClosing(false);
       setMobileView("nav");
+      setNotifPrefs(loadNotificationPrefs());
       document.body.style.overflow = "hidden";
     }
     return () => {
       document.body.style.overflow = "";
     };
   }, [open]);
+
+  const updateNotifPref = <K extends keyof NotificationPrefs>(
+    key: K,
+    value: NotificationPrefs[K],
+  ) => {
+    setNotifPrefs((prev) => {
+      const next = { ...prev, [key]: value };
+      saveNotificationPrefs(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -707,15 +777,19 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
             />
           </div>
 
-          <SectionHeading>Login History</SectionHeading>
-          {loginHistory.length > 0 && (
-            <button
-              onClick={handleClearSessions}
-              className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline mb-3"
-            >
-              Clear all sessions
-            </button>
-          )}
+          <div className="flex items-center justify-between gap-3 mt-8 mb-1">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+              Login History
+            </h3>
+            {loginHistory.length > 0 && (
+              <button
+                onClick={handleClearSessions}
+                className="text-xs font-medium text-red-600 dark:text-red-400 hover:underline shrink-0"
+              >
+                Clear all sessions
+              </button>
+            )}
+          </div>
           {historyLoading ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Loading...
@@ -725,7 +799,7 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
               No login history available
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="mt-2 max-h-56 overflow-y-auto overscroll-contain rounded-xl border border-gray-100 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800 pr-0.5">
               {loginHistory.map((entry, index) => {
                 const browser = getBrowser(entry.userAgent);
                 const os = getOS(entry.userAgent);
@@ -733,7 +807,7 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
                 return (
                   <div
                     key={entry.id}
-                    className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700"
+                    className="flex items-center gap-3 py-2.5 px-3 bg-gray-50/80 dark:bg-gray-800/60"
                   >
                     <div className="h-8 w-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0">
                       <Monitor
@@ -762,6 +836,104 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === "notifications" && (
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
+            Notifications
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            Choose which alert types show in the bell. Preferences stay on this
+            device.
+          </p>
+
+          <SectionHeading>Master</SectionHeading>
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="flex items-center justify-between gap-4 py-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Enable notifications
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Pause everything in the bell without deleting history
+                </p>
+              </div>
+              <ToggleSwitch
+                label="Enable notifications"
+                checked={notifPrefs.enabled}
+                onChange={(v) => updateNotifPref("enabled", v)}
+              />
+            </div>
+          </div>
+
+          <SectionHeading>Categories</SectionHeading>
+          <div
+            className={`divide-y divide-gray-100 dark:divide-gray-800 ${
+              !notifPrefs.enabled ? "opacity-50 pointer-events-none" : ""
+            }`}
+          >
+            {(
+              [
+                {
+                  key: "energy" as const,
+                  icon: Zap,
+                  title: "Energy alerts",
+                  desc: "High load, wasteful fuzzy state, power anomalies",
+                },
+                {
+                  key: "climate" as const,
+                  icon: Thermometer,
+                  title: "Climate alerts",
+                  desc: "Hot/cold comfort extremes and humidity spikes",
+                },
+                {
+                  key: "security" as const,
+                  icon: Shield,
+                  title: "Security alerts",
+                  desc: "New logins and account security events",
+                },
+                {
+                  key: "system" as const,
+                  icon: Activity,
+                  title: "System alerts",
+                  desc: "OTA firmware, MQTT, and service status",
+                },
+              ] as const
+            ).map((row) => {
+              const Icon = row.icon;
+              return (
+                <div
+                  key={row.key}
+                  className="flex items-center justify-between gap-4 py-4"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="h-8 w-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0 mt-0.5">
+                      <Icon
+                        size={15}
+                        className="text-gray-600 dark:text-gray-300"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {row.title}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {row.desc}
+                      </p>
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    label={row.title}
+                    checked={notifPrefs[row.key]}
+                    disabled={!notifPrefs.enabled}
+                    onChange={(v) => updateNotifPref(row.key, v)}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
