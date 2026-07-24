@@ -18,7 +18,6 @@ import {
 } from "./analytics/fuzzy";
 import {
   initTimescaleDB,
-  insertReading,
   getLatestReading,
   getReadingsInRange,
   getRecentLogs,
@@ -72,10 +71,6 @@ await app.register(swagger, {
         description:
           "Statistical analysis, fuzzy classification, and visualizations",
       },
-      {
-        name: "Blynk Proxy",
-        description: "Real-time sensor data from Blynk IoT",
-      },
       { name: "MQTT", description: "MQTT telemetry ingestion" },
       { name: "Notifications", description: "User notification management" },
       { name: "Glossary", description: "Technical term definitions" },
@@ -98,9 +93,6 @@ await app.register(registerAuthRoutes);
 await app.register(registerGlossaryRoutes);
 await app.register(registerNotificationRoutes);
 await app.register(registerAdminRoutes);
-
-const BLYNK_SERVER_URL = process.env.BLYNK_SERVER_URL;
-const BLYNK_AUTH_TOKEN = process.env.BLYNK_AUTH_TOKEN;
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -172,66 +164,6 @@ function getRangeConfig(range: string): {
   }
 }
 
-// ── Blynk Polling → TimescaleDB (fallback) ──────────────
-async function pollBlynkToTimescale() {
-  if (!BLYNK_SERVER_URL || !BLYNK_AUTH_TOKEN) return;
-
-  try {
-    const fetchPin = async (pin: number): Promise<number> => {
-      const res = await fetch(
-        `${BLYNK_SERVER_URL}/${BLYNK_AUTH_TOKEN}/get/v${pin}`,
-      );
-      const data = await res.json();
-      const value = Array.isArray(data) ? data[0] : data;
-      return Number(value) || 0;
-    };
-
-    const [
-      acVoltage,
-      acCurrent,
-      acPower,
-      cosPhi,
-      apparentPower,
-      totalEnergy,
-      frequency,
-      reactivePower,
-      temperature,
-      humidity,
-    ] = await Promise.all([
-      fetchPin(0),
-      fetchPin(1),
-      fetchPin(2),
-      fetchPin(3),
-      fetchPin(4),
-      fetchPin(5),
-      fetchPin(6),
-      fetchPin(7),
-      fetchPin(8),
-      fetchPin(9),
-    ]);
-
-    if (acVoltage > 100) {
-      await insertReading({
-        time: new Date().toISOString(),
-        acVoltage,
-        acCurrent,
-        acPower,
-        cosPhi,
-        apparentPower,
-        totalEnergy,
-        frequency,
-        reactivePower,
-        temperature,
-        humidity,
-        tempComfort: "COMFORTABLE",
-        energyStatus: "2",
-      });
-    }
-  } catch {
-    // Silently fail — Blynk might be unreachable temporarily
-  }
-}
-
 // ═══════════════════════════════════════════════════════════
 //  MQTT Status Endpoint
 // ═══════════════════════════════════════════════════════════
@@ -252,33 +184,6 @@ app.get(
       broker: `${mqttHost}:${mqttPort}`,
       topic,
     };
-  },
-);
-
-// ═══════════════════════════════════════════════════════════
-//  Blynk Proxy
-// ═══════════════════════════════════════════════════════════
-app.get(
-  "/api/blynk/:pin",
-  {
-    schema: {
-      description: "Proxy Blynk IoT sensor data by virtual pin",
-      tags: ["Blynk Proxy"],
-    },
-  },
-  async (request, reply) => {
-    const { pin } = request.params as { pin: string };
-    if (!BLYNK_SERVER_URL || !BLYNK_AUTH_TOKEN)
-      return reply.code(500).send({ error: "Blynk not configured" });
-    try {
-      const response = await fetch(
-        `${BLYNK_SERVER_URL}/${BLYNK_AUTH_TOKEN}/get/v${pin}`,
-      );
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      return reply.code(500).send({ error: "Blynk fetch failed" });
-    }
   },
 );
 
@@ -904,12 +809,12 @@ const port = Number(process.env.PORT ?? 8787);
 
 await initTimescaleDB();
 
-// ── Start MQTT Ingestor ──────────────────────────────────
+// ── Start MQTT Ingestor (primary data source) ─────────────
 startMqttIngestor();
 
-// ── Keep Blynk polling as fallback ───────────────────────
-setInterval(pollBlynkToTimescale, 30_000);
-setTimeout(pollBlynkToTimescale, 5_000);
+// ── Blynk polling disabled — MQTT is now primary ──────────
+// The pollBlynkToTimescale function and Blynk proxy endpoint
+// have been removed. All data comes via MQTT.
 
 try {
   await prisma.$connect();

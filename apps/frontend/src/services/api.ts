@@ -1,6 +1,8 @@
 // apps/frontend/src/services/api.ts
 import { useQuery } from "@tanstack/react-query";
 import type { EnergyReading } from "@/types/energy";
+import { useMqttLive } from "./mqtt";
+import type { MqttSensorData } from "./mqtt";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
@@ -115,6 +117,7 @@ async function fetchPin(pin: number): Promise<number> {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/** @deprecated Use useMqttLive() instead for live data */
 async function fetchLiveReading(): Promise<EnergyReading> {
   const [
     acVoltage,
@@ -188,26 +191,40 @@ async function fetchLiveReading(): Promise<EnergyReading> {
   };
 }
 
+/** @deprecated Use useMqttLive() instead for live data */
+export function useLiveReading() {
+  return useQuery<EnergyReading>({
+    queryKey: ["live-reading"],
+    queryFn: fetchLiveReading,
+    refetchInterval: 3000,
+    staleTime: 0,
+  });
+}
+
 async function fetchHistory(range: string) {
   const res = await fetch(`${API_BASE}/readings/history?range=${range}`);
   if (!res.ok) throw new Error("Failed to fetch history");
   return res.json();
 }
+
 async function fetchRecentReadings(limit: number) {
   const res = await fetch(`${API_BASE}/readings/logs?pageSize=${limit}`);
   if (!res.ok) throw new Error("Failed to fetch logs");
   return res.json();
 }
+
 async function fetchAnalyticsSummary(range: string): Promise<AnalyticsSummary> {
   const res = await fetch(`${API_BASE}/analytics/summary?range=${range}`);
   if (!res.ok) throw new Error("Failed to fetch analytics");
   return res.json();
 }
+
 async function fetchClimateSummary(range: string): Promise<ClimateSummary> {
   const res = await fetch(`${API_BASE}/analytics/climate?range=${range}`);
   if (!res.ok) throw new Error("Failed to fetch climate");
   return res.json();
 }
+
 async function fetchFuzzyDistribution(
   range: string,
 ): Promise<FuzzyDistribution> {
@@ -217,21 +234,25 @@ async function fetchFuzzyDistribution(
   if (!res.ok) throw new Error("Failed to fetch fuzzy");
   return res.json();
 }
+
 async function fetchMembershipData(): Promise<MembershipData> {
   const res = await fetch(`${API_BASE}/analytics/membership`);
   if (!res.ok) throw new Error("Failed to fetch membership");
   return res.json();
 }
+
 async function fetchDecisionSurface(): Promise<DecisionSurfacePoint[]> {
   const res = await fetch(`${API_BASE}/analytics/decision-surface`);
   if (!res.ok) throw new Error("Failed to fetch decision surface");
   return res.json();
 }
+
 async function fetchBoxPlot(range: string): Promise<BoxPlotData[]> {
   const res = await fetch(`${API_BASE}/analytics/box-plot?range=${range}`);
   if (!res.ok) throw new Error("Failed to fetch box plot");
   return res.json();
 }
+
 async function fetchBlandAltman(range: string): Promise<BlandAltmanResult> {
   const res = await fetch(`${API_BASE}/analytics/bland-altman?range=${range}`);
   if (!res.ok) throw new Error("Failed to fetch Bland-Altman");
@@ -246,14 +267,6 @@ async function fetchEnergyHistory(range: string) {
   return res.json();
 }
 
-export function useLiveReading() {
-  return useQuery<EnergyReading>({
-    queryKey: ["live-reading"],
-    queryFn: fetchLiveReading,
-    refetchInterval: 3000,
-    staleTime: 0,
-  });
-}
 export function useReadingHistory(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
 ) {
@@ -271,6 +284,7 @@ export function useReadingHistory(
     refetchInterval: 30_000,
   });
 }
+
 export function useEnergyHistory(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
 ) {
@@ -280,6 +294,7 @@ export function useEnergyHistory(
     refetchInterval: 30_000,
   });
 }
+
 export function useRecentReadings(limit = 20) {
   return useQuery<EnergyReading[]>({
     queryKey: ["recent-readings", limit],
@@ -287,6 +302,7 @@ export function useRecentReadings(limit = 20) {
     refetchInterval: 10_000,
   });
 }
+
 export function useAnalyticsSummary(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
 ) {
@@ -296,6 +312,7 @@ export function useAnalyticsSummary(
     refetchInterval: 30_000,
   });
 }
+
 export function useClimateSummary(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
 ) {
@@ -305,6 +322,7 @@ export function useClimateSummary(
     refetchInterval: 30_000,
   });
 }
+
 export function useFuzzyDistribution(range: string) {
   return useQuery<FuzzyDistribution>({
     queryKey: ["fuzzy-distribution", range],
@@ -312,6 +330,7 @@ export function useFuzzyDistribution(range: string) {
     refetchInterval: 60_000,
   });
 }
+
 export function useMembershipData() {
   return useQuery<MembershipData>({
     queryKey: ["membership-data"],
@@ -319,6 +338,7 @@ export function useMembershipData() {
     staleTime: 5 * 60_000,
   });
 }
+
 export function useDecisionSurface() {
   return useQuery<DecisionSurfacePoint[]>({
     queryKey: ["decision-surface"],
@@ -326,6 +346,7 @@ export function useDecisionSurface() {
     staleTime: 5 * 60_000,
   });
 }
+
 export function useBoxPlot(range: string) {
   return useQuery<BoxPlotData[]>({
     queryKey: ["box-plot", range],
@@ -333,6 +354,7 @@ export function useBoxPlot(range: string) {
     refetchInterval: 60_000,
   });
 }
+
 export function useBlandAltman(range: string) {
   return useQuery<BlandAltmanResult>({
     queryKey: ["bland-altman", range],
@@ -473,3 +495,7 @@ export function useAdminStats() {
 }
 
 export { updateUserRole, toggleUserActive };
+
+// Re-export MQTT live hook for centralized data access
+export { useMqttLive };
+export type { MqttSensorData };

@@ -18,7 +18,7 @@ import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { PowerOverview } from "@/components/PowerOverview";
 import { ClimateOverview } from "@/components/ClimateOverview";
 import {
-  useLiveReading,
+  useMqttLive,
   useReadingHistory,
   useAnalyticsSummary,
 } from "@/services/api";
@@ -203,7 +203,30 @@ export function Dashboard() {
   const [chartRange, setChartRange] = useState<string>("24h");
   const [showForecast, setShowForecast] = useState(false);
   const { user } = useAuth();
-  const { data: live } = useLiveReading();
+
+  // ── MQTT Live Data ──────────────────────────────────
+  const { data: liveMqtt } = useMqttLive();
+
+  // ── Compatibility mapping: MQTT data → old shape ─────
+  const live = liveMqtt
+    ? {
+        acVoltage: liveMqtt.voltage,
+        acCurrent: liveMqtt.current,
+        acPower: liveMqtt.power,
+        cosPhi: liveMqtt.pf,
+        apparentPower: liveMqtt.apparentPower,
+        totalEnergy: liveMqtt.energy,
+        frequency: liveMqtt.frequency,
+        reactivePower: liveMqtt.reactivePower,
+        temperature: liveMqtt.temperature,
+        humidity: liveMqtt.humidity,
+        tempComfort: undefined as string | undefined,
+        energyStatus: undefined as string | undefined,
+        powerQualityScore: undefined as number | undefined,
+        voltageStability: undefined as number | undefined,
+      }
+    : null;
+
   const { data: history = [] } = useReadingHistory(chartRange as any);
   const { data: summary } = useAnalyticsSummary("24h");
   const ec = summary?.energy?.estimatedCost ?? "—";
