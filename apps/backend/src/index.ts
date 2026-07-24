@@ -209,7 +209,6 @@ app.get(
 
     reply.raw.write(": connected\n\n");
 
-    // Send latest reading immediately on connect
     const latest = await getLatestReading();
     if (latest) {
       const payload = JSON.stringify({
@@ -231,7 +230,6 @@ app.get(
       reply.raw.write(`data: ${payload}\n\n`);
     }
 
-    // Subscribe to new readings from MQTT
     const unsubscribe = onNewReading((data) => {
       try {
         reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -240,7 +238,6 @@ app.get(
       }
     });
 
-    // Keep alive every 15 seconds
     const keepAlive = setInterval(() => {
       try {
         reply.raw.write(": keepalive\n\n");
@@ -254,7 +251,6 @@ app.get(
       clearInterval(keepAlive);
     });
 
-    // Never resolve — SSE is persistent
     return new Promise(() => {});
   },
 );

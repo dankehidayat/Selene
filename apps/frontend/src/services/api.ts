@@ -5,7 +5,7 @@ import type { EnergyReading } from "@/types/energy";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
-// ── SSE Live Data (replaces Blynk polling) ────────────────
+// ── SSE Live Data ─────────────────────────────────────────
 export function useLiveReading() {
   const [data, setData] = useState<EnergyReading | null>(null);
 
@@ -38,7 +38,7 @@ export function useLiveReading() {
     };
 
     eventSource.onerror = () => {
-      // EventSource auto-reconnects, no action needed
+      // EventSource auto-reconnects
     };
 
     return () => {

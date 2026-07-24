@@ -7,20 +7,29 @@ import { emitNewReading } from "./events";
 const MQTT_HOST = process.env.MQTT_HOST || "localhost";
 const MQTT_PORT = parseInt(process.env.MQTT_PORT || "1883");
 const TOPIC = process.env.MQTT_TOPIC || "selene/+/telemetry";
+const MQTT_USER = process.env.MQTT_USER || "";
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD || "";
 
 let client: mqtt.MqttClient | null = null;
 
 export function startMqttIngestor() {
   if (client) return;
 
-  client = mqtt.connect({
+  const options: mqtt.IClientOptions = {
     host: MQTT_HOST,
     port: MQTT_PORT,
     clientId: `selene-backend-${Math.random().toString(16).slice(2, 8)}`,
     clean: true,
     connectTimeout: 4000,
     reconnectPeriod: 1000,
-  });
+  };
+
+  if (MQTT_USER && MQTT_PASSWORD) {
+    options.username = MQTT_USER;
+    options.password = MQTT_PASSWORD;
+  }
+
+  client = mqtt.connect(options);
 
   client.on("connect", () => {
     console.log(`[MQTT] Connected to broker at ${MQTT_HOST}:${MQTT_PORT}`);
@@ -57,7 +66,6 @@ export function startMqttIngestor() {
       return;
     }
 
-    // ── Parse fields matching Arduino's JSON format ────────
     const voltage = Number(payload.voltage ?? 0);
     const acCurrent = Number(payload.current ?? 0);
     const acPower = Number(payload.power ?? 0);
@@ -119,7 +127,6 @@ export function startMqttIngestor() {
         energyStatus,
       });
 
-      // ── Broadcast to SSE clients ──────────────────────
       emitNewReading({
         acVoltage: voltage,
         acCurrent,

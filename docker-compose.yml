@@ -79,6 +79,8 @@ services:
       - MQTT_HOST=${MQTT_HOST}
       - MQTT_PORT=${MQTT_PORT}
       - MQTT_TOPIC=${MQTT_TOPIC}
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
     ports:
       - "127.0.0.1:${BACKEND_PORT}:${BACKEND_PORT}"
     depends_on:

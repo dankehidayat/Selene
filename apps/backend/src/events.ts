@@ -16,7 +16,7 @@ export function emitNewReading(data: any) {
     try {
       cb(data);
     } catch {
-      // Listener disconnected — will be cleaned up on next emit
+      // Listener disconnected — cleaned up on next emit
     }
   }
 }
