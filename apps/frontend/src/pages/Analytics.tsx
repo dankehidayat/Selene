@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { StatCard } from "@/components/StatCard";
+import { useTabFromSearch } from "@/hooks/useTabFromSearch";
 import {
   useAnalyticsSummary,
   useReadingHistory,
@@ -828,6 +829,13 @@ function MetricRow({
   );
 }
 
+const ANALYTICS_TAB_KEYS = [
+  "energy",
+  "environment",
+  "fuzzy",
+  "climate-fuzzy",
+] as const;
+
 export function Analytics() {
   const [energyRange, setEnergyRange] = useState<string>("7d");
   const [climateRange, setClimateRange] = useState<string>("7d");
@@ -836,6 +844,8 @@ export function Analytics() {
   const [activeTab, setActiveTab] = useState<
     "energy" | "environment" | "fuzzy" | "climate-fuzzy"
   >("energy");
+
+  useTabFromSearch(ANALYTICS_TAB_KEYS, setActiveTab);
 
   const analyticsTabs: {
     key: "energy" | "environment" | "fuzzy" | "climate-fuzzy";
@@ -1041,7 +1051,7 @@ export function Analytics() {
         </div>
       </div>
 
-      <div key={activeTab} className="animate-pageIn">
+      <div key={activeTab} className="animate-tabIn">
 
       {/* ═════ ENERGY ═════ */}
       {activeTab === "energy" && (

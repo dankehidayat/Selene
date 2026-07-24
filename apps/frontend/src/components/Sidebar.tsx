@@ -52,6 +52,13 @@ export function SidebarContent({
   const { openSettings } = useSettings();
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [themePulse, setThemePulse] = useState(false);
+  const [gearSpin, setGearSpin] = useState(false);
+
+  const handleOpenSettings = () => {
+    setGearSpin(true);
+    openSettings();
+    window.setTimeout(() => setGearSpin(false), 520);
+  };
 
   useEffect(() => {
     applyTheme(theme);
@@ -175,7 +182,7 @@ export function SidebarContent({
           <div className="flex items-center gap-1.5">
             {/* Avatar — opens settings */}
             <button
-              onClick={() => openSettings()}
+              onClick={handleOpenSettings}
               className="flex items-center gap-2.5 flex-1 min-w-0 px-2 py-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition text-left"
             >
               <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0">
@@ -195,11 +202,14 @@ export function SidebarContent({
 
             {/* Settings gear */}
             <button
-              onClick={() => openSettings()}
+              onClick={handleOpenSettings}
               className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition shrink-0"
               title="Settings"
             >
-              <Settings size={15} />
+              <Settings
+                size={15}
+                className={gearSpin ? "animate-gearSpin" : ""}
+              />
             </button>
 
             {/* Theme toggle */}

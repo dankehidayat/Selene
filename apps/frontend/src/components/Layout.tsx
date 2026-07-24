@@ -73,6 +73,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <TopBar
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onMobileMenu={openMobile}
+          sidebarOpen={sidebarOpen}
         />
         <main className="p-5 lg:p-8 space-y-6 animate-pageIn">{children}</main>
       </div>

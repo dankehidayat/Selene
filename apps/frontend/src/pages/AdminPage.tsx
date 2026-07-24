@@ -17,10 +17,12 @@ import {
 } from "lucide-react";
 import { ChartCard } from "@/components/ChartCard";
 import { UserManagement } from "@/components/UserManagement";
+import { useTabFromSearch } from "@/hooks/useTabFromSearch";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 type TabKey = "users" | "firmware" | "system";
+const ADMIN_TAB_KEYS = ["users", "firmware", "system"] as const;
 
 interface FirmwareStatus {
   loading: boolean;
@@ -118,6 +120,7 @@ export function AdminPage() {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<TabKey>("users");
+  useTabFromSearch(ADMIN_TAB_KEYS, setActiveTab);
   const [selectedNode, setSelectedNode] = useState("");
   const [mqttNodes, setMqttNodes] = useState<
     { nodeId: string; lastSeen: string; messageCount: number }[]
@@ -374,7 +377,7 @@ export function AdminPage() {
       let sawDownload = false;
       for (let i = 0; i < 12; i++) {
         await new Promise((r) => setTimeout(r, 2000));
-        const hist = await loadHistory();
+        const hist = (await loadHistory()) ?? [];
         const entry = hist.find((e) => e.nodeId === targetNodeId);
         if (!entry) continue;
         if (entry.status === lastStatus) continue;
@@ -451,7 +454,7 @@ export function AdminPage() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition ${
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 active:scale-[0.97] ${
                 activeTab === tab.key
                   ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
                   : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
@@ -464,6 +467,7 @@ export function AdminPage() {
         })}
       </div>
 
+      <div key={activeTab} className="animate-tabIn">
       {/* ── Users Tab ──────────────────────────────────── */}
       {activeTab === "users" && <UserManagement />}
 
@@ -865,6 +869,7 @@ export function AdminPage() {
           </div>
         </ChartCard>
       )}
+      </div>
     </div>
   );
 }

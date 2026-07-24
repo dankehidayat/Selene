@@ -19,6 +19,9 @@ import {
   HardDrive,
 } from "lucide-react";
 import { ChartCard } from "@/components/ChartCard";
+import { useTabFromSearch } from "@/hooks/useTabFromSearch";
+
+const IMPRESSUM_TAB_KEYS = ["about", "acknowledgement"] as const;
 
 interface PackageInfo {
   name: string;
@@ -478,6 +481,7 @@ export function Impressum() {
   const [activeTab, setActiveTab] = useState<"about" | "acknowledgement">(
     "about",
   );
+  useTabFromSearch(IMPRESSUM_TAB_KEYS, setActiveTab);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -496,7 +500,7 @@ export function Impressum() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${activeTab === tab ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"}`}
+              className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 active:scale-[0.97] ${activeTab === tab ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"}`}
             >
               {tab === "about" ? "About Selene" : "Acknowledgement"}
             </button>
@@ -504,6 +508,7 @@ export function Impressum() {
         </div>
       </div>
 
+      <div key={activeTab} className="animate-tabIn">
       {activeTab === "about" && (
         <div className="space-y-6 max-w-2xl mx-auto">
           <ChartCard title="Project Information">
@@ -795,6 +800,7 @@ export function Impressum() {
           </ChartCard>
         </div>
       )}
+      </div>
     </div>
   );
 }

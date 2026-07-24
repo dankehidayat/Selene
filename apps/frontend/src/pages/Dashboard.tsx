@@ -561,7 +561,6 @@ export function Dashboard() {
               qualityScore={live?.powerQualityScore}
               cosPhi={live?.cosPhi}
               frequency={live?.frequency}
-              estimatedCost={ec}
               totalKwh={tk}
             />
           </ChartCard>
