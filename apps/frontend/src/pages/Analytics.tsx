@@ -417,40 +417,73 @@ function InfoPopover({ title, content }: { title: string; content: string }) {
     </HoverCard.Root>
   );
 }
+/** Lightweight disclosure — no height animation (avoids Recharts reflow lag). */
 function Accordion({
   title,
   defaultOpen,
   children,
+  hint,
 }: {
   title: string;
   defaultOpen?: boolean;
   children: React.ReactNode;
+  hint?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+    <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-card overflow-hidden">
       <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition"
       >
-        <span className="flex items-center gap-2">
-          {title}
-          <span className="text-xs font-normal text-gray-400">
-            (static reference data)
-          </span>
-        </span>
+        <div className="min-w-0">
+          <p className="text-[15px] font-semibold text-gray-900 dark:text-white">
+            {title}
+          </p>
+          {hint ? (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
+              {hint}
+            </p>
+          ) : null}
+        </div>
         <ChevronDown
-          size={16}
-          className={`text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          size={18}
+          className={`text-gray-400 shrink-0 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
         />
       </button>
-      <div
-        className={`grid transition-all duration-200 ease-in-out ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
-      >
-        <div className="overflow-hidden">
-          <div className="px-4 pb-4">{children}</div>
+      {/* Mount charts only when open — no CSS grid-row animation (that lagged hard) */}
+      {open ? (
+        <div className="px-5 pb-5 border-t border-gray-100 dark:border-gray-800 pt-4">
+          {children}
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AnalyticsSectionHeader({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-1">
+      <div>
+        <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 dark:text-white tracking-tight">
+          {title}
+        </h2>
+        {description ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
+            {description}
+          </p>
+        ) : null}
       </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
@@ -968,24 +1001,44 @@ export function Analytics() {
 
   return (
     <div className="space-y-8 font-sans">
-      <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit flex-wrap">
-        {analyticsTabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition ${
-                activeTab === tab.key
-                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                  : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-              }`}
-            >
-              <Icon size={15} />
-              {tab.label}
-            </button>
-          );
-        })}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-white tracking-tight">
+            Analytics
+          </h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-0.5">
+            Energy, environment, and fuzzy intelligence across your fleet
+          </p>
+        </div>
+        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit flex-wrap">
+          {analyticsTabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg transition ${
+                  activeTab === tab.key
+                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                    : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                <Icon size={15} />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">
+                  {tab.key === "energy"
+                    ? "Energy"
+                    : tab.key === "environment"
+                      ? "Env"
+                      : tab.key === "fuzzy"
+                        ? "E-Fuzzy"
+                        : "C-Fuzzy"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ═════ ENERGY ═════ */}
@@ -2234,19 +2287,26 @@ export function Analytics() {
               />
             )}
           </ChartCard>
-          <Accordion title="Membership Functions">
-            <div className="grid lg:grid-cols-2 gap-4 pt-2">
+          <Accordion
+            title="Membership Functions"
+            hint="Static fuzzy sets for voltage & power — expand to inspect shapes"
+            defaultOpen={false}
+          >
+            <div className="grid lg:grid-cols-2 gap-4">
               <ChartCard title="Voltage Membership" chartId="chart-voltage-mf">
                 {!membership ? (
-                  <div className="flex h-[250px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                    Loading...
+                  <div className="flex h-[220px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                    Loading…
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={250}>
-                    <LineChart data={membership.voltageMembership}>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart
+                      data={membership.voltageMembership}
+                      margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+                    >
                       <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
                       <XAxis dataKey="x" tick={CHART_FONT} />
-                      <YAxis domain={[0, 1]} tick={CHART_FONT} />
+                      <YAxis domain={[0, 1]} tick={CHART_FONT} width={32} />
                       <Tooltip content={<MembershipTooltip />} />
                       <Legend
                         wrapperStyle={{
@@ -2260,6 +2320,7 @@ export function Analytics() {
                         stroke="#EF4444"
                         strokeWidth={2}
                         dot={false}
+                        isAnimationActive={false}
                         name="Low"
                       />
                       <Line
@@ -2268,6 +2329,7 @@ export function Analytics() {
                         stroke="#10B981"
                         strokeWidth={2}
                         dot={false}
+                        isAnimationActive={false}
                         name="Normal"
                       />
                       <Line
@@ -2276,6 +2338,7 @@ export function Analytics() {
                         stroke="#3B82F6"
                         strokeWidth={2}
                         dot={false}
+                        isAnimationActive={false}
                         name="High"
                       />
                     </LineChart>
@@ -2284,15 +2347,18 @@ export function Analytics() {
               </ChartCard>
               <ChartCard title="Power Membership" chartId="chart-power-mf">
                 {!membership ? (
-                  <div className="flex h-[250px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                    Loading...
+                  <div className="flex h-[220px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                    Loading…
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={250}>
-                    <LineChart data={membership.powerMembership}>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart
+                      data={membership.powerMembership}
+                      margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+                    >
                       <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
                       <XAxis dataKey="x" tick={CHART_FONT} />
-                      <YAxis domain={[0, 1]} tick={CHART_FONT} />
+                      <YAxis domain={[0, 1]} tick={CHART_FONT} width={32} />
                       <Tooltip content={<MembershipTooltip />} />
                       <Legend
                         wrapperStyle={{
@@ -2306,6 +2372,7 @@ export function Analytics() {
                         stroke="#2ecc71"
                         strokeWidth={2}
                         dot={false}
+                        isAnimationActive={false}
                         name="Economical"
                       />
                       <Line
@@ -2314,6 +2381,7 @@ export function Analytics() {
                         stroke="#3498db"
                         strokeWidth={2}
                         dot={false}
+                        isAnimationActive={false}
                         name="Normal"
                       />
                       <Line
@@ -2322,6 +2390,7 @@ export function Analytics() {
                         stroke="#e74c3c"
                         strokeWidth={2}
                         dot={false}
+                        isAnimationActive={false}
                         name="Wasteful"
                       />
                     </LineChart>

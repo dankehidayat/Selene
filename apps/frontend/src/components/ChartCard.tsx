@@ -1,8 +1,48 @@
 // apps/frontend/src/components/ChartCard.tsx
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Download, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** High-DPI capture of a chart card (includes title + plot). */
+async function captureCard(el: HTMLElement, dark: boolean): Promise<HTMLCanvasElement> {
+  const { default: html2canvas } = await import("html2canvas");
+  // Recharts/SVG benefit from high scale; clamp for memory
+  const scale = Math.min(4, Math.max(2.5, (window.devicePixelRatio || 1) * 2.5));
+  const w = Math.max(el.scrollWidth, el.offsetWidth);
+  const h = Math.max(el.scrollHeight, el.offsetHeight);
+
+  return html2canvas(el, {
+    backgroundColor: dark ? "#111827" : "#ffffff",
+    scale,
+    useCORS: true,
+    allowTaint: true,
+    logging: false,
+    // Prefer accurate SVG paint over foreignObject (often blurry)
+    foreignObjectRendering: false,
+    width: w,
+    height: h,
+    windowWidth: w,
+    windowHeight: h,
+    x: 0,
+    y: 0,
+    scrollX: -window.scrollX,
+    scrollY: -window.scrollY,
+    onclone: (_doc, cloned) => {
+      cloned.style.width = `${w}px`;
+      cloned.style.height = `${h}px`;
+      cloned.style.transform = "none";
+      // Force opaque backgrounds so dark mode exports cleanly
+      cloned.querySelectorAll("svg").forEach((svg) => {
+        (svg as SVGElement).style.overflow = "visible";
+      });
+    },
+  });
+}
+
+function isDarkMode() {
+  return document.documentElement.classList.contains("dark");
+}
 
 export function ChartCard({
   title,
@@ -18,58 +58,54 @@ export function ChartCard({
   chartId?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const captureTarget = () => {
+    // Prefer whole card (title + chrome) for a “embedded” look
+    if (cardRef.current) return cardRef.current;
+    if (chartId) return document.getElementById(chartId);
+    return null;
+  };
 
   const handleDownloadPNG = async () => {
-    if (!chartId) return;
-    const el = document.getElementById(chartId);
+    const el = captureTarget();
     if (!el) return;
-    const { default: html2canvas } = await import("html2canvas");
-    const canvas = await html2canvas(el, {
-      backgroundColor: "#ffffff",
-      scale: 3,
-      useCORS: true,
-      allowTaint: true,
-      windowWidth: el.scrollWidth,
-      windowHeight: el.scrollHeight,
-    });
+    const canvas = await captureCard(el, isDarkMode());
     const link = document.createElement("a");
     link.download = `${title.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.png`;
-    link.href = canvas.toDataURL("image/png");
+    link.href = canvas.toDataURL("image/png", 1.0);
     link.click();
   };
 
   const handleCopy = async () => {
-    if (!chartId) return;
-    const el = document.getElementById(chartId);
+    const el = captureTarget();
     if (!el) return;
-    const { default: html2canvas } = await import("html2canvas");
-    const canvas = await html2canvas(el, {
-      backgroundColor: "#ffffff",
-      scale: 3,
-      useCORS: true,
-      allowTaint: true,
-      windowWidth: el.scrollWidth,
-      windowHeight: el.scrollHeight,
-    });
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
-      try {
-        await navigator.clipboard.write([
-          new ClipboardItem({ "image/png": blob }),
-        ]);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      } catch {
-        const link = document.createElement("a");
-        link.download = `${title.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.png`;
-        link.href = canvas.toDataURL("image/png");
-        link.click();
-      }
-    });
+    const canvas = await captureCard(el, isDarkMode());
+    canvas.toBlob(
+      async (blob) => {
+        if (!blob) return;
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ "image/png": blob }),
+          ]);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch {
+          const link = document.createElement("a");
+          link.download = `${title.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.png`;
+          link.href = canvas.toDataURL("image/png", 1.0);
+          link.click();
+        }
+      },
+      "image/png",
+      1.0,
+    );
   };
 
   return (
     <div
+      ref={cardRef}
+      id={chartId}
       className={cn(
         "bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-card p-5",
         className,
@@ -96,14 +132,20 @@ export function ChartCard({
                   className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg py-1 min-w-[11rem] z-50"
                 >
                   <DropdownMenu.Item
-                    onSelect={handleDownloadPNG}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      void handleDownloadPNG();
+                    }}
                     className="flex items-center gap-2.5 text-sm px-3 py-2.5 cursor-pointer outline-none rounded-lg mx-1 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                   >
                     <Download size={13} className="text-gray-400" /> Download
                     PNG
                   </DropdownMenu.Item>
                   <DropdownMenu.Item
-                    onSelect={handleCopy}
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      void handleCopy();
+                    }}
                     className="flex items-center gap-2.5 text-sm px-3 py-2.5 cursor-pointer outline-none rounded-lg mx-1 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                   >
                     {copied ? (
@@ -119,7 +161,7 @@ export function ChartCard({
           )}
         </div>
       </div>
-      {chartId ? <div id={chartId}>{children}</div> : children}
+      {children}
     </div>
   );
 }

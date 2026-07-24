@@ -13,6 +13,10 @@ import {
   Layers,
   Database,
   Cpu,
+  Radio,
+  Boxes,
+  Network,
+  HardDrive,
 } from "lucide-react";
 import { ChartCard } from "@/components/ChartCard";
 
@@ -163,7 +167,7 @@ const frontendPackages: PackageInfo[] = [
     version: "^1.4.1",
     license: "MIT",
     url: "https://html2canvas.hertzen.com",
-    description: "Screenshots with JavaScript using HTML5 Canvas",
+    description: "Client-side chart capture for PNG export & clipboard",
   },
   {
     name: "file-saver",
@@ -171,6 +175,13 @@ const frontendPackages: PackageInfo[] = [
     license: "MIT",
     url: "https://github.com/eligrey/FileSaver.js",
     description: "Save files on the client-side",
+  },
+  {
+    name: "mqtt (js)",
+    version: "^5.15.2",
+    license: "MIT",
+    url: "https://github.com/mqttjs/MQTT.js",
+    description: "MQTT client (browser utilities where needed)",
   },
 ];
 
@@ -184,118 +195,139 @@ const backendPackages: PackageInfo[] = [
   },
   {
     name: "Bun",
-    version: "^1.3.5",
+    version: "1.x",
     license: "MIT",
     url: "https://bun.sh",
-    description: "Fast all-in-one JavaScript runtime & package manager",
+    description: "JavaScript runtime & package manager",
   },
   {
-    name: "@prisma/client",
+    name: "@prisma/client + prisma",
     version: "^6.19.3",
     license: "Apache-2.0",
     url: "https://www.prisma.io",
-    description: "Next-generation ORM for TypeScript & Node.js",
+    description: "ORM and migrations for PostgreSQL (users, glossary, …)",
   },
   {
-    name: "Prisma CLI",
-    version: "^6.19.3",
-    license: "Apache-2.0",
-    url: "https://www.prisma.io",
-    description: "Database management and migration tools",
-  },
-  {
-    name: "bcryptjs",
-    version: "^2.4.3",
+    name: "mqtt",
+    version: "^5.10.1",
     license: "MIT",
-    url: "https://github.com/dcodeIO/bcrypt.js",
-    description: "Password hashing library",
-  },
-  {
-    name: "jsonwebtoken",
-    version: "^9.0.2",
-    license: "MIT",
-    url: "https://github.com/auth0/node-jsonwebtoken",
-    description: "JSON Web Token implementation",
-  },
-  {
-    name: "@fastify/cors",
-    version: "^9.0.1",
-    license: "MIT",
-    url: "https://github.com/fastify/fastify-cors",
-    description: "CORS plugin for Fastify",
-  },
-  {
-    name: "@fastify/swagger",
-    version: "^8.15.0",
-    license: "MIT",
-    url: "https://github.com/fastify/fastify-swagger",
-    description: "Swagger/OpenAPI documentation generator for Fastify",
-  },
-  {
-    name: "@fastify/swagger-ui",
-    version: "^3.1.0",
-    license: "MIT",
-    url: "https://github.com/fastify/fastify-swagger-ui",
-    description: "Swagger UI integration for Fastify",
+    url: "https://github.com/mqttjs/MQTT.js",
+    description: "MQTT ingest from EMQX (ESP32 telemetry & OTA commands)",
   },
   {
     name: "pg",
     version: "^8.13.0",
     license: "MIT",
     url: "https://node-postgres.com",
-    description: "PostgreSQL client for Node.js",
+    description: "PostgreSQL / TimescaleDB driver",
   },
   {
-    name: "PostgreSQL",
+    name: "bcryptjs",
+    version: "^2.4.3",
+    license: "MIT",
+    url: "https://github.com/dcodeIO/bcrypt.js",
+    description: "Password hashing",
+  },
+  {
+    name: "jsonwebtoken",
+    version: "^9.0.2",
+    license: "MIT",
+    url: "https://github.com/auth0/node-jsonwebtoken",
+    description: "JWT auth for API sessions",
+  },
+  {
+    name: "@fastify/cors",
+    version: "^9.0.1",
+    license: "MIT",
+    url: "https://github.com/fastify/fastify-cors",
+    description: "CORS for browser clients",
+  },
+  {
+    name: "@fastify/multipart",
+    version: "^8.3.1",
+    license: "MIT",
+    url: "https://github.com/fastify/fastify-multipart",
+    description: "Firmware .bin upload for OTA",
+  },
+  {
+    name: "@fastify/swagger + swagger-ui",
+    version: "^8 / ^3",
+    license: "MIT",
+    url: "https://github.com/fastify/fastify-swagger",
+    description: "OpenAPI docs at /docs",
+  },
+  {
+    name: "@selene/shared",
+    version: "workspace",
+    license: "Project",
+    url: "https://github.com/dankehidayat/Selene",
+    description: "Shared types, MQTT topics, Timescale helpers",
+  },
+  {
+    name: "@selene/sensors",
+    version: "workspace",
+    license: "Project",
+    url: "https://github.com/dankehidayat/Selene",
+    description: "PZEM-004T + DHT11 parser registry (modular sensors)",
+  },
+  {
+    name: "PostgreSQL 16",
     version: "16.x",
     license: "PostgreSQL",
     url: "https://www.postgresql.org",
-    description: "Advanced open-source relational database",
+    description: "Relational store for accounts & metadata",
   },
   {
     name: "TimescaleDB",
-    version: "2.x",
+    version: "2.x / PG16",
     license: "Timescale License",
     url: "https://www.timescale.com",
-    description: "Time-series database extension for PostgreSQL",
+    description: "Time-series hypertables for sensor readings",
+  },
+  {
+    name: "EMQX",
+    version: "5.7",
+    license: "Apache-2.0",
+    url: "https://www.emqx.io",
+    description: "MQTT broker for fleet telemetry and OTA commands",
   },
 ];
 
 const iotPackages: PackageInfo[] = [
   {
-    name: "ESP32 Dev-Kit",
-    version: "V1.0",
-    license: "Open Source",
+    name: "ESP32 DevKit V1",
+    version: "—",
+    license: "Hardware",
     url: "https://www.espressif.com",
-    description: "Low-cost, low-power microcontroller with Wi-Fi & Bluetooth",
+    description: "Wi-Fi MCU running Eco Office firmware",
   },
   {
     name: "PZEM-004T",
-    version: "V3.0",
+    version: "V3",
     license: "Hardware",
     url: "https://innovatorsguru.com/pzem-004t",
-    description: "AC electrical measurement module",
+    description: "AC energy measurement (energy domain)",
   },
   {
     name: "DHT11",
     version: "—",
     license: "Hardware",
     url: "https://www.mouser.com/datasheet/2/758/DHT11-Technical-Data-Sheet-Translated-Version-1143054.pdf",
-    description: "Basic digital temperature and humidity sensor",
+    description: "Temperature & humidity (environment domain)",
   },
   {
-    name: "Arduino IDE",
-    version: "2.3.8",
-    license: "LGPL",
+    name: "Eco Office firmware",
+    version: "feat/selene-mqtt-ota",
+    license: "See repo",
+    url: "https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino",
+    description: "MQTT telemetry + HTTPS OTA sketch (separate repo)",
+  },
+  {
+    name: "Arduino IDE / ESP32 core",
+    version: "2.x",
+    license: "LGPL / Apache",
     url: "https://www.arduino.cc",
-    description: "Open-source electronics prototyping platform",
-  },
-  {
-    name: "Blynk",
-    version: "2.27.34",
-    license: "AGPL-3.0",
-    url: "https://blynk.io",
-    description: "IoT platform for connecting devices to the cloud",
+    description: "Build & flash tooling for the edge device",
   },
 ];
 
@@ -480,95 +512,100 @@ export function Impressum() {
                 Selene
               </p>
               <p className="text-sm text-gray-600 dark:text-gray-300 font-medium leading-relaxed">
-                A real-time energy and climate monitoring dashboard for
-                ESP32-based IoT sensors. Features a 15-rule Mamdani fuzzy
-                inference engine for energy classification, climate fuzzy
-                analysis based on ASHRAE 55 standards, role-based access
-                control, and time-series data storage with automated Blynk
-                polling.
+                Smart energy &amp; climate dashboard for ESP32 fleets. Edge
+                devices (Eco Office firmware) publish{" "}
+                <strong>PZEM-004T</strong> electrical data and{" "}
+                <strong>DHT11</strong> temperature/humidity over{" "}
+                <strong>MQTT (EMQX)</strong>. The monorepo backend ingests via a{" "}
+                <strong>sensor parser registry</strong>, stores time-series in
+                TimescaleDB, and serves analytics, auth, and OTA over a Fastify
+                API — structured for future microservices without requiring them
+                in production today.
               </p>
             </div>
           </ChartCard>
 
           <ChartCard title="Tech Stack Used">
             <div className="flex flex-wrap gap-2">
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
-                React 18
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">
-                TypeScript
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400">
-                Fastify
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
-                Bun
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400">
-                PostgreSQL
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">
-                TimescaleDB
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400">
-                Prisma ORM
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
-                TanStack
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400">
-                Recharts
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400">
-                Observable Plot
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400">
-                Radix UI
-              </span>
-              <span className="text-xs font-medium px-2.5 py-1 rounded-lg bg-lime-50 dark:bg-lime-900/30 text-lime-700 dark:text-lime-400">
-                Tailwind CSS
-              </span>
+              {[
+                ["React 18", "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"],
+                ["TypeScript", "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"],
+                ["Vite", "bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400"],
+                ["Fastify + Bun", "bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"],
+                ["PostgreSQL", "bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400"],
+                ["TimescaleDB", "bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"],
+                ["Prisma", "bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400"],
+                ["MQTT / EMQX", "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400"],
+                ["@selene/sensors", "bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400"],
+                ["TanStack", "bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"],
+                ["Recharts", "bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400"],
+                ["Tailwind CSS", "bg-lime-50 dark:bg-lime-900/30 text-lime-700 dark:text-lime-400"],
+              ].map(([label, cls]) => (
+                <span
+                  key={label}
+                  className={`text-xs font-medium px-2.5 py-1 rounded-lg ${cls}`}
+                >
+                  {label}
+                </span>
+              ))}
             </div>
           </ChartCard>
 
           <ChartCard title="Key Features">
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <div className="flex items-start gap-3 py-3">
-                <Activity size={16} className="text-blue-500 mt-0.5 shrink-0" />
+                <Radio size={16} className="text-indigo-500 mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Real-Time Monitoring
+                    MQTT-first fleet ingest
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-                    Live sensor data via Blynk IoT proxy, refreshing every 3
-                    seconds with automated TimescaleDB storage.
+                    EMQX broker, topic{" "}
+                    <code className="text-[10px]">selene/&lt;node&gt;/telemetry</code>
+                    , live SSE to the dashboard, and OTA commands on{" "}
+                    <code className="text-[10px]">…/command</code>.
                   </p>
                 </div>
               </div>
               <div className="flex items-start gap-3 py-3">
-                <Database
+                <Boxes size={16} className="text-teal-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Modular sensor packages
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                    <code className="text-[10px]">@selene/shared</code> +{" "}
+                    <code className="text-[10px]">@selene/sensors</code> parser
+                    registry for PZEM (energy) and DHT11 (environment), ready for
+                    lux/soil-style extensions.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 py-3">
+                <Network size={16} className="text-violet-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Microservice-ready monorepo
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                    Domain scaffolds (auth, energy, climate, firmware, ingestor)
+                    and modular Compose/Caddy layouts — production still ships as
+                    a reliable monolith until you split services.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 py-3">
+                <HardDrive
                   size={16}
                   className="text-emerald-500 mt-0.5 shrink-0"
                 />
                 <div>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Time-Series Storage
+                    Time-series + dual fuzzy engines
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-                    TimescaleDB hypertables with automatic Blynk-to-database
-                    polling and 7-day chunk partitioning.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 py-3">
-                <Cpu size={16} className="text-violet-500 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Dual Fuzzy Engines
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-                    15-rule energy classification (IEEE 1159) and 14-rule
-                    climate comfort analysis (ASHRAE 55).
+                    TimescaleDB hypertables; energy fuzzy (IEEE-style rules) and
+                    climate fuzzy (ASHRAE 55–inspired comfort).
                   </p>
                 </div>
               </div>
@@ -576,11 +613,11 @@ export function Impressum() {
                 <Shield size={16} className="text-amber-500 mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Role-Based Access
+                    Admin, OTA &amp; RBAC
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-                    Admin panel with user management, role switching, account
-                    control, and session history.
+                    User roles, Admin Tools (users, firmware OTA, system), JWT
+                    auth, and session history.
                   </p>
                 </div>
               </div>
@@ -588,11 +625,11 @@ export function Impressum() {
                 <Layers size={16} className="text-cyan-500 mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Comprehensive Analytics
+                    Analytics workspace
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-                    Bland-Altman plots, box plots, decision surfaces, membership
-                    functions, and statistical summaries.
+                    Energy &amp; environment charts, fuzzy distributions,
+                    membership functions, decision surfaces, and PNG export.
                   </p>
                 </div>
               </div>
