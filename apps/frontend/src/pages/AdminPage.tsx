@@ -369,16 +369,32 @@ export function AdminPage() {
       await loadHistory();
       await loadNodes(undefined, { silent: true });
 
-      // Poll history a few times for status transitions (pending → downloading → success/failed)
-      for (let i = 0; i < 6; i++) {
-        await new Promise((r) => setTimeout(r, 2500));
+      // Poll history: pending → downloading → success/failed
+      let lastStatus = "";
+      let sawDownload = false;
+      for (let i = 0; i < 12; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
         const hist = await loadHistory();
         const entry = hist.find((e) => e.nodeId === targetNodeId);
         if (!entry) continue;
-        if (entry.status === "downloading") {
-          appendLog("info", `Device is downloading firmware…`);
+        if (entry.status === lastStatus) continue;
+        lastStatus = entry.status;
+
+        if (entry.status === "pending") {
+          appendLog("info", "Waiting for device to start download…");
+        } else if (entry.status === "downloading") {
+          sawDownload = true;
+          appendLog(
+            "info",
+            "Device is downloading firmware (full .bin leaving the server)…",
+          );
         } else if (entry.status === "success") {
-          appendLog("ok", `OTA success reported by ${targetNodeId}.`);
+          appendLog(
+            "ok",
+            sawDownload
+              ? `OTA complete for ${targetNodeId} (binary delivered; device should reboot into new firmware).`
+              : `OTA success for ${targetNodeId}.`,
+          );
           break;
         } else if (entry.status === "failed") {
           appendLog(
@@ -387,6 +403,12 @@ export function AdminPage() {
           );
           break;
         }
+      }
+      if (lastStatus === "downloading") {
+        appendLog(
+          "warn",
+          "Still marked downloading — if the ESP already rebooted into the app, refresh history shortly (server marks success when the full file is sent).",
+        );
       }
     } catch (err: any) {
       appendLog("err", err.message || "Upload failed");

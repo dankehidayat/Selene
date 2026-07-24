@@ -152,7 +152,9 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
     }
 
     const entry = otaHistory.find(
-      (e) => e.nodeId === nodeId && e.status === "pending",
+      (e) =>
+        e.nodeId === nodeId &&
+        (e.status === "pending" || e.status === "downloading"),
     );
     if (entry) entry.status = "downloading";
 
@@ -167,29 +169,64 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
     );
     reply.header("Content-Length", fw.size);
 
-    return fw.buffer;
+    // Full app image is returned in one buffer. ESP32 often reboots right after
+    // flash and never POSTs /firmware/result — that left UI stuck on "downloading".
+    // Mark success once the response is finished (or shortly after send).
+    const payload = fw.buffer;
+    const markDelivered = () => {
+      const hist = otaHistory.find(
+        (e) =>
+          e.nodeId === nodeId &&
+          (e.status === "pending" || e.status === "downloading"),
+      );
+      if (hist && hist.status !== "failed") {
+        hist.status = "success";
+        console.log(
+          `[Firmware] ${nodeId} full binary delivered (${(fw.size / 1024).toFixed(1)}KB) → status=success`,
+        );
+      }
+      firmwareStore.delete(nodeId);
+    };
+    reply.raw.once("finish", markDelivered);
+    // Fallback if 'finish' is not emitted for this payload path
+    setTimeout(markDelivered, 5000);
+
+    return payload;
   });
 
-  // ── ESP32 reports OTA result ──────────────────────────
+  // ── ESP32 reports OTA result (optional; download finish also marks success) ──
   app.post("/api/firmware/result", async (request) => {
-    const { nodeId, success, error } = request.body as {
-      nodeId: string;
-      success: boolean;
+    const body = (request.body || {}) as {
+      nodeId?: string;
+      success?: boolean;
       error?: string;
     };
+    const nodeId = body.nodeId;
+    if (!nodeId) {
+      return { acknowledged: false, error: "nodeId required" };
+    }
+    const success = body.success !== false;
+    const error = body.error;
 
     console.log(
-      `[Firmware] OTA ${success ? "SUCCESS" : "FAILED"} for ${nodeId}${error ? `: ${error}` : ""}`,
+      `[Firmware] OTA result from device ${nodeId}: ${success ? "SUCCESS" : "FAILED"}${error ? `: ${error}` : ""}`,
     );
 
     const entry = otaHistory.find(
       (e) =>
         e.nodeId === nodeId &&
-        (e.status === "pending" || e.status === "downloading"),
+        (e.status === "pending" ||
+          e.status === "downloading" ||
+          e.status === "success"),
     );
     if (entry) {
-      entry.status = success ? "success" : "failed";
-      if (error) entry.error = error;
+      // Device can still override success→failed if flash fails after download
+      if (!success) {
+        entry.status = "failed";
+        if (error) entry.error = error;
+      } else if (entry.status !== "failed") {
+        entry.status = "success";
+      }
     }
 
     if (firmwareStore.has(nodeId)) {
