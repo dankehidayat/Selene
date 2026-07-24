@@ -19,4 +19,4 @@ It covers service ports, parser registry, database strategy, Caddy routing, Dock
 | Gateway | `deploy/Caddyfile.modular` |
 | Compose | `docker-compose.modular.yml` / `docker-compose.yml` (VPS) |
 | Transition API | `apps/backend` :8787 |
-| ESP32 firmware | **[Eco-Office `feat/selene-mqtt-ota`](https://github.com/dankehidayat/Eco-Office/tree/feat/selene-mqtt-ota)** (`Energy_Monitor/`) — not stored in Selene |
+| ESP32 firmware | **[Eco-Office `feat/selene-mqtt-ota`](https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino)** — root `Eco Office.ino` (energy + environment); not stored in Selene |

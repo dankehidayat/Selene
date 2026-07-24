@@ -52,10 +52,10 @@ docker compose up -d frontend
 
 Device firmware is **not** stored in Selene. Use:
 
-**https://github.com/dankehidayat/Eco-Office/tree/feat/selene-mqtt-ota**  
-→ `Energy_Monitor/` (ESP32 DevKit V1, MQTT + OTA)
+**https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino**  
+(ESP32 DevKit V1 — PZEM energy + DHT11 environment, MQTT + OTA)
 
-Admin **Firmware** tab uploads a compiled `.bin` and triggers MQTT OTA; the sketch must implement `command: "ota"` (see Eco-Office README on that branch).
+Admin **Firmware** tab uploads a compiled `.bin` and triggers MQTT OTA; `Eco Office.ino` on that branch implements `command: "ota"`.
 
 ## Scripts
 

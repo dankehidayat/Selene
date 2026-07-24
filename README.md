@@ -109,11 +109,10 @@ ESP32 + PZEM-004T + DHT11
 
 ### Hardware / edge firmware
 
-- ESP32 DevKit V1, PZEM-004T, DHT11, LCD I2C  
+- ESP32 DevKit V1, **PZEM-004T** (energy) + **DHT11** (environment: temperature/humidity), LCD I2C  
 - **Firmware lives in a separate repository** (not in Selene):  
-  **[dankehidayat/Eco-Office](https://github.com/dankehidayat/Eco-Office)** branch **`feat/selene-mqtt-ota`** → [`Energy_Monitor/`](https://github.com/dankehidayat/Eco-Office/tree/feat/selene-mqtt-ota/Energy_Monitor)  
-- Eco-Office **`main`** is reserved for the final report / original sketch — use `feat/selene-mqtt-ota` for Selene MQTT + OTA  
-- Secrets in the sketch must stay blank in git; configure MQTT/Blynk locally before flash  
+  **[dankehidayat/Eco-Office](https://github.com/dankehidayat/Eco-Office)** branch **`feat/selene-mqtt-ota`** → root sketch [`Eco Office.ino`](https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino)  
+- Eco-Office **`main`** keeps the original final-report sketch; **`feat/selene-mqtt-ota`** replaces `Eco Office.ino` with MQTT + OTA (secrets blank in git)
 
 ## Modular microservices architecture
 

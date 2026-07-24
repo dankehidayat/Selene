@@ -2,7 +2,7 @@
 
 > **Branch:** `feat/modular-microservices`  
 > **Field hardware today:** ESP32 + **PZEM-004T** + **DHT11**  
-> **Edge firmware:** [Eco-Office `feat/selene-mqtt-ota`](https://github.com/dankehidayat/Eco-Office/tree/feat/selene-mqtt-ota) (`Energy_Monitor/`) — secrets blank in git  
+> **Edge firmware:** [Eco-Office `feat/selene-mqtt-ota`](https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino) — root `Eco Office.ino` (PZEM energy + DHT11 environment); secrets blank in git  
 > Extension examples (lux, soil, …) are **contracts only** until hardware exists.
 
 ---
@@ -213,8 +213,8 @@ apps/frontend/
 
 | Repo | Branch | Path |
 |------|--------|------|
-| [dankehidayat/Eco-Office](https://github.com/dankehidayat/Eco-Office) | `feat/selene-mqtt-ota` | `Energy_Monitor/` |
-| Eco-Office `main` | — | Final report only — do not put Selene secrets there |
+| [dankehidayat/Eco-Office](https://github.com/dankehidayat/Eco-Office) | `feat/selene-mqtt-ota` | **`Eco Office.ino`** (repo root) — energy + environment + MQTT OTA |
+| Eco-Office `main` | — | Final report + original sketch only — do not put Selene secrets there |
 
 Configure MQTT/Blynk placeholders in the sketch locally; never commit tokens.
 

@@ -45,10 +45,10 @@ docker exec selene-backend bunx prisma generate
 
 ## Edge firmware (not in this repo)
 
-ESP32 sketch (telemetry + OTA) is maintained in:
+ESP32 sketch (energy + environment telemetry + OTA) is maintained in:
 
 **https://github.com/dankehidayat/Eco-Office** branch **`feat/selene-mqtt-ota`**  
-→ folder `Energy_Monitor/`
+→ root file **`Eco Office.ino`** (overwrites the main-branch sketch on that branch only)
 
 Backend OTA API:
 
