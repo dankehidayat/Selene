@@ -11,6 +11,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Shield,
 } from "lucide-react";
 import { useAuth } from "@/services/auth";
 import { useState, useEffect } from "react";
@@ -116,6 +117,27 @@ export function SidebarContent() {
             </Link>
           ))}
         </nav>
+
+        {/* Administration — Admin Only */}
+        {user?.role === "ADMIN" && (
+          <>
+            <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
+              Administration
+            </p>
+            <nav className="px-3 space-y-0.5 pb-4">
+              <Link
+                to="/admin"
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition"
+                activeProps={{
+                  className:
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
+                }}
+              >
+                <Shield size={16} /> Admin Tools
+              </Link>
+            </nav>
+          </>
+        )}
 
         <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
           Information

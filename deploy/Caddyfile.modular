@@ -1,0 +1,55 @@
+# Selene modular microservices gateway
+# Use with docker-compose.modular.yml (caddy service).
+#
+# Local example without TLS:
+#   :8080 { ... }
+# Production:
+#   selene.dankehidayat.my.id { ... }
+
+:8080 {
+	# Core services
+	handle /api/auth/* {
+		reverse_proxy auth:3001
+	}
+	handle /api/admin/* {
+		reverse_proxy auth:3001
+	}
+	handle /api/glossary* {
+		reverse_proxy auth:3001
+	}
+	handle /api/notifications* {
+		reverse_proxy auth:3001
+	}
+	handle /api/energy/* {
+		reverse_proxy energy:3002
+	}
+	handle /api/climate/* {
+		reverse_proxy climate:3003
+	}
+	handle /api/firmware/* {
+		reverse_proxy firmware:3004
+	}
+	handle /api/ingest* {
+		reverse_proxy ingestor:3005
+	}
+
+	# Extension services — uncomment when activated
+	# handle /api/soil/*    { reverse_proxy soil:3006 }
+	# handle /api/lux/*     { reverse_proxy lux:3007 }
+	# handle /api/gps/*     { reverse_proxy gps:3008 }
+	# handle /api/gas/*     { reverse_proxy gas:3009 }
+	# handle /api/generic/* { reverse_proxy generic:3010 }
+
+	# Transition: fall back to monolith for unmigrated routes
+	handle /api/* {
+		reverse_proxy monolith:8787
+	}
+
+	handle /health {
+		reverse_proxy monolith:8787
+	}
+
+	handle {
+		reverse_proxy frontend:4173
+	}
+}

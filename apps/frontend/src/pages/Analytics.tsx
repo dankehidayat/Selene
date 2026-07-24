@@ -34,6 +34,9 @@ import {
   ChevronDown,
   TrendingDown,
   Minus,
+  Leaf,
+  Brain,
+  CloudSun,
 } from "lucide-react";
 import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { StatCard } from "@/components/StatCard";
@@ -801,6 +804,17 @@ export function Analytics() {
     "energy" | "environment" | "fuzzy" | "climate-fuzzy"
   >("energy");
 
+  const analyticsTabs: {
+    key: "energy" | "environment" | "fuzzy" | "climate-fuzzy";
+    label: string;
+    icon: typeof Zap;
+  }[] = [
+    { key: "energy", label: "Energy", icon: Zap },
+    { key: "environment", label: "Environment", icon: Leaf },
+    { key: "fuzzy", label: "Energy Fuzzy", icon: Brain },
+    { key: "climate-fuzzy", label: "Climate Fuzzy", icon: CloudSun },
+  ];
+
   const { data: summary, isLoading: summaryLoading } = useAnalyticsSummary(
     energyRange as any,
   );
@@ -955,23 +969,23 @@ export function Analytics() {
   return (
     <div className="space-y-8 font-sans">
       <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit flex-wrap">
-        {(["energy", "environment", "fuzzy", "climate-fuzzy"] as const).map(
-          (tab) => (
+        {analyticsTabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${activeTab === tab ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"}`}
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition ${
+                activeTab === tab.key
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                  : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+              }`}
             >
-              {tab === "energy"
-                ? "Energy"
-                : tab === "environment"
-                  ? "Environment"
-                  : tab === "fuzzy"
-                    ? "Energy Fuzzy"
-                    : "Climate Fuzzy"}
+              <Icon size={15} />
+              {tab.label}
             </button>
-          ),
-        )}
+          );
+        })}
       </div>
 
       {/* ═════ ENERGY ═════ */}

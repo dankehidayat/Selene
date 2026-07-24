@@ -33,7 +33,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787/api";
+  import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 export function AuthProvider({
   children,

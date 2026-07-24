@@ -1,0 +1,170 @@
+# Modular microservices stack (Phase 2–3).
+# Local day-to-day: prefer docker-compose.local.yml + apps/backend monolith.
+# This compose starts infra + service scaffolds + optional ingestor.
+#
+#   docker compose -f docker-compose.modular.yml up -d
+#
+# Extension services remain commented until needed.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: selene-mod-postgres
+    environment:
+      POSTGRES_USER: selene_admin
+      POSTGRES_PASSWORD: local_dev_password
+      POSTGRES_DB: selene
+    ports:
+      - "5434:5432"
+    volumes:
+      - mod_pgdata:/var/lib/postgresql/data
+    networks:
+      - selene-mod
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U selene_admin -d selene"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: selene-mod-timescaledb
+    environment:
+      POSTGRES_USER: selene_ts
+      POSTGRES_PASSWORD: local_dev_password
+      POSTGRES_DB: selene_measurements
+    ports:
+      - "5433:5432"
+    volumes:
+      - mod_tsdata:/var/lib/postgresql/data
+    command: postgres -c 'listen_addresses=*' -c 'password_encryption=md5'
+    networks:
+      - selene-mod
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U selene_ts -d selene_measurements"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  emqx:
+    image: emqx/emqx:5.7.0
+    container_name: selene-mod-emqx
+    environment:
+      EMQX_NAME: selene-mod
+      EMQX_AUTHENTICATION__1__MECHANISM: password_based
+      EMQX_AUTHENTICATION__1__BACKEND: built_in_database
+      EMQX_AUTHENTICATION__1__USER_ID_TYPE: username
+      EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__NAME: sha256
+      EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__SALT_POSITION: suffix
+      EMQX_LISTENERS__TCP__DEFAULT__ENABLE_AUTHN: "true"
+      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: admin123
+    ports:
+      - "1883:1883"
+      - "18083:18083"
+    networks:
+      - selene-mod
+
+  # ── Core microservices (scaffolds except ingestor is real) ──
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    environment:
+      AUTH_PORT: 3001
+      DATABASE_URL: postgresql://selene_admin:local_dev_password@postgres:5432/selene
+      JWT_SECRET: local_dev_jwt_secret_change_me
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - selene-mod
+    profiles: ["services"]
+
+  energy:
+    build:
+      context: .
+      dockerfile: services/energy/Dockerfile
+    environment:
+      ENERGY_PORT: 3002
+      TIMESCALE_URL: postgresql://selene_ts:local_dev_password@timescaledb:5432/selene_measurements
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    networks:
+      - selene-mod
+    profiles: ["services"]
+
+  climate:
+    build:
+      context: .
+      dockerfile: services/climate/Dockerfile
+    environment:
+      CLIMATE_PORT: 3003
+      TIMESCALE_URL: postgresql://selene_ts:local_dev_password@timescaledb:5432/selene_measurements
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    networks:
+      - selene-mod
+    profiles: ["services"]
+
+  firmware:
+    build:
+      context: .
+      dockerfile: services/firmware/Dockerfile
+    environment:
+      FIRMWARE_PORT: 3004
+      MQTT_HOST: emqx
+      MQTT_PORT: 1883
+      MQTT_USER: selene
+      MQTT_PASSWORD: selene123
+    depends_on:
+      - emqx
+    networks:
+      - selene-mod
+    profiles: ["services"]
+
+  ingestor:
+    build:
+      context: .
+      dockerfile: services/ingestor/Dockerfile
+    environment:
+      INGESTOR_PORT: 3005
+      TIMESCALE_URL: postgresql://selene_ts:local_dev_password@timescaledb:5432/selene_measurements
+      MQTT_HOST: emqx
+      MQTT_PORT: 1883
+      MQTT_USER: selene
+      MQTT_PASSWORD: selene123
+      MQTT_TOPIC: selene/+/telemetry
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      emqx:
+        condition: service_started
+    networks:
+      - selene-mod
+    profiles: ["services"]
+
+  # monolith:
+  #   build: ./apps/backend
+  #   ... Phase 3 hybrid fallback
+
+  # caddy:
+  #   image: caddy:2-alpine
+  #   volumes:
+  #     - ./deploy/Caddyfile.modular:/etc/caddy/Caddyfile
+  #   ports:
+  #     - "8080:8080"
+  #   profiles: ["gateway"]
+
+  # Extension services — enable with profile "extensions"
+  # soil / lux / gps / gas / generic
+
+networks:
+  selene-mod:
+    driver: bridge
+
+volumes:
+  mod_pgdata:
+  mod_tsdata:

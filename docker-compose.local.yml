@@ -1,0 +1,85 @@
+# Local development stack for macOS (including Apple Silicon).
+#
+# IMPORTANT: Host port 5432 is often taken by Homebrew PostgreSQL.
+# Docker Postgres is published on 5434 so Prisma/psql hit the container DB
+# (selene), not the local brew instance (which causes Prisma P1010).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: selene-local-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=selene_admin
+      - POSTGRES_PASSWORD=local_dev_password
+      - POSTGRES_DB=selene
+    ports:
+      # Host 5434 → container 5432 (avoids Homebrew postgresql@14 on 5432)
+      - "5434:5432"
+    volumes:
+      - postgres_data_local:/var/lib/postgresql/data
+    # md5 keeps auth compatible with Prisma's query engine on macOS
+    command: postgres -c 'listen_addresses=*' -c 'password_encryption=md5'
+    networks:
+      - selene-local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U selene_admin -d selene"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: selene-local-timescaledb
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=selene_ts
+      - POSTGRES_PASSWORD=local_dev_password
+      - POSTGRES_DB=selene_measurements
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescale_data_local:/var/lib/postgresql/data
+    command: postgres -c 'listen_addresses=*' -c 'password_encryption=md5'
+    networks:
+      - selene-local
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U selene_ts -d selene_measurements"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  emqx:
+    image: emqx/emqx:5.7.0
+    container_name: selene-local-emqx
+    restart: unless-stopped
+    environment:
+      - EMQX_NAME=selene-local
+      # Match Arduino firmware + apps/backend/.env (selene / selene123)
+      # Access Control → Authentication (password_based + built_in_database)
+      - EMQX_AUTHENTICATION__1__MECHANISM=password_based
+      - EMQX_AUTHENTICATION__1__BACKEND=built_in_database
+      - EMQX_AUTHENTICATION__1__USER_ID_TYPE=username
+      - EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__NAME=sha256
+      - EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__SALT_POSITION=suffix
+      - EMQX_LISTENERS__TCP__DEFAULT__ENABLE_AUTHN=true
+      - EMQX_DASHBOARD__DEFAULT_USERNAME=admin
+      - EMQX_DASHBOARD__DEFAULT_PASSWORD=admin123
+    ports:
+      - "1883:1883"
+      - "18083:18083"
+      - "8083:8083"
+    volumes:
+      - emqx_data_local:/opt/emqx/data
+      - emqx_log_local:/opt/emqx/log
+    networks:
+      - selene-local
+
+networks:
+  selene-local:
+    driver: bridge
+
+volumes:
+  postgres_data_local:
+  timescale_data_local:
+  emqx_data_local:
+  emqx_log_local:

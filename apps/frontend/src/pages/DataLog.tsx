@@ -15,7 +15,7 @@ import { ChartCard } from "@/components/ChartCard";
 import { useRecentReadings } from "@/services/api";
 
 const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787/api";
+  import.meta.env.VITE_API_BASE_URL ?? "/api";
 const PAGE_SIZES = [10, 20, 30, 50, 100];
 
 export function DataLog() {

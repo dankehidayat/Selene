@@ -6,7 +6,7 @@ import { ChartCard } from "@/components/ChartCard";
 import { useAuth } from "@/services/auth";
 
 const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787/api";
+  import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 interface GlossaryTerm {
   id: string;

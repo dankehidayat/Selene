@@ -3,11 +3,15 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "services/*"
   ],
   "scripts": {
-    "frontend:only": "cd apps/frontend && bun run dev",
     "dev:frontend": "cd apps/frontend && bun run dev",
-    "dev:backend": "cd apps/backend && bun run dev"
+    "dev:backend": "cd apps/backend && bun run dev",
+    "dev:ingestor": "cd services/ingestor && bun run dev",
+    "frontend:only": "cd apps/frontend && bun run dev",
+    "test:sensors": "bun run packages/sensors/src/smoke.test.ts",
+    "typecheck:packages": "bun run --filter @selene/shared typecheck && bun run --filter @selene/sensors typecheck"
   }
 }

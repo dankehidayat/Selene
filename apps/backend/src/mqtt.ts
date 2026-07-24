@@ -1,16 +1,61 @@
-// apps/backend/src/mqtt.ts
+// apps/backend/src/mqtt.ts — telemetry ingest via parser registry
 import mqtt from "mqtt";
+import {
+  commandTopic,
+  parseSeleneTopic,
+  telemetryTopic,
+} from "@selene/shared";
+import {
+  listSensorCatalog,
+  runParserRegistry,
+} from "@selene/sensors";
 import { insertReading } from "./timescale";
 import { classifyEnergyFuzzy, classifyClimateFuzzy } from "./analytics/fuzzy";
 import { emitNewReading } from "./events";
 
 const MQTT_HOST = process.env.MQTT_HOST || "localhost";
 const MQTT_PORT = parseInt(process.env.MQTT_PORT || "1883");
-const TOPIC = process.env.MQTT_TOPIC || "selene/+/telemetry";
+const TOPIC = process.env.MQTT_TOPIC || telemetryTopic("+");
 const MQTT_USER = process.env.MQTT_USER || "";
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || "";
 
 let client: mqtt.MqttClient | null = null;
+
+const knownNodes = new Map<
+  string,
+  { nodeId: string; lastSeen: string; messageCount: number }
+>();
+
+export function rememberNode(nodeId: string) {
+  if (!nodeId || nodeId === "unknown" || nodeId === "+") return;
+  const prev = knownNodes.get(nodeId);
+  knownNodes.set(nodeId, {
+    nodeId,
+    lastSeen: new Date().toISOString(),
+    messageCount: (prev?.messageCount ?? 0) + 1,
+  });
+}
+
+export function getKnownNodes() {
+  return Array.from(knownNodes.values()).sort((a, b) =>
+    a.lastSeen < b.lastSeen ? 1 : -1,
+  );
+}
+
+export function getMqttConnectionStatus() {
+  return {
+    connected: Boolean(client?.connected),
+    broker: `${MQTT_HOST}:${MQTT_PORT}`,
+    topic: TOPIC,
+    clientId: client?.options?.clientId
+      ? String(client.options.clientId)
+      : null,
+  };
+}
+
+export function getSensorCatalog() {
+  return listSensorCatalog();
+}
 
 export function startMqttIngestor() {
   if (client) return;
@@ -38,6 +83,11 @@ export function startMqttIngestor() {
         console.error("[MQTT] Subscribe error:", err);
       } else {
         console.log(`[MQTT] Subscribed to topic: ${TOPIC}`);
+        console.log(
+          `[MQTT] Sensor modules: ${listSensorCatalog()
+            .map((s) => s.id)
+            .join(", ")}`,
+        );
       }
     });
   });
@@ -55,10 +105,11 @@ export function startMqttIngestor() {
   });
 
   client.on("message", async (topic, message) => {
-    const topicParts = topic.split("/");
-    const nodeId = topicParts.length >= 2 ? topicParts[1] : "unknown";
+    const parsedTopic = parseSeleneTopic(topic);
+    const nodeId = parsedTopic?.nodeId ?? "unknown";
+    rememberNode(nodeId);
 
-    let payload: any;
+    let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(message.toString());
     } catch (err) {
@@ -66,36 +117,23 @@ export function startMqttIngestor() {
       return;
     }
 
-    const voltage = Number(payload.voltage ?? 0);
-    const acCurrent = Number(payload.current ?? 0);
-    const acPower = Number(payload.power ?? 0);
-    const cosPhi = Number(payload.pf ?? 0);
-    const frequency = Number(payload.frequency ?? 0);
-    const totalEnergy = Number(payload.energy ?? 0);
-    const temperature = Number(payload.temperature ?? 0);
-    const humidity = Number(payload.humidity ?? 0);
+    // Parser registry: energy (PZEM) + climate (DHT11) may both fire
+    const { domains, flat, shouldDrop } = runParserRegistry(nodeId, payload);
 
-    const reactivePower = Number(
-      payload.reactive_power ?? payload.reactivePower ?? 0,
-    );
-    const apparentPower = Number(
-      payload.apparent_power ??
-        payload.apparentPower ??
-        (cosPhi > 0 ? acPower / cosPhi : 0),
-    );
-
-    if (voltage < 100 && acPower === 0) {
+    if (shouldDrop || domains.length === 0) {
       return;
     }
 
     const energyFuzzy = classifyEnergyFuzzy(
-      voltage,
-      acPower,
-      cosPhi,
-      reactivePower,
+      flat.acVoltage,
+      flat.acPower,
+      flat.cosPhi,
+      flat.reactivePower,
     );
-
-    const climateFuzzy = classifyClimateFuzzy(temperature, humidity);
+    const climateFuzzy = classifyClimateFuzzy(
+      flat.temperature,
+      flat.humidity,
+    );
 
     const energyStatus =
       energyFuzzy.category === "ECONOMICAL"
@@ -104,40 +142,43 @@ export function startMqttIngestor() {
           ? "2"
           : "3";
 
+    flat.tempComfort = climateFuzzy.category;
+    flat.energyStatus = energyStatus;
+
     console.log(
-      `[MQTT] ${nodeId} | V:${voltage.toFixed(1)}V P:${acPower.toFixed(1)}W ` +
-        `T:${temperature.toFixed(1)}°C H:${humidity.toFixed(0)}% ` +
+      `[MQTT] ${nodeId} [${domains.join("+")}] | V:${flat.acVoltage.toFixed(1)}V P:${flat.acPower.toFixed(1)}W ` +
+        `T:${flat.temperature.toFixed(1)}°C H:${flat.humidity.toFixed(0)}% ` +
         `Energy:${energyFuzzy.category} Climate:${climateFuzzy.category}`,
     );
 
     try {
       await insertReading({
-        time: new Date().toISOString(),
-        acVoltage: voltage,
-        acCurrent,
-        acPower,
-        cosPhi,
-        apparentPower,
-        totalEnergy,
-        frequency,
-        reactivePower,
-        temperature,
-        humidity,
+        time: flat.time,
+        acVoltage: flat.acVoltage,
+        acCurrent: flat.acCurrent,
+        acPower: flat.acPower,
+        cosPhi: flat.cosPhi,
+        apparentPower: flat.apparentPower,
+        totalEnergy: flat.totalEnergy,
+        frequency: flat.frequency,
+        reactivePower: flat.reactivePower,
+        temperature: flat.temperature,
+        humidity: flat.humidity,
         tempComfort: climateFuzzy.category,
         energyStatus,
       });
 
       emitNewReading({
-        acVoltage: voltage,
-        acCurrent,
-        acPower,
-        cosPhi,
-        apparentPower,
-        totalEnergy,
-        frequency,
-        reactivePower,
-        temperature,
-        humidity,
+        acVoltage: flat.acVoltage,
+        acCurrent: flat.acCurrent,
+        acPower: flat.acPower,
+        cosPhi: flat.cosPhi,
+        apparentPower: flat.apparentPower,
+        totalEnergy: flat.totalEnergy,
+        frequency: flat.frequency,
+        reactivePower: flat.reactivePower,
+        temperature: flat.temperature,
+        humidity: flat.humidity,
         tempComfort: climateFuzzy.category,
         energyStatus,
         powerQualityScore: null,
@@ -155,4 +196,26 @@ export function stopMqttIngestor() {
     client = null;
     console.log("[MQTT] Ingestor stopped");
   }
+}
+
+export function sendOtaCommand(
+  nodeId: string,
+  downloadUrl: string,
+  fileSize: number,
+) {
+  if (!client?.connected) {
+    console.warn("[MQTT] Cannot send OTA command — not connected");
+    return false;
+  }
+
+  const topic = commandTopic(nodeId);
+  const payload = JSON.stringify({
+    command: "ota",
+    url: downloadUrl,
+    size: fileSize,
+  });
+
+  client.publish(topic, payload, { qos: 1 });
+  console.log(`[MQTT] OTA command sent to ${topic}: ${fileSize} bytes`);
+  return true;
 }

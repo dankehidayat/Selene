@@ -1,0 +1,21 @@
+{
+  "name": "@selene/ingestor",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --env-file=../../apps/backend/.env run src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@selene/shared": "workspace:*",
+    "@selene/sensors": "workspace:*",
+    "fastify": "^4.28.0",
+    "mqtt": "^5.10.1",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.5.4"
+  }
+}

@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Dashboard } from "@/pages/Dashboard";
 import { DataLog } from "@/pages/DataLog";
 import { Analytics } from "@/pages/Analytics";
+import { AdminPage } from "@/pages/AdminPage";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
 import { Impressum } from "@/pages/Impressum";
@@ -55,6 +56,18 @@ const analyticsRoute = createRoute({
   ),
 });
 
+const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin",
+  component: () => (
+    <ProtectedRoute>
+      <Layout>
+        <AdminPage />
+      </Layout>
+    </ProtectedRoute>
+  ),
+});
+
 const impressumRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/impressum",
@@ -95,6 +108,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   logRoute,
   analyticsRoute,
+  adminRoute,
   impressumRoute,
   glossaryRoute,
   loginRoute,

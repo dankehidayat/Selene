@@ -115,6 +115,31 @@ ESP32 + PZEM-004T + DHT11
 - Arduino Framework
 - Blynk IoT platform
 
+## Modular microservices architecture
+
+Work continues on branch **`feat/modular-microservices`**.
+
+| Layer | Role |
+|-------|------|
+| `@selene/shared` | Types, ports, Timescale helper, MQTT factory, JWT helpers |
+| `@selene/sensors` | **PZEM-004T** + **DHT11** modules + **parser registry** |
+| `services/ingestor` | Standalone MQTT → registry → Timescale (:3005) |
+| `services/{auth,energy,climate,firmware}` | Domain scaffolds (:3001–3004) |
+| `services/{soil,lux,…}` | Extension stubs |
+| `apps/backend` | Transition monolith (full HTTP API :8787) |
+| `deploy/Caddyfile.modular` | API gateway routes |
+
+Canonical doc: **[docs/MODULAR_MICROSERVICES.md](./docs/MODULAR_MICROSERVICES.md)**
+
+```bash
+bun install
+bun run test:sensors
+bun run dev:backend      # monolith + ingest
+bun run dev:ingestor     # optional standalone ingestor
+curl -s localhost:8787/api/sensors/catalog
+```
+
+
 ## Getting Started
 
 ### Prerequisites
@@ -130,13 +155,15 @@ ESP32 + PZEM-004T + DHT11
 git clone https://github.com/dankehidayat/selene.git
 cd selene
 
-# Start databases (PostgreSQL + TimescaleDB)
-docker compose up -d postgres timescaledb
+# Start databases (PostgreSQL + TimescaleDB + EMQX)
+# Postgres is published on host port 5434 (not 5432) to avoid clashing with
+# Homebrew postgresql@14, which commonly owns localhost:5432 on macOS.
+docker compose -f docker-compose.local.yml up -d
 
 # Backend setup
 cd apps/backend
-cp .env.example .env
-# Edit .env with your configuration
+cp .env.local.example .env
+# DATABASE_URL must use 127.0.0.1:5434 — see note below
 bun install
 bun run db:generate
 bun run db:migrate
@@ -144,22 +171,65 @@ bun run dev
 
 # Frontend setup (new terminal)
 cd apps/frontend
-cp .env.example .env
+cp .env.local.example .env
 bun install
 bun run dev
 ```
 
 The frontend will be available at `http://localhost:5173`, backend at `http://localhost:8787`, and Swagger UI at `http://localhost:8787/docs`.
 
-### Docker Deployment
+**macOS note (Prisma P1010):** If Homebrew PostgreSQL is running, `localhost:5432` is the brew instance (databases like `flowpoint` / `matilda`), not Docker. Prisma then reports `P1010: User was denied access on the database (not available)` even though auth “works” against the wrong server. Use host port **5434** for Selene Postgres (`docker-compose.local.yml`) and point `DATABASE_URL` at `127.0.0.1:5434`.
+
+### Live ESP32 data on Mac (no Arduino changes)
+
+The ESP32 publishes only to the **VPS** broker. To feed the same stream into the local backend:
+
+```text
+ESP32 → VPS EMQX ←── SSH tunnel ── Mac backend → local Timescale → dashboard
+```
+
+1. Leave firmware as-is (`MQTT_BROKER` = VPS IP, user `selene` / `selene123`).
+2. Open a tunnel (leave this terminal running; enter your SSH key passphrase if prompted):
 
 ```bash
-cp .env.example .env
-# Edit .env with your configuration
+./scripts/mqtt-tunnel.sh
+# equivalent: ssh -N -L 1884:127.0.0.1:1883 rd
+```
+
+3. Backend `.env` (already documented in `apps/backend/.env.local.example`):
+
+```env
+MQTT_HOST=127.0.0.1
+MQTT_PORT=1884
+MQTT_USER=selene
+MQTT_PASSWORD=selene123
+MQTT_TOPIC=selene/+/telemetry
+```
+
+4. Start backend (`bun run dev` in `apps/backend`). You should see `[MQTT] Connected` and new rows when the device publishes.
+
+If the tunnel fails, on the VPS check that EMQX is listening on host port 1883 (`ss -lntp | grep 1883`). Adjust `REMOTE_MQTT` if needed: `REMOTE_MQTT=127.0.0.1:1883 ./scripts/mqtt-tunnel.sh`.
+
+### Docker Deployment (production / VPS)
+
+Production uses the **monolith backend** plus Postgres, Timescale, and EMQX. Modular packages (`@selene/shared`, `@selene/sensors`) are **built into** the backend image — you do **not** need to deploy microservices yet.
+
+```bash
+# On the VPS (repo root)
+cp .env.production.example .env.production
+cp apps/backend/.env.production.example apps/backend/.env.production
+# Edit both files: passwords, JWT, MQTT user/pass matching EMQX, VITE_API_BASE_URL
+
+# docker-compose.yml → docker-compose.production.yml (symlink)
+docker compose build backend
 docker compose up -d
 docker exec selene-backend bunx prisma db push
-docker exec selene-backend bun run db:generate
+docker exec selene-backend bunx prisma generate
 ```
+
+**Production MQTT:** set `MQTT_HOST=emqx` (compose service name), not a local SSH tunnel. ESP32 continues publishing to the VPS public IP:1883.
+
+**Do not** switch to `docker-compose.modular.yml` on the VPS until Phase 4 (full service split). Local Mac dev: `docker-compose.local.yml` + optional `./scripts/mqtt-tunnel.sh`.
 
 ### Data Import (one-time)
 
@@ -233,8 +303,8 @@ Admin users have access to:
 | ------------------ | ----------------------------- | -------------------------------------------------------------------- |
 | `PORT`             | Server port                   | `8787`                                                               |
 | `JWT_SECRET`       | Secret key for JWT signing    | `openssl rand -base64 64`                                            |
-| `DATABASE_URL`     | PostgreSQL connection string  | `postgresql://postgres:postgres@localhost:5432/flowpoint`            |
-| `TIMESCALE_URL`    | TimescaleDB connection string | `postgresql://selene_ts:password@localhost:5433/selene_measurements` |
+| `DATABASE_URL`     | PostgreSQL connection string  | `postgresql://selene_admin:local_dev_password@127.0.0.1:5434/selene`  |
+| `TIMESCALE_URL`    | TimescaleDB connection string | `postgresql://selene_ts:local_dev_password@127.0.0.1:5433/selene_measurements` |
 | `BLYNK_SERVER_URL` | Blynk IoT server URL          | `http://iot.serangkota.go.id:8080`                                   |
 | `BLYNK_AUTH_TOKEN` | Blynk authentication token    | `your-blynk-token`                                                   |
 

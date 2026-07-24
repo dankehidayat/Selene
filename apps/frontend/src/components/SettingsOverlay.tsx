@@ -8,7 +8,6 @@ import {
 } from "react";
 import { useAuth, useLoginHistory } from "@/services/auth";
 import { useNavigate } from "@tanstack/react-router";
-import { UserManagement } from "@/components/UserManagement";
 import {
   CheckCircle2,
   AlertCircle,
@@ -18,13 +17,12 @@ import {
   X,
   ChevronLeft,
   User as UserIcon,
-  Shield,
   Key,
   LogOut,
 } from "lucide-react";
 
 const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787/api";
+  import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -154,15 +152,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
 // ── Nav Items ─────────────────────────────────────────────
 
+// Administration lives on /admin (Admin Tools) — not duplicated here.
 const navItems = [
-  { key: "general", label: "General", icon: UserIcon, adminOnly: false },
-  { key: "security", label: "Login & Security", icon: Key, adminOnly: false },
-  {
-    key: "administration",
-    label: "Administration",
-    icon: Shield,
-    adminOnly: true,
-  },
+  { key: "general", label: "General", icon: UserIcon },
+  { key: "security", label: "Login & Security", icon: Key },
 ] as const;
 
 // ── Main Overlay Component ────────────────────────────────
@@ -179,9 +172,7 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
   const isMobile = useIsMobile();
 
   const [editing, setEditing] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<
-    "general" | "security" | "administration"
-  >("general");
+  const [activeTab, setActiveTab] = useState<"general" | "security">("general");
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [mobileView, setMobileView] = useState<"nav" | "content">("nav");
@@ -422,28 +413,13 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
 
   const deleteConfirmText = "delete my account";
 
-  const filteredNavItems = navItems.filter(
-    (item) => !item.adminOnly || user?.role === "ADMIN",
-  );
-
-  const accountItems = filteredNavItems.filter((i) => !i.adminOnly);
-  const adminItems = filteredNavItems.filter((i) => i.adminOnly);
+  const accountItems = navItems;
 
   const activeLabel =
-    filteredNavItems.find((i) => i.key === activeTab)?.label || "Settings";
-
-  const isAdminTab = activeTab === "administration";
+    navItems.find((i) => i.key === activeTab)?.label || "Settings";
 
   const tabContent = (
-    <div
-      className={
-        isMobile
-          ? ""
-          : isAdminTab
-            ? "px-8 py-8"
-            : "max-w-xl mx-auto px-10 py-10"
-      }
-    >
+    <div className={isMobile ? "" : "max-w-xl mx-auto px-10 py-10"}>
       {activeTab === "general" && (
         <div>
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
@@ -789,14 +765,6 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         </div>
       )}
 
-      {activeTab === "administration" && (
-        <div>
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
-            Administration
-          </h2>
-          <UserManagement />
-        </div>
-      )}
     </div>
   );
 
@@ -865,31 +833,6 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
                   })}
                 </div>
               </div>
-              {adminItems.length > 0 && (
-                <div>
-                  <p className="px-2 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                    Admin
-                  </p>
-                  <div className="space-y-0.5">
-                    {adminItems.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <button
-                          key={item.key}
-                          onClick={() => selectTab(item.key)}
-                          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-                        >
-                          <Icon
-                            size={18}
-                            className="text-gray-400 dark:text-gray-500"
-                          />
-                          {item.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
               <div className="mt-auto pt-4 border-t border-gray-100 dark:border-gray-800">
                 <button
                   onClick={handleLogout}
@@ -979,39 +922,6 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
               </div>
             </div>
 
-            {adminItems.length > 0 && (
-              <div>
-                <p className="px-1 mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                  Admin
-                </p>
-                <div className="flex flex-col gap-0.5">
-                  {adminItems.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.key}
-                        onClick={() => selectTab(item.key)}
-                        className={`text-left px-3 py-2.5 rounded-lg font-semibold text-sm transition flex items-center gap-2.5 ${
-                          activeTab === item.key
-                            ? "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white"
-                            : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white"
-                        }`}
-                      >
-                        <Icon
-                          size={15}
-                          className={
-                            activeTab === item.key
-                              ? "text-gray-700 dark:text-gray-300"
-                              : "text-gray-400 dark:text-gray-500"
-                          }
-                        />
-                        {item.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {/* Logout — at the bottom of sidebar */}
             <div className="mt-auto pt-4 border-t border-gray-100 dark:border-gray-800">

@@ -12,11 +12,16 @@ build/
 
 # Environment files
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.*.local
+.env.*
+apps/backend/.env
+apps/backend/.env.*
+apps/frontend/.env
+apps/frontend/.env.*
+
+# Keep example files
+!.env*.example
+!apps/backend/.env*.example
+!apps/frontend/.env*.example
 
 # IDE
 .vscode/
@@ -46,8 +51,8 @@ coverage/
 # Prisma
 prisma/.env
 
-# Bun
-bun.lock
+# Bun — keep bun.lock committed for reproducible deploys
+# bun.lock
 
 # Vite
 apps/frontend/dist/
@@ -56,17 +61,3 @@ apps/frontend/dist/
 tmp/
 temp/
 *.tmp
-
-# Environment variable backup
-*.env.bak
-*.env.backup
-
-# Archive
-*.zip
-*.tar.gz
-*.rar
-
-# Certificates
-*.pem
-*.crt
-*.key

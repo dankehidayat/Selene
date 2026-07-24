@@ -1,0 +1,17 @@
+{
+  "name": "@selene/gps",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@selene/shared": "workspace:*",
+    "fastify": "^4.28.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

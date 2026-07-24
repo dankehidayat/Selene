@@ -1,0 +1,28 @@
+{
+  "name": "@selene/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./telemetry": "./src/telemetry.ts",
+    "./topics": "./src/topics.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./db/timescale": "./src/db/timescale.ts",
+    "./mqtt-client": "./src/mqtt-client.ts",
+    "./middleware/auth": "./src/middleware/auth.ts"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "mqtt": "^5.10.1",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.5.4"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

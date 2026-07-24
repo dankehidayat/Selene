@@ -27,15 +27,25 @@ import {
 } from "./timescale";
 import { startMqttIngestor } from "./mqtt";
 import { onNewReading } from "./events";
+import { registerFirmwareRoutes } from "./routes/firmware";
+import { authenticate, requireAdmin } from "./middleware/auth";
+import multipart from "@fastify/multipart";
 
 const app = Fastify({ logger: true });
 
 await app.register(cors, {
   origin: [
     "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "https://selene.dankehidayat.my.id",
     "https://*.dankehidayat.my.id",
   ],
+});
+
+await app.register(multipart, {
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
 });
 
 // ── Swagger/OpenAPI ───────────────────────────────────────
@@ -73,6 +83,7 @@ await app.register(swagger, {
           "Statistical analysis, fuzzy classification, and visualizations",
       },
       { name: "MQTT", description: "MQTT telemetry ingestion" },
+      { name: "Firmware", description: "OTA firmware update management" },
       { name: "Notifications", description: "User notification management" },
       { name: "Glossary", description: "Technical term definitions" },
       { name: "Health", description: "Service health check" },
@@ -94,7 +105,7 @@ await app.register(registerAuthRoutes);
 await app.register(registerGlossaryRoutes);
 await app.register(registerNotificationRoutes);
 await app.register(registerAdminRoutes);
-
+await app.register(registerFirmwareRoutes);
 // ── Helpers ───────────────────────────────────────────────
 
 const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
@@ -166,7 +177,7 @@ function getRangeConfig(range: string): {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  MQTT Status Endpoint
+//  MQTT Status / known nodes (from live telemetry topics)
 // ═══════════════════════════════════════════════════════════
 app.get(
   "/api/mqtt/status",
@@ -177,13 +188,49 @@ app.get(
     },
   },
   async () => {
-    const mqttHost = process.env.MQTT_HOST || "localhost";
-    const mqttPort = parseInt(process.env.MQTT_PORT || "1883");
-    const topic = process.env.MQTT_TOPIC || "selene/+/telemetry";
+    const { getMqttConnectionStatus, getKnownNodes } = await import("./mqtt");
+    const status = getMqttConnectionStatus();
     return {
-      active: true,
-      broker: `${mqttHost}:${mqttPort}`,
-      topic,
+      active: status.connected,
+      connected: status.connected,
+      broker: status.broker,
+      topic: status.topic,
+      clientId: status.clientId,
+      nodes: getKnownNodes(),
+    };
+  },
+);
+
+app.get(
+  "/api/mqtt/nodes",
+  {
+    schema: {
+      description:
+        "List sensor node IDs discovered from MQTT topics (selene/{nodeId}/telemetry)",
+      tags: ["MQTT"],
+    },
+    preHandler: [authenticate, requireAdmin],
+  },
+  async () => {
+    const { getKnownNodes } = await import("./mqtt");
+    return { nodes: getKnownNodes() };
+  },
+);
+
+app.get(
+  "/api/sensors/catalog",
+  {
+    schema: {
+      description:
+        "Registered sensor modules (PZEM-004T, DHT11, …) and capabilities",
+      tags: ["Sensors"],
+    },
+  },
+  async () => {
+    const { getSensorCatalog } = await import("./mqtt");
+    return {
+      modules: getSensorCatalog(),
+      note: "Fleet currently fields PZEM-004T + DHT11; catalog is extensible.",
     };
   },
 );
