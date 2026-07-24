@@ -2,19 +2,18 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { SidebarContent } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { CookieBanner } from "./CookieBanner";
+import {
+  ShellLayoutProvider,
+  useShellLayout,
+  SHELL_SIDEBAR_W,
+  SHELL_SIDEBAR_MS,
+} from "@/lib/shellLayout";
 
 const CLOSE_MS = 280;
-const SIDEBAR_W = 248;
 
-/**
- * Desktop sidebar uses transform (not width) so heavy pages like Analytics
- * don't reflow ResponsiveContainer charts on every animation frame.
- * Main content margin updates once at the start (open) or end (close).
- */
-export function Layout({ children }: { children: ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  /** Main content left inset — may lag behind sidebarOpen while closing. */
-  const [mainPadded, setMainPadded] = useState(true);
+function LayoutShell({ children }: { children: ReactNode }) {
+  const { sidebarOpen, toggleSidebar } = useShellLayout();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileVisible, setMobileVisible] = useState(false);
   const [mobileClosing, setMobileClosing] = useState(false);
@@ -35,18 +34,6 @@ export function Layout({ children }: { children: ReactNode }) {
     }, CLOSE_MS);
   };
 
-  const toggleDesktopSidebar = () => {
-    if (sidebarOpen) {
-      // Close: slide panel away first, expand main after (one reflow, not continuous).
-      setSidebarOpen(false);
-      window.setTimeout(() => setMainPadded(false), CLOSE_MS);
-    } else {
-      // Open: reserve space first, then slide panel in.
-      setMainPadded(true);
-      requestAnimationFrame(() => setSidebarOpen(true));
-    }
-  };
-
   useEffect(() => {
     if (!mobileOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -58,12 +45,19 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] dark:bg-gray-950 overflow-x-hidden">
-      {/* Desktop sidebar — fixed, transform only */}
+      {/*
+        Sidebar slides with transform; main margin animates in the same duration
+        so content shrinks/grows. Charts freeze resize via StableResponsiveContainer
+        while html.sidebar-resizing is set (see shellLayout).
+      */}
       <aside
-        className={`hidden lg:flex flex-col fixed left-0 top-0 z-30 w-[248px] h-dvh max-h-dvh bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 transition-transform duration-300 ease-out will-change-transform ${
+        className={`hidden lg:flex flex-col fixed left-0 top-0 z-30 h-dvh max-h-dvh bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 transition-transform ease-out will-change-transform ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
-        style={{ width: SIDEBAR_W }}
+        style={{
+          width: SHELL_SIDEBAR_W,
+          transitionDuration: `${SHELL_SIDEBAR_MS}ms`,
+        }}
         aria-hidden={!sidebarOpen}
       >
         <div className="w-full h-full min-h-0 flex flex-col overflow-hidden">
@@ -94,12 +88,13 @@ export function Layout({ children }: { children: ReactNode }) {
       )}
 
       <div
-        className={`min-w-0 max-w-full transition-[margin] duration-0 ${
-          mainPadded ? "lg:ml-[248px]" : "lg:ml-0"
+        className={`min-w-0 max-w-full transition-[margin] ease-out ${
+          sidebarOpen ? "lg:ml-[248px]" : "lg:ml-0"
         }`}
+        style={{ transitionDuration: `${SHELL_SIDEBAR_MS}ms` }}
       >
         <TopBar
-          onToggleSidebar={toggleDesktopSidebar}
+          onToggleSidebar={toggleSidebar}
           onMobileMenu={openMobile}
           sidebarOpen={sidebarOpen}
         />
@@ -107,6 +102,16 @@ export function Layout({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+
+      <CookieBanner />
     </div>
+  );
+}
+
+export function Layout({ children }: { children: ReactNode }) {
+  return (
+    <ShellLayoutProvider>
+      <LayoutShell>{children}</LayoutShell>
+    </ShellLayoutProvider>
   );
 }

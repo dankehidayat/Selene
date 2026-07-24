@@ -1,5 +1,6 @@
 // apps/frontend/src/components/PowerOverview.tsx
 import { Activity, Gauge, Waves, Zap } from "lucide-react";
+import { InfoTip } from "@/components/InfoTip";
 
 interface PowerOverviewProps {
   qualityScore: number | undefined | null;
@@ -61,50 +62,40 @@ function qualityHeadline(score: number | undefined): string {
   return "Grid vibes: needs love";
 }
 
-function qualityNarration(
-  score: number | undefined,
-  estimated: boolean,
-): string {
+function qualityNarration(score: number | undefined): string {
   if (score === undefined) {
     return "We're waiting for the first electrical heartbeat from your sensors. Hang tight — the story starts when data arrives.";
   }
-  let base: string;
   if (score >= 80) {
-    base =
-      "Your power line is humming along nicely. Factor and frequency are in a happy place — the kind of day an engineer would high-five.";
-  } else if (score >= 60) {
-    base =
-      "Things look healthy overall. Nothing dramatic on the wire, just a steady workday for your circuits.";
-  } else if (score >= 40) {
-    base =
-      "There's a little drama on the grid today. Worth a glance at power factor or frequency when you have a moment.";
-  } else {
-    base =
-      "The electrical side is waving a yellow flag. Check loads, wiring, or the sensor — your gear will thank you.";
+    return "Your power line is humming along nicely. Efficiency and frequency are in a happy place — the kind of day an engineer would high-five.";
   }
-  if (estimated) {
-    base += " (Score estimated from cos φ and frequency.)";
+  if (score >= 60) {
+    return "Things look healthy overall. Nothing dramatic on the wire, just a steady workday for your circuits.";
   }
-  return base;
+  if (score >= 40) {
+    return "There's a little drama on the grid today. Worth a glance at how efficiently power is used, or how steady the frequency is.";
+  }
+  return "The electrical side is waving a yellow flag. Check loads, wiring, or the sensor — your gear will thank you.";
 }
 
-function cosPhiNarration(cp: number | undefined): string {
+/** Human wording — avoid greek symbols / jargon in the sentence. */
+function efficiencyNarration(cp: number | undefined): string {
   if (cp === undefined) {
-    return "Power factor is still shy — no cos φ sample yet. We'll narrate once the meters speak.";
+    return "We don't have an efficiency reading yet. Once the meters speak, we'll tell you how cleanly the load is drawing power.";
   }
   if (cp >= 0.95) {
-    return `cos φ is a crisp ${cp.toFixed(2)} — almost pure real power. Your loads are sipping electricity efficiently.`;
+    return `Efficiency looks excellent at ${cp.toFixed(2)} — almost all the power is doing real work.`;
   }
   if (cp >= 0.85) {
-    return `cos φ sits at ${cp.toFixed(2)} — a polite, efficient guest at the table. Reactive power is under control.`;
+    return `Efficiency sits at a solid ${cp.toFixed(2)} — a polite, efficient guest at the table.`;
   }
   if (cp >= 0.6) {
-    return `cos φ is ${cp.toFixed(2)} — workable, but the grid is carrying extra “imaginary” power. Correction gear could help.`;
+    return `Efficiency is ${cp.toFixed(2)} — workable, but the circuit is carrying some wasted effort. Correction gear could help.`;
   }
   if (cp > 0) {
-    return `cos φ is down at ${cp.toFixed(2)}. Lots of reactive power in the mix — the wire is working harder than it needs to.`;
+    return `Efficiency is down at ${cp.toFixed(2)}. The wire is working harder than it needs to for the useful power you get.`;
   }
-  return `cos φ is near zero (${cp.toFixed(2)}). That usually means a sensor glitch, no real load, or something worth investigating.`;
+  return `The efficiency reading is basically flat (${cp.toFixed(2)}). That often means no real load, a quiet circuit, or a sensor that needs a check.`;
 }
 
 function frequencyNarration(freq: number | undefined): string {
@@ -197,6 +188,13 @@ export function PowerOverview({
           <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
             Power quality
           </p>
+          {estimated ? (
+            <InfoTip
+              title="How this score is estimated"
+              content="The device didn't send a quality score directly, so we estimated it from efficiency (how cleanly the load uses power) and grid frequency. It's a helpful guide until a full score arrives from the sensor path."
+              iconSize={13}
+            />
+          ) : null}
         </div>
         <div className="flex items-baseline gap-1.5">
           <span
@@ -225,7 +223,7 @@ export function PowerOverview({
           {qualityHeadline(derived)}
         </p>
         <p className="text-sm text-gray-600 dark:text-gray-300 mt-1.5 leading-relaxed">
-          {qualityNarration(derived, estimated)}
+          {qualityNarration(derived)}
         </p>
       </div>
 
@@ -233,8 +231,8 @@ export function PowerOverview({
         <MetricStory
           icon={Gauge}
           iconClass="text-violet-500"
-          label="Power factor"
-          story={cosPhiNarration(pf)}
+          label="Efficiency"
+          story={efficiencyNarration(pf)}
         />
         <MetricStory
           icon={Waves}

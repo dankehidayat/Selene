@@ -1,9 +1,8 @@
 // apps/frontend/src/pages/Analytics.tsx
 import { useState, useRef, useEffect } from "react";
 import * as Plot from "@observablehq/plot";
-import * as HoverCard from "@radix-ui/react-hover-card";
+
 import {
-  ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
@@ -20,6 +19,7 @@ import {
   LineChart,
   ReferenceLine,
 } from "recharts";
+import { StableResponsiveContainer as ResponsiveContainer } from "@/components/StableResponsiveContainer";
 import {
   Zap,
   Activity,
@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { StatCard } from "@/components/StatCard";
+import { InfoTip } from "@/components/InfoTip";
 import { useTabFromSearch } from "@/hooks/useTabFromSearch";
 import {
   useAnalyticsSummary,
@@ -390,34 +391,7 @@ function MembershipTooltip({
     </div>
   );
 }
-function InfoPopover({ title, content }: { title: string; content: string }) {
-  return (
-    <HoverCard.Root openDelay={200} closeDelay={100}>
-      <HoverCard.Trigger asChild>
-        <span className="inline-flex cursor-help">
-          <Info
-            size={13}
-            className="text-gray-400 dark:text-gray-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
-          />
-        </span>
-      </HoverCard.Trigger>
-      <HoverCard.Portal>
-        <HoverCard.Content
-          side="top"
-          sideOffset={8}
-          className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-xl p-4 w-80 z-50"
-        >
-          <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
-            {title}
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-            {content}
-          </p>
-        </HoverCard.Content>
-      </HoverCard.Portal>
-    </HoverCard.Root>
-  );
-}
+
 /**
  * Disclosure with enter/exit fade+slide. Charts mount only while open so we
  * never animate Recharts height (that reflows hard). Close waits for exit anim.
@@ -2165,7 +2139,7 @@ export function Analytics() {
                 <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
                   Multi-variable fuzzy inference for energy classification
                 </p>
-                <InfoPopover
+                <InfoTip
                   title="IEEE 1159 & PLN Standards"
                   content="Based on IEEE 1159-2019 and PLN standards requiring power factor ≥ 0.85. Uses Mamdani fuzzy inference with 15 rules across 4 input variables."
                 />
@@ -2451,7 +2425,7 @@ export function Analytics() {
                 <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
                   Fuzzy inference for thermal comfort classification
                 </p>
-                <InfoPopover
+                <InfoTip
                   title="ASHRAE 55 & SNI 03-6572"
                   content="Based on ASHRAE 55-2020 and SNI 03-6572-2001. Adapted for naturally ventilated buildings in tropical climates. 14 rules across 2 input variables."
                 />

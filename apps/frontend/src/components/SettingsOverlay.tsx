@@ -24,12 +24,21 @@ import {
   Thermometer,
   Shield,
   Activity,
+  Cookie,
+  Download,
+  Smartphone,
 } from "lucide-react";
 import {
   loadNotificationPrefs,
   saveNotificationPrefs,
   type NotificationPrefs,
 } from "@/lib/notificationPrefs";
+import {
+  loadPrivacyPrefs,
+  savePrivacyPrefs,
+  type PrivacyPrefs,
+} from "@/lib/privacyPrefs";
+import { QRCodeSVG } from "qrcode.react";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -128,7 +137,7 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 // ── Context ───────────────────────────────────────────────
 
 interface SettingsContextType {
-  openSettings: () => void;
+  openSettings: (tab?: SettingsTab) => void;
   closeSettings: () => void;
 }
 
@@ -141,35 +150,45 @@ export function useSettings() {
   return useContext(SettingsContext);
 }
 
+// ── Nav Items ─────────────────────────────────────────────
+
+// Administration lives on /admin (Admin Tools) — not duplicated here.
+const navItems = [
+  { key: "profile", label: "My Profile", icon: UserIcon },
+  { key: "security", label: "Login & Security", icon: Key },
+  { key: "notifications", label: "Notifications", icon: Bell },
+  { key: "privacy", label: "Privacy & Cookies", icon: Cookie },
+  { key: "data", label: "Data & Export", icon: Download },
+] as const;
+
+type SettingsTab = (typeof navItems)[number]["key"];
+
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [initialTab, setInitialTab] = useState<SettingsTab | undefined>();
 
   return (
     <SettingsContext.Provider
       value={{
-        openSettings: () => setSettingsOpen(true),
+        openSettings: (tab?: SettingsTab) => {
+          if (tab) setInitialTab(tab);
+          setSettingsOpen(true);
+        },
         closeSettings: () => setSettingsOpen(false),
       }}
     >
       {children}
       <SettingsOverlay
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        initialTab={initialTab}
+        onClose={() => {
+          setSettingsOpen(false);
+          setInitialTab(undefined);
+        }}
       />
     </SettingsContext.Provider>
   );
 }
-
-// ── Nav Items ─────────────────────────────────────────────
-
-// Administration lives on /admin (Admin Tools) — not duplicated here.
-const navItems = [
-  { key: "general", label: "General", icon: UserIcon },
-  { key: "security", label: "Login & Security", icon: Key },
-  { key: "notifications", label: "Notifications", icon: Bell },
-] as const;
-
-type SettingsTab = (typeof navItems)[number]["key"];
 
 function ToggleSwitch({
   checked,
@@ -210,16 +229,17 @@ function ToggleSwitch({
 interface SettingsOverlayProps {
   open: boolean;
   onClose: () => void;
+  initialTab?: SettingsTab;
 }
 
-function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
-  const { user, token, logout } = useAuth();
+function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
+  const { user, token, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
   const { history: loginHistory, loading: historyLoading } = useLoginHistory();
   const isMobile = useIsMobile();
 
   const [editing, setEditing] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
   const [isClosing, setIsClosing] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [mobileView, setMobileView] = useState<"nav" | "content">("nav");
@@ -234,6 +254,32 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
           system: true,
         },
   );
+  const [privacyPrefs, setPrivacyPrefs] = useState<PrivacyPrefs>(() =>
+    typeof window !== "undefined"
+      ? loadPrivacyPrefs()
+      : {
+          essential: true,
+          functional: true,
+          analytics: false,
+          marketing: false,
+          decidedAt: null,
+        },
+  );
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [backupRemaining, setBackupRemaining] = useState(0);
+  const [totpLoading, setTotpLoading] = useState(false);
+  const [totpError, setTotpError] = useState<string | null>(null);
+  const [totpPhase, setTotpPhase] = useState<
+    "idle" | "setup" | "backup" | "disable"
+  >("idle");
+  const [setupToken, setSetupToken] = useState<string | null>(null);
+  const [otpauthUrl, setOtpauthUrl] = useState<string | null>(null);
+  const [manualSecret, setManualSecret] = useState<string | null>(null);
+  const [totpCode, setTotpCode] = useState("");
+  const [totpPassword, setTotpPassword] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const [exportLoading, setExportLoading] = useState<string | null>(null);
 
   const [name, setName] = useState(user?.name || "");
   const [nameLoading, setNameLoading] = useState(false);
@@ -270,14 +316,35 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
     if (open) {
       setIsVisible(true);
       setIsClosing(false);
-      setMobileView("nav");
+      setMobileView(initialTab ? "content" : "nav");
+      if (initialTab) setActiveTab(initialTab);
       setNotifPrefs(loadNotificationPrefs());
+      setPrivacyPrefs(loadPrivacyPrefs());
+      setExportMsg(null);
+      setTotpPhase("idle");
+      setTotpError(null);
+      setBackupCodes(null);
+      setTotpCode("");
+      setTotpPassword("");
       document.body.style.overflow = "hidden";
+
+      if (token) {
+        fetch(`${API_BASE}/auth/2fa/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (typeof d.enabled === "boolean") setTotpEnabled(d.enabled);
+            if (typeof d.backupCodesRemaining === "number")
+              setBackupRemaining(d.backupCodesRemaining);
+          })
+          .catch(() => {});
+      }
     }
     return () => {
       document.body.style.overflow = "";
     };
-  }, [open]);
+  }, [open, initialTab, token]);
 
   const updateNotifPref = <K extends keyof NotificationPrefs>(
     key: K,
@@ -288,6 +355,69 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
       saveNotificationPrefs(next);
       return next;
     });
+  };
+
+  const updatePrivacyPref = <K extends keyof PrivacyPrefs>(
+    key: K,
+    value: PrivacyPrefs[K],
+  ) => {
+    setPrivacyPrefs((prev) => {
+      const next = {
+        ...prev,
+        [key]: value,
+        essential: true as const,
+        decidedAt: new Date().toISOString(),
+      };
+      savePrivacyPrefs(next);
+      return next;
+    });
+  };
+
+  const exportAccountJson = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      account: {
+        id: user?.id,
+        email: user?.email,
+        name: user?.name,
+        role: user?.role,
+        createdAt: user?.createdAt,
+      },
+      note: "Selene account export (profile fields only).",
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `selene-account-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setExportMsg("Account JSON downloaded.");
+  };
+
+  const exportMeasurements = async (format: "csv" | "tsv") => {
+    if (!token) return;
+    setExportLoading(format);
+    setExportMsg(null);
+    try {
+      const res = await fetch(
+        `${API_BASE}/readings/export?format=${format}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `sensor-data-${new Date().toISOString().slice(0, 10)}.${format}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setExportMsg(`Measurements downloaded as ${format.toUpperCase()}.`);
+    } catch {
+      setExportMsg("Could not export measurements. Try Data Log.");
+    } finally {
+      setExportLoading(null);
+    }
   };
 
   useEffect(() => {
@@ -490,10 +620,10 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
 
   const tabContent = (
     <div className={isMobile ? "" : "max-w-xl mx-auto px-10 py-10"}>
-      {activeTab === "general" && (
+      {activeTab === "profile" && (
         <div>
           <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
-            My Account
+            My Profile
           </h2>
 
           <SectionHeading>Account Info</SectionHeading>
@@ -624,80 +754,6 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
               }
             />
           </div>
-
-          <SectionHeading>Danger Zone</SectionHeading>
-          <div className="border border-red-200 dark:border-red-800 rounded-xl p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <Trash2 size={18} className="text-red-500 dark:text-red-400" />
-              <div>
-                <p className="text-sm font-semibold text-red-600 dark:text-red-400">
-                  Delete Account
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Permanently delete your account and all associated data
-                </p>
-              </div>
-            </div>
-            {editing === "delete" ? (
-              <div className="space-y-3">
-                <p className="text-xs text-gray-600 dark:text-gray-300">
-                  To confirm, type{" "}
-                  <span className="font-mono font-semibold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-                    delete my account
-                  </span>{" "}
-                  below:
-                </p>
-                <input
-                  type="text"
-                  value={deleteConfirm}
-                  onChange={(e) => setDeleteConfirm(e.target.value)}
-                  autoComplete="off"
-                  className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-red-500 transition"
-                  placeholder="delete my account"
-                />
-                <input
-                  type="password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  autoComplete="new-password"
-                  className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-red-500 transition"
-                  placeholder="Confirm your password"
-                />
-                {deleteMsg && (
-                  <p className="text-xs flex items-center gap-1.5 font-medium text-red-500 dark:text-red-400">
-                    <AlertCircle size={12} />
-                    {deleteMsg.text}
-                  </p>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleDeleteAccount}
-                    disabled={
-                      deleteConfirm !== deleteConfirmText ||
-                      !deletePassword ||
-                      deleteLoading
-                    }
-                    className="px-4 py-2 text-sm font-semibold text-white bg-red-600 dark:bg-red-500 rounded-lg hover:bg-red-700 dark:hover:bg-red-600 disabled:opacity-50 transition"
-                  >
-                    {deleteLoading ? "Deleting..." : "Delete Account"}
-                  </button>
-                  <button
-                    onClick={handleCancel}
-                    className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => handleEdit("delete")}
-                className="px-4 py-2 text-sm font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition"
-              >
-                Delete Account
-              </button>
-            )}
-          </div>
         </div>
       )}
 
@@ -707,7 +763,7 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
             Login & Security
           </h2>
 
-          <SectionHeading>Password & Security</SectionHeading>
+          <SectionHeading>Password</SectionHeading>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             <SettingsRow
               label="Password"
@@ -775,6 +831,327 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
               label="Active Session"
               value="You're signed in on this device"
             />
+          </div>
+
+          <SectionHeading>Two-factor authentication</SectionHeading>
+          <div className="rounded-xl border border-gray-100 dark:border-gray-800 p-4 space-y-4">
+            <div className="flex items-start gap-3">
+              <Smartphone
+                size={20}
+                className="text-violet-500 shrink-0 mt-0.5"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Authenticator app (TOTP)
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                  Require a code from Google Authenticator, Authy, or similar
+                  after your password.
+                </p>
+                <p className="text-xs font-medium mt-2">
+                  Status:{" "}
+                  <span
+                    className={
+                      totpEnabled
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-gray-500 dark:text-gray-400"
+                    }
+                  >
+                    {totpEnabled
+                      ? `On · ${backupRemaining} backup code${backupRemaining === 1 ? "" : "s"} left`
+                      : "Off"}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            {totpError && (
+              <p className="text-xs font-medium text-red-500 dark:text-red-400 flex items-center gap-1.5">
+                <AlertCircle size={12} /> {totpError}
+              </p>
+            )}
+
+            {totpPhase === "idle" && !totpEnabled && (
+              <button
+                type="button"
+                disabled={totpLoading || !token}
+                onClick={async () => {
+                  if (!token) return;
+                  setTotpLoading(true);
+                  setTotpError(null);
+                  try {
+                    const res = await fetch(`${API_BASE}/auth/2fa/setup`, {
+                      method: "POST",
+                      headers: { Authorization: `Bearer ${token}` },
+                    });
+                    const data = await res.json();
+                    if (!res.ok)
+                      throw new Error(data.error || "Setup failed");
+                    setSetupToken(data.setupToken);
+                    setOtpauthUrl(data.otpauthUrl);
+                    setManualSecret(data.secret);
+                    setTotpPhase("setup");
+                  } catch (err: any) {
+                    setTotpError(err.message);
+                  } finally {
+                    setTotpLoading(false);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 disabled:opacity-50 transition"
+              >
+                {totpLoading ? "Starting…" : "Enable 2FA"}
+              </button>
+            )}
+
+            {totpPhase === "idle" && totpEnabled && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTotpPhase("disable");
+                    setTotpError(null);
+                    setTotpCode("");
+                    setTotpPassword("");
+                  }}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+                >
+                  Disable 2FA
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTotpPhase("disable");
+                    setTotpError(null);
+                    setTotpCode("");
+                    setTotpPassword("");
+                    // reuse disable form fields for regen with flag via editing
+                    setEditing("backup-regen");
+                  }}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                >
+                  New backup codes
+                </button>
+              </div>
+            )}
+
+            {totpPhase === "setup" && otpauthUrl && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                  Scan this QR with your authenticator app, then enter the
+                  6-digit code to confirm.
+                </p>
+                <div className="flex justify-center p-3 bg-white rounded-xl border border-gray-100 w-fit mx-auto">
+                  <QRCodeSVG value={otpauthUrl} size={160} />
+                </div>
+                {manualSecret && (
+                  <p className="text-[11px] text-center text-gray-500 dark:text-gray-400 break-all font-mono">
+                    Manual key: {manualSecret}
+                  </p>
+                )}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  placeholder="6-digit code"
+                  className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none tracking-widest"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={totpLoading}
+                    onClick={async () => {
+                      if (!token || !setupToken) return;
+                      setTotpLoading(true);
+                      setTotpError(null);
+                      try {
+                        const res = await fetch(
+                          `${API_BASE}/auth/2fa/enable`,
+                          {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({
+                              setupToken,
+                              code: totpCode.trim(),
+                            }),
+                          },
+                        );
+                        const data = await res.json();
+                        if (!res.ok)
+                          throw new Error(data.error || "Enable failed");
+                        setTotpEnabled(true);
+                        setBackupCodes(data.backupCodes || []);
+                        setBackupRemaining(
+                          (data.backupCodes || []).length,
+                        );
+                        setTotpPhase("backup");
+                        setTotpCode("");
+                        await refreshUser();
+                      } catch (err: any) {
+                        setTotpError(err.message);
+                      } finally {
+                        setTotpLoading(false);
+                      }
+                    }}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 disabled:opacity-50"
+                  >
+                    {totpLoading ? "Checking…" : "Confirm & enable"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTotpPhase("idle");
+                      setSetupToken(null);
+                      setOtpauthUrl(null);
+                      setManualSecret(null);
+                      setTotpCode("");
+                    }}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {totpPhase === "backup" && backupCodes && (
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300 leading-relaxed">
+                  Save these backup codes now — they won&apos;t be shown again.
+                  Each works once if you lose your phone.
+                </p>
+                <ul className="grid grid-cols-2 gap-1.5 font-mono text-xs text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                  {backupCodes.map((c) => (
+                    <li key={c}>{c}</li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTotpPhase("idle");
+                    setBackupCodes(null);
+                  }}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900"
+                >
+                  I saved my codes
+                </button>
+              </div>
+            )}
+
+            {totpPhase === "disable" && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  {editing === "backup-regen"
+                    ? "Confirm with password and app code to generate new backup codes."
+                    : "Confirm with password and app code to turn off 2FA."}
+                </p>
+                <input
+                  type="password"
+                  value={totpPassword}
+                  onChange={(e) => setTotpPassword(e.target.value)}
+                  placeholder="Current password"
+                  autoComplete="current-password"
+                  className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none"
+                />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  placeholder="Authenticator or backup code"
+                  className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none tracking-widest"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={totpLoading}
+                    onClick={async () => {
+                      if (!token) return;
+                      setTotpLoading(true);
+                      setTotpError(null);
+                      try {
+                        if (editing === "backup-regen") {
+                          const res = await fetch(
+                            `${API_BASE}/auth/2fa/backup-codes`,
+                            {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${token}`,
+                              },
+                              body: JSON.stringify({
+                                password: totpPassword,
+                                code: totpCode.trim(),
+                              }),
+                            },
+                          );
+                          const data = await res.json();
+                          if (!res.ok)
+                            throw new Error(data.error || "Failed");
+                          setBackupCodes(data.backupCodes || []);
+                          setBackupRemaining(
+                            (data.backupCodes || []).length,
+                          );
+                          setTotpPhase("backup");
+                          setEditing(null);
+                        } else {
+                          const res = await fetch(
+                            `${API_BASE}/auth/2fa/disable`,
+                            {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${token}`,
+                              },
+                              body: JSON.stringify({
+                                password: totpPassword,
+                                code: totpCode.trim(),
+                              }),
+                            },
+                          );
+                          const data = await res.json();
+                          if (!res.ok)
+                            throw new Error(data.error || "Failed");
+                          setTotpEnabled(false);
+                          setBackupRemaining(0);
+                          setTotpPhase("idle");
+                          await refreshUser();
+                        }
+                        setTotpCode("");
+                        setTotpPassword("");
+                      } catch (err: any) {
+                        setTotpError(err.message);
+                      } finally {
+                        setTotpLoading(false);
+                      }
+                    }}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 disabled:opacity-50"
+                  >
+                    {totpLoading
+                      ? "Working…"
+                      : editing === "backup-regen"
+                        ? "Generate codes"
+                        : "Disable 2FA"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTotpPhase("idle");
+                      setEditing(null);
+                      setTotpCode("");
+                      setTotpPassword("");
+                    }}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between gap-3 mt-8 mb-1">
@@ -849,16 +1226,19 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
             device.
           </p>
 
-          <SectionHeading>Master</SectionHeading>
+          <SectionHeading>Delivery</SectionHeading>
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             <div className="flex items-center justify-between gap-4 py-4">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Enable notifications
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  Pause everything in the bell without deleting history
-                </p>
+              <div className="flex items-start gap-3 min-w-0">
+                <Bell size={20} className="text-blue-500 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Enable notifications
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Pause everything in the bell without deleting history
+                  </p>
+                </div>
               </div>
               <ToggleSwitch
                 label="Enable notifications"
@@ -879,24 +1259,28 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
                 {
                   key: "energy" as const,
                   icon: Zap,
+                  iconClass: "text-amber-500",
                   title: "Energy alerts",
                   desc: "High load, wasteful fuzzy state, power anomalies",
                 },
                 {
                   key: "climate" as const,
                   icon: Thermometer,
+                  iconClass: "text-cyan-500",
                   title: "Climate alerts",
                   desc: "Hot/cold comfort extremes and humidity spikes",
                 },
                 {
                   key: "security" as const,
                   icon: Shield,
+                  iconClass: "text-violet-500",
                   title: "Security alerts",
                   desc: "New logins and account security events",
                 },
                 {
                   key: "system" as const,
                   icon: Activity,
+                  iconClass: "text-emerald-500",
                   title: "System alerts",
                   desc: "OTA firmware, MQTT, and service status",
                 },
@@ -909,12 +1293,10 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
                   className="flex items-center justify-between gap-4 py-4"
                 >
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="h-8 w-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0 mt-0.5">
-                      <Icon
-                        size={15}
-                        className="text-gray-600 dark:text-gray-300"
-                      />
-                    </div>
+                    <Icon
+                      size={20}
+                      className={`shrink-0 mt-0.5 ${row.iconClass}`}
+                    />
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-gray-900 dark:text-white">
                         {row.title}
@@ -933,6 +1315,227 @@ function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "privacy" && (
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
+            Privacy & Cookies
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            Aligned with common EU expectations (ePrivacy / GDPR): essential
+            processing always on; optional categories are your choice and can be
+            changed anytime.
+          </p>
+
+          <SectionHeading>Cookie categories</SectionHeading>
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="flex items-center justify-between gap-4 py-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Essential
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Sign-in, security, and load balancing — always required
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 shrink-0">
+                Always on
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4 py-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Functional
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Theme, notification prefs, and UI choices on this device
+                </p>
+              </div>
+              <ToggleSwitch
+                label="Functional cookies"
+                checked={privacyPrefs.functional}
+                onChange={(v) => updatePrivacyPref("functional", v)}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4 py-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Analytics
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Anonymous product metrics (reserved — not loaded today)
+                </p>
+              </div>
+              <ToggleSwitch
+                label="Analytics cookies"
+                checked={privacyPrefs.analytics}
+                onChange={(v) => updatePrivacyPref("analytics", v)}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4 py-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Marketing
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Third-party ads — Selene does not use these
+                </p>
+              </div>
+              <ToggleSwitch
+                label="Marketing cookies"
+                checked={privacyPrefs.marketing}
+                onChange={(v) => updatePrivacyPref("marketing", v)}
+              />
+            </div>
+          </div>
+          {privacyPrefs.decidedAt && (
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-4">
+              Last updated{" "}
+              {new Date(privacyPrefs.decidedAt).toLocaleString()}
+            </p>
+          )}
+        </div>
+      )}
+
+      {activeTab === "data" && (
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
+            Data & Export
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            Download a copy of your data or permanently remove your account
+            (GDPR-style access & erasure).
+          </p>
+
+          <SectionHeading>Export</SectionHeading>
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Account data
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Profile fields as JSON
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={exportAccountJson}
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition shrink-0"
+              >
+                <Download size={14} /> Download JSON
+              </button>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Measurement data
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Sensor readings (same as Data Log export)
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={exportLoading === "csv"}
+                  onClick={() => exportMeasurements("csv")}
+                  className="px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50"
+                >
+                  {exportLoading === "csv" ? "…" : "CSV"}
+                </button>
+                <button
+                  type="button"
+                  disabled={exportLoading === "tsv"}
+                  onClick={() => exportMeasurements("tsv")}
+                  className="px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition disabled:opacity-50"
+                >
+                  {exportLoading === "tsv" ? "…" : "TSV"}
+                </button>
+              </div>
+            </div>
+            {exportMsg && (
+              <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                {exportMsg}
+              </p>
+            )}
+          </div>
+
+          <SectionHeading>Danger zone</SectionHeading>
+          <div className="border border-red-200 dark:border-red-800 rounded-xl p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <Trash2 size={18} className="text-red-500 dark:text-red-400" />
+              <div>
+                <p className="text-sm font-semibold text-red-600 dark:text-red-400">
+                  Delete account
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Permanently delete your account and associated data
+                </p>
+              </div>
+            </div>
+            {editing === "delete" ? (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-600 dark:text-gray-300">
+                  To confirm, type{" "}
+                  <span className="font-mono font-semibold text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
+                    delete my account
+                  </span>{" "}
+                  below:
+                </p>
+                <input
+                  type="text"
+                  value={deleteConfirm}
+                  onChange={(e) => setDeleteConfirm(e.target.value)}
+                  autoComplete="off"
+                  className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-red-500 transition"
+                  placeholder="delete my account"
+                />
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  autoComplete="new-password"
+                  className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 outline-none focus:border-red-500 transition"
+                  placeholder="Confirm your password"
+                />
+                {deleteMsg && (
+                  <p className="text-xs flex items-center gap-1.5 font-medium text-red-500 dark:text-red-400">
+                    <AlertCircle size={12} />
+                    {deleteMsg.text}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDeleteAccount}
+                    disabled={
+                      deleteConfirm !== deleteConfirmText ||
+                      !deletePassword ||
+                      deleteLoading
+                    }
+                    className="px-4 py-2 text-sm font-semibold text-white bg-red-600 dark:bg-red-500 rounded-lg hover:bg-red-700 dark:hover:bg-red-600 disabled:opacity-50 transition"
+                  >
+                    {deleteLoading ? "Deleting..." : "Delete Account"}
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleEdit("delete")}
+                className="px-4 py-2 text-sm font-semibold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition"
+              >
+                Delete Account
+              </button>
+            )}
           </div>
         </div>
       )}

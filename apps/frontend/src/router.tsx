@@ -13,6 +13,8 @@ import { Analytics } from "@/pages/Analytics";
 import { AdminPage } from "@/pages/AdminPage";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
+import { ForgotPassword } from "@/pages/ForgotPassword";
+import { ResetPassword } from "@/pages/ResetPassword";
 import { Impressum } from "@/pages/Impressum";
 import { Glossary } from "@/pages/Glossary";
 
@@ -104,6 +106,18 @@ const registerRoute = createRoute({
   component: () => <Register />,
 });
 
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/forgot-password",
+  component: () => <ForgotPassword />,
+});
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reset-password",
+  component: () => <ResetPassword />,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   logRoute,
@@ -113,6 +127,8 @@ const routeTree = rootRoute.addChildren([
   glossaryRoute,
   loginRoute,
   registerRoute,
+  forgotPasswordRoute,
+  resetPasswordRoute,
 ]);
 
 export const router = createRouter({ routeTree });

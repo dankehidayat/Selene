@@ -1,7 +1,7 @@
 // apps/frontend/src/pages/Dashboard.tsx
 import { useState } from "react";
 import {
-  ResponsiveContainer,
+
   Line,
   XAxis,
   YAxis,
@@ -17,6 +17,7 @@ import { StatCard } from "@/components/StatCard";
 import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { PowerOverview } from "@/components/PowerOverview";
 import { ClimateOverview } from "@/components/ClimateOverview";
+import { StableResponsiveContainer as ResponsiveContainer } from "@/components/StableResponsiveContainer";
 import {
   useLiveReading,
   useReadingHistory,

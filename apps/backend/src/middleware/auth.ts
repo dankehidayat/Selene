@@ -19,6 +19,9 @@ export async function authenticate(
 
   try {
     const payload = verifyToken(token);
+    if (payload.purpose && payload.purpose !== "session") {
+      return reply.code(401).send({ error: "Invalid or expired token" });
+    }
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       select: { id: true, email: true, role: true, isActive: true },

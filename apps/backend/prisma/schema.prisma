@@ -13,16 +13,36 @@ enum UserRole {
 }
 
 model User {
-  id           String         @id @default(cuid())
-  email        String         @unique
-  password     String
-  name         String?
-  role         UserRole       @default(USER)
-  isActive     Boolean        @default(true)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  loginHistory LoginHistory[]
-  apiKeys      ApiKey[]
+  id            String         @id @default(cuid())
+  email         String         @unique
+  password      String
+  name          String?
+  role          UserRole       @default(USER)
+  isActive      Boolean        @default(true)
+  /// TOTP second factor
+  totpEnabled   Boolean        @default(false)
+  /// AES-GCM ciphertext (base64) of the authenticator secret
+  totpSecretEnc String?
+  /// JSON array of bcrypt-hashed one-time backup codes
+  totpBackupHashes String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  loginHistory  LoginHistory[]
+  apiKeys       ApiKey[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tokenHash])
+  @@index([userId])
 }
 
 model LoginHistory {

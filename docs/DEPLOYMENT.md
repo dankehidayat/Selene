@@ -49,10 +49,21 @@ git pull   # e.g. feat/modular-microservices
 # cp -n .env.example .env
 # cp -n apps/backend/.env.example apps/backend/.env
 
+# ── After pull: ensure email + 2FA vars exist (append if missing) ──
+# Use a *new* Resend key (never commit; rotate if leaked).
+# Root .env (compose substitution) AND apps/backend/.env (container env_file):
+#
+#   RESEND_API_KEY=re_xxxxxxxx
+#   RESEND_FROM=Selene <onboarding@resend.dev>
+#   APP_PUBLIC_URL=https://selene.dankehidayat.my.id
+#   TOTP_ISSUER=Selene
+
 sudo docker compose up -d --build
 # same as: sudo docker compose -f docker-compose.yml up -d --build
 
+# Apply Prisma schema (password reset tokens + 2FA columns)
 sudo docker exec selene-backend bunx prisma generate
+sudo docker exec selene-backend bunx prisma db push
 sudo docker logs -f selene-backend
 ```
 
@@ -60,6 +71,15 @@ Caddy on the host still proxies:
 
 - `/api/*`, `/docs*`, `/health` → `localhost:8787`
 - SPA → `localhost:4173`
+
+### Email (Resend) + 2FA env checklist
+
+| Variable | Where | Purpose |
+|----------|--------|---------|
+| `RESEND_API_KEY` | root `.env` + `apps/backend/.env` | Send password-reset mail |
+| `RESEND_FROM` | same | Verified sender (or `onboarding@resend.dev` for tests) |
+| `APP_PUBLIC_URL` | same | Base URL for reset links (no trailing slash) |
+| `TOTP_ISSUER` | same | Label in authenticator apps (`Selene`) |
 
 ---
 

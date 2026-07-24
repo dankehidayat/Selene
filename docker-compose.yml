@@ -94,6 +94,10 @@ services:
       - MQTT_TOPIC=${MQTT_TOPIC}
       - MQTT_USER=${MQTT_USER}
       - MQTT_PASSWORD=${MQTT_PASSWORD}
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - RESEND_FROM=${RESEND_FROM:-Selene <onboarding@resend.dev>}
+      - APP_PUBLIC_URL=${APP_PUBLIC_URL:-}
+      - TOTP_ISSUER=${TOTP_ISSUER:-Selene}
     ports:
       - "127.0.0.1:${BACKEND_PORT}:${BACKEND_PORT}"
     depends_on:
