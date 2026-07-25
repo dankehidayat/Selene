@@ -42,7 +42,7 @@ import {
   ConfidencePill,
   ForecastLegendHint,
 } from "@/components/ChartCard";
-import { StatCard, EST_COST_INFO } from "@/components/StatCard";
+import { StatCard, EST_COST_INFO, TOTAL_ENERGY_INFO } from "@/components/StatCard";
 import { InfoTip } from "@/components/InfoTip";
 import { useTabFromSearch } from "@/hooks/useTabFromSearch";
 import { useChartMaxPoints } from "@/hooks/useChartMaxPoints";
@@ -1202,6 +1202,8 @@ export function Analytics() {
               unit="kWh"
               icon={Activity}
               iconColor="text-cyan-500 dark:text-cyan-400"
+              infoTitle={TOTAL_ENERGY_INFO.title}
+              infoContent={TOTAL_ENERGY_INFO.content}
             />
             <StatCard
               label="Est. Cost"

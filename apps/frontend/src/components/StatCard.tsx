@@ -55,8 +55,14 @@ export function StatCard({
   );
 }
 
+export const TOTAL_ENERGY_INFO = {
+  title: "How total energy is calculated",
+  content:
+    "Total energy uses the PZEM-004T cumulative energy counter (Wh → kWh) — the same hardware total Blynk shows — by summing positive increments over the selected range (resets are handled). It is not a sum of every power sample × full hour, which overestimates when readings are sparse. Conversion: 1 kWh = 1000 Wh.",
+} as const;
+
 export const EST_COST_INFO = {
   title: "How estimated cost is calculated",
   content:
-    "Estimated cost = total energy (kWh) over the selected period × Rp 1,444.7 per kWh (PLN residential tariff approximation used by Selene). It is a guide, not a bill — actual rates may vary by region, block, and time of use.",
+    "Estimated cost = total energy (kWh) over the selected period × Rp 1.444,70 per kWh. Rate: PLN R-1/TR 1.300–2.200 VA non-subsidized residential, Triwulan III 2026 (Juli–September) — official ESDM/PLN flat tariff (unchanged). Energy itself comes from the PZEM cumulative Wh counter (same source as Blynk), not from summing power × full time buckets. Guide only — actual bills may add PPJ and admin fees.",
 } as const;

@@ -2,6 +2,18 @@
 import { Pool } from "pg";
 import { emaSmooth, lttb } from "./lib/lttb";
 
+/**
+ * PLN R-1/TR 1,300–2,200 VA official flat rate (Rp/kWh).
+ * Triwulan III 2026 (Juli–September): unchanged vs prior quarter (ESDM/PLN).
+ * Use the same figure for R-1 1300 VA and 2200 VA non-subsidized residential.
+ */
+export const PLN_RP_PER_KWH = 1444.7;
+
+/** Format estimated cost from kWh using the official PLN residential rate. */
+export function formatEstimatedCost(totalKwh: number): string {
+  return `Rp ${Math.round(totalKwh * PLN_RP_PER_KWH).toLocaleString("id-ID")}`;
+}
+
 const TIMESCALE_URL = process.env.TIMESCALE_URL;
 
 if (!TIMESCALE_URL) {
@@ -646,6 +658,90 @@ export async function getAllReadingsForAnalytics(
 }
 
 /**
+ * Energy (Wh) over [from, to] from the PZEM cumulative counter (`total_energy`).
+ * This matches Blynk/hardware lifetime Wh far better than integrating avg_power ×
+ * full bucket duration (which overestimates badly when samples are sparse).
+ *
+ * Handles meter resets: when the counter drops, treat it as a reset to 0 and
+ * continue summing positive increments.
+ * Returns null when there is no usable cumulative data (caller may fall back).
+ */
+export async function getCumulativeEnergyWh(
+  from: string,
+  to: string,
+): Promise<number | null> {
+  if (!pool) return null;
+
+  const result = await pool.query(
+    `WITH ordered AS (
+       SELECT time, total_energy AS e
+       FROM sensor_readings
+       WHERE time >= $1 AND time <= $2
+         AND total_energy IS NOT NULL
+     ),
+     deltas AS (
+       SELECT
+         e,
+         LAG(e) OVER (ORDER BY time ASC) AS prev
+       FROM ordered
+     )
+     SELECT
+       COUNT(*)::bigint AS n,
+       COALESCE(SUM(
+         CASE
+           WHEN prev IS NULL THEN 0
+           WHEN e + 1e-6 >= prev THEN e - prev
+           ELSE e
+         END
+       ), 0) AS energy_wh,
+       COALESCE(MAX(e), 0) AS max_e
+     FROM deltas`,
+    [from, to],
+  );
+
+  const row = result.rows[0];
+  if (!row || !row.n || Number(row.n) < 2) return null;
+
+  const wh = Number(row.energy_wh);
+  const maxE = Number(row.max_e);
+  if (!Number.isFinite(wh)) return null;
+
+  // Firmware never populated the counter (always 0) → let caller fall back
+  // to density-weighted power integration.
+  if (maxE <= 0 && wh <= 0) return null;
+
+  // Counter present: report 0 when it didn't move in-range (do NOT invent
+  // energy by multiplying sparse power samples by full bucket hours).
+  return Math.max(0, wh);
+}
+
+/**
+ * Density-weighted power integration (Wh) — fallback only when cumulative
+ * energy is unavailable. Weights each CAGG bucket by how full it is so a
+ * single sample in an hour is not treated as a full hour of that power.
+ */
+async function getIntegratedEnergyWhFromCagg(
+  view: string,
+  from: string,
+  to: string,
+  bucket: "1h" | "5m",
+): Promise<number> {
+  if (!pool) return 0;
+  // Nominal MQTT cadence ~every 5s → 720 samples/hour, 60 samples/5 min
+  const expectedN = bucket === "1h" ? 720 : 60;
+  const bucketHours = bucket === "1h" ? 1.0 : 5.0 / 60.0;
+  const result = await pool.query(
+    `SELECT COALESCE(SUM(
+       avg_power * LEAST(1.0, n::float / $3) * $4
+     ), 0) AS energy_wh
+     FROM ${view}
+     WHERE bucket >= $1 AND bucket <= $2`,
+    [from, to, expectedN, bucketHours],
+  );
+  return Math.max(0, Number(result.rows[0]?.energy_wh) || 0);
+}
+
+/**
  * Fast SQL summary from continuous aggregates (no full series into Node).
  * Falls back to series-based stats if CAGG empty.
  */
@@ -675,7 +771,9 @@ export async function getEnergySummaryFromCagg(
   const view = prefer1h || range !== "1h" ? (prefer1h ? CAGG_1H : CAGG_5M) : null;
   if (!view || !(await caggHasRows(view, from, to))) return null;
 
-  // Weighted averages by sample count n
+  const bucketKind: "1h" | "5m" = prefer1h ? "1h" : "5m";
+
+  // Weighted averages by sample count n (power/voltage stats only — not energy)
   const stats = await pool.query(
     `SELECT
       SUM(n)::bigint AS data_points,
@@ -686,16 +784,22 @@ export async function getEnergySummaryFromCagg(
       SUM(avg_cos_phi * n) / NULLIF(SUM(n), 0) AS avg_pf,
       SUM(avg_reactive * n) / NULLIF(SUM(n), 0) AS avg_reactive,
       MIN(min_power) AS min_power,
-      MAX(max_power) AS max_power,
-      -- energy Wh ≈ avg_power * hours_in_bucket; 5m = 1/12h, 1h = 1h
-      SUM(avg_power * CASE WHEN $3 = '1h' THEN 1.0 ELSE (5.0/60.0) END) AS energy_wh
+      MAX(max_power) AS max_power
     FROM ${view}
     WHERE bucket >= $1 AND bucket <= $2`,
-    [from, to, prefer1h ? "1h" : "5m"],
+    [from, to],
   );
 
   const s = stats.rows[0];
   if (!s || !s.data_points) return null;
+
+  // Prefer PZEM cumulative Wh (same source as Blynk). Fall back to
+  // density-weighted power integration only when the counter is missing.
+  const cumulativeWh = await getCumulativeEnergyWh(from, to);
+  const energyWh =
+    cumulativeWh != null
+      ? cumulativeWh
+      : await getIntegratedEnergyWhFromCagg(view, from, to, bucketKind);
 
   // Approximate median/std from bucket avgs (weighted not exact; fine for UI)
   const series = await pool.query(
@@ -736,7 +840,7 @@ export async function getEnergySummaryFromCagg(
     avgPower: +(peakMap.get(hour) ?? 0).toFixed(2),
   }));
 
-  const totalKwh = (Number(s.energy_wh) || 0) / 1000;
+  const totalKwh = energyWh / 1000;
   const avgReactive = Number(s.avg_reactive) || 0;
 
   return {
@@ -760,7 +864,7 @@ export async function getEnergySummaryFromCagg(
     },
     energy: {
       totalKwh: +totalKwh.toFixed(3),
-      estimatedCost: `Rp ${Math.round(totalKwh * 1444.7).toLocaleString()}`,
+      estimatedCost: formatEstimatedCost(totalKwh),
     },
     peakHours,
   };
@@ -804,85 +908,88 @@ export async function getEnergyInRange(
         ? "1 day"
         : "1 hour";
 
-  // Prefer hourly CAGG when bucketing by hour/day
-  if (
-    (bucketSize === "hour" || bucketSize === "day" || !bucketSize) &&
-    (await caggHasRows(CAGG_1H, from, to))
-  ) {
-    const outer =
-      bucketSize === "day"
-        ? "1 day"
-        : bucketSize === "month"
-          ? "1 month"
-          : "1 hour";
-    const result = await pool.query(
-      `WITH src AS (
-         SELECT bucket, avg_power
-         FROM ${CAGG_1H}
-         WHERE bucket >= $1 AND bucket <= $2
-       ),
-       rolled AS (
-         SELECT
-           time_bucket($3::interval, bucket) AS b,
-           AVG(avg_power) AS avg_power,
-           COUNT(*)::float AS hours
-         FROM src
-         GROUP BY 1
-       )
-       SELECT b AS bucket, avg_power, hours FROM rolled ORDER BY 1`,
-      [from, to, outer],
-    );
-    let points = result.rows.map((row: any) => ({
-      timestamp: new Date(row.bucket).toISOString(),
-      energy_kwh: +(Number(row.avg_power) * (Number(row.hours) || 1)).toFixed(1),
-    }));
-    const maxP = clampMaxPoints(maxPointsArg, 400);
-    if (points.length > maxP) {
-      points = lttb(
-        points,
-        maxP,
-        (p) => new Date(p.timestamp).getTime(),
-        (p) => p.energy_kwh,
-      );
-    }
-    return points;
-  }
-
+  // Prefer cumulative PZEM counter per outer bucket (matches Blynk Wh / 1000).
+  // Global LAG keeps continuity across bucket edges; delta is attributed to the
+  // later sample's bucket. Fall back to density-weighted power when empty.
   const result = await pool.query(
-    `WITH buckets AS (
+    `WITH samples AS (
        SELECT
          time_bucket($3::interval, time) AS bucket,
-         AVG(ac_power) AS avg_power
+         time,
+         total_energy,
+         ac_power
        FROM sensor_readings
        WHERE time >= $1 AND time <= $2
+     ),
+     energy_deltas AS (
+       SELECT
+         bucket,
+         total_energy AS e,
+         LAG(total_energy) OVER (ORDER BY time ASC) AS prev
+       FROM samples
+       WHERE total_energy IS NOT NULL
+     ),
+     energy_per_bucket AS (
+       SELECT
+         bucket,
+         COALESCE(SUM(
+           CASE
+             WHEN prev IS NULL THEN 0
+             WHEN e + 1e-6 >= prev THEN e - prev
+             ELSE e
+           END
+         ), 0) AS energy_wh
+       FROM energy_deltas
+       GROUP BY bucket
+     ),
+     power_per_bucket AS (
+       SELECT
+         bucket,
+         AVG(ac_power) AS avg_power,
+         COUNT(*)::float AS n
+       FROM samples
+       WHERE ac_power IS NOT NULL
        GROUP BY bucket
      )
      SELECT
-       bucket,
-       avg_power,
-       EXTRACT(
-         EPOCH FROM (
-           LEAD(bucket) OVER (ORDER BY bucket) - bucket
-         )
-       ) / 3600.0 AS hours
-     FROM buckets
-     ORDER BY bucket ASC`,
+       COALESCE(e.bucket, p.bucket) AS bucket,
+       e.energy_wh,
+       p.avg_power,
+       p.n
+     FROM energy_per_bucket e
+     FULL OUTER JOIN power_per_bucket p ON e.bucket = p.bucket
+     ORDER BY 1 ASC`,
     [from, to, interval],
   );
 
+  // Nominal samples per outer bucket (≈5s cadence) for density-weighted fallback
+  const expectedN =
+    bucketSize === "month"
+      ? 720 * 24 * 30
+      : bucketSize === "day"
+        ? 720 * 24
+        : 720;
   const fallbackHours =
     bucketSize === "month" ? 30 * 24 : bucketSize === "day" ? 24 : 1;
 
   let points = result.rows
-    .filter((row: any) => row.avg_power != null)
+    .filter((row: any) => row.bucket != null)
     .map((row: any) => {
-      const hours =
-        row.hours != null && Number(row.hours) > 0
-          ? Number(row.hours)
-          : fallbackHours;
+      const cumulativeWh = Number(row.energy_wh) || 0;
+      let energyKwh: number;
+      if (cumulativeWh > 0) {
+        energyKwh = cumulativeWh / 1000;
+      } else {
+        // Density-weighted: avg_power (W) × effective hours → Wh → kWh
+        const n = Number(row.n) || 0;
+        const frac = Math.min(1, n / expectedN);
+        const wh =
+          (Number(row.avg_power) || 0) * fallbackHours * frac;
+        energyKwh = wh / 1000;
+      }
       return {
         timestamp: new Date(row.bucket).toISOString(),
-        energy_kwh: +(Number(row.avg_power) * hours).toFixed(1),
+        energy_kwh: +energyKwh.toFixed(4),
       };
     });
 

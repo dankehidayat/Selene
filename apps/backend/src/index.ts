@@ -28,6 +28,8 @@ import {
   getExportData,
   getEnergyInRange,
   getEnergySummaryFromCagg,
+  getCumulativeEnergyWh,
+  formatEstimatedCost,
   clampMaxPoints,
 } from "./timescale";
 import { startMqttIngestor } from "./mqtt";
@@ -553,13 +555,27 @@ app.get(
       avgCosPhi = mean(cosPhis),
       avgReactive = mean(reactivePowers);
 
-    let totalEnergyKwh = 0;
-    for (let i = 1; i < data.length; i++) {
-      const dt =
-        (new Date(data[i].timestamp).getTime() -
-          new Date(data[i - 1].timestamp).getTime()) /
-        3600000;
-      totalEnergyKwh += ((data[i].acPower + data[i - 1].acPower) / 2000) * dt;
+    // Prefer PZEM cumulative Wh (same counter Blynk shows). Trapezoidal
+    // power integration only if the counter is missing from the series.
+    const cumulativeWh = await getCumulativeEnergyWh(
+      from.toISOString(),
+      to.toISOString(),
+    );
+    let totalEnergyKwh: number;
+    if (cumulativeWh != null) {
+      totalEnergyKwh = cumulativeWh / 1000;
+    } else {
+      totalEnergyKwh = 0;
+      for (let i = 1; i < data.length; i++) {
+        const dt =
+          (new Date(data[i].timestamp).getTime() -
+            new Date(data[i - 1].timestamp).getTime()) /
+          3600000;
+        // Cap gap so offline periods don't invent energy from last known power
+        const hours = Math.min(dt, 5 / 60);
+        totalEnergyKwh +=
+          ((data[i].acPower + data[i - 1].acPower) / 2000) * hours;
+      }
     }
 
     const hourlyUsage = new Map<number, { power: number; count: number }>();
@@ -598,7 +614,7 @@ app.get(
       },
       energy: {
         totalKwh: +totalEnergyKwh.toFixed(3),
-        estimatedCost: `Rp ${Math.round(totalEnergyKwh * 1444.7).toLocaleString()}`,
+        estimatedCost: formatEstimatedCost(totalEnergyKwh),
       },
       peakHours,
     };
