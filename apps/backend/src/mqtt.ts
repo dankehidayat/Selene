@@ -227,7 +227,25 @@ export function sendOtaCommand(
     size: fileSize,
   });
 
-  client.publish(topic, payload, { qos: 1 });
-  console.log(`[MQTT] OTA command sent to ${topic}: ${fileSize} bytes`);
+  // QoS 1, not retained (retained OTA would re-flash forever after reboot).
+  client.publish(topic, payload, { qos: 1, retain: false }, (err) => {
+    if (err) {
+      console.error(`[MQTT] OTA publish error on ${topic}:`, err.message);
+    }
+  });
+  console.log(
+    `[MQTT] OTA command published → ${topic} (${fileSize} bytes) url=${downloadUrl}`,
+  );
+  return true;
+}
+
+/** Generic command publish (status/reboot tests from ops). */
+export function sendNodeCommand(
+  nodeId: string,
+  command: Record<string, unknown>,
+) {
+  if (!client?.connected) return false;
+  const topic = commandTopic(nodeId);
+  client.publish(topic, JSON.stringify(command), { qos: 1, retain: false });
   return true;
 }

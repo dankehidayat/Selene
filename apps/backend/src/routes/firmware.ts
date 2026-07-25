@@ -11,9 +11,20 @@ interface PendingFirmware {
   size: number;
   uploadedAt: Date;
   expiresAt: Date;
+  /** How many times the OTA MQTT command was published */
+  publishCount: number;
+  lastPublishedAt: Date | null;
+  /** First byte served to a device (HTTPS download started) */
+  downloadStartedAt: Date | null;
 }
 
 const firmwareStore = new Map<string, PendingFirmware>();
+
+/** Keep binaries available long enough for slow Wi‑Fi OTA + retries */
+const FIRMWARE_TTL_MS = 15 * 60 * 1000;
+/** Re-publish MQTT ota command while binary is still pending */
+const OTA_REPUBLISH_MS = 12_000;
+const OTA_REPUBLISH_MAX = 25; // ~5 minutes of retries
 
 // Clean up expired firmware every minute
 setInterval(() => {
@@ -25,6 +36,29 @@ setInterval(() => {
     }
   }
 }, 60_000);
+
+// Re-push OTA MQTT commands so a briefly-busy ESP still gets the update
+setInterval(() => {
+  const now = Date.now();
+  for (const fw of firmwareStore.values()) {
+    if (now > fw.expiresAt.getTime()) continue;
+    // Stop nagging once the device has started downloading
+    if (fw.downloadStartedAt) continue;
+    if (fw.publishCount >= OTA_REPUBLISH_MAX) continue;
+    const last = fw.lastPublishedAt?.getTime() ?? 0;
+    if (now - last < OTA_REPUBLISH_MS) continue;
+
+    const downloadUrl = publicDownloadUrl(fw.nodeId);
+    const sent = sendOtaCommand(fw.nodeId, downloadUrl, fw.size);
+    if (sent) {
+      fw.publishCount += 1;
+      fw.lastPublishedAt = new Date();
+      console.log(
+        `[Firmware] Re-published OTA to ${fw.nodeId} (attempt ${fw.publishCount}/${OTA_REPUBLISH_MAX})`,
+      );
+    }
+  }
+}, 5_000);
 
 // ── OTA History ──────────────────────────────────────────
 interface OtaEntry {
@@ -38,6 +72,20 @@ interface OtaEntry {
 }
 
 const otaHistory: OtaEntry[] = [];
+
+function publicDownloadUrl(nodeId: string) {
+  const base =
+    process.env.PUBLIC_API_BASE?.replace(/\/$/, "") ||
+    "https://selene.dankehidayat.my.id/api";
+  return `${base}/firmware/download/${encodeURIComponent(nodeId)}`;
+}
+
+function publicCheckUrl(nodeId: string) {
+  const base =
+    process.env.PUBLIC_API_BASE?.replace(/\/$/, "") ||
+    "https://selene.dankehidayat.my.id/api";
+  return `${base}/firmware/check/${encodeURIComponent(nodeId)}`;
+}
 
 export async function registerFirmwareRoutes(app: FastifyInstance) {
   // ── Upload firmware (admin only) ──────────────────────
@@ -99,13 +147,17 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
       }
 
       const id = `${nodeId}-${Date.now()}`;
+      const now = new Date();
       firmwareStore.set(nodeId, {
         buffer,
         nodeId,
         filename,
         size: buffer.length,
-        uploadedAt: new Date(),
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+        uploadedAt: now,
+        expiresAt: new Date(now.getTime() + FIRMWARE_TTL_MS),
+        publishCount: 0,
+        lastPublishedAt: null,
+        downloadStartedAt: null,
       });
 
       otaHistory.unshift({
@@ -114,7 +166,7 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
         filename,
         size: buffer.length,
         status: "pending",
-        timestamp: new Date().toISOString(),
+        timestamp: now.toISOString(),
       });
       if (otaHistory.length > 50) otaHistory.pop();
 
@@ -123,8 +175,13 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
       );
       rememberNode(nodeId);
 
-      const downloadUrl = `https://selene.dankehidayat.my.id/api/firmware/download/${nodeId}`;
+      const downloadUrl = publicDownloadUrl(nodeId);
       const sent = sendOtaCommand(nodeId, downloadUrl, buffer.length);
+      const fw = firmwareStore.get(nodeId);
+      if (fw && sent) {
+        fw.publishCount = 1;
+        fw.lastPublishedAt = new Date();
+      }
 
       return {
         success: true,
@@ -132,20 +189,46 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
         nodeId,
         filename,
         size: buffer.length,
+        downloadUrl,
+        checkUrl: publicCheckUrl(nodeId),
         otaCommandSent: sent,
         message: sent
-          ? `OTA command sent to ${nodeId}. ESP32 will download and flash automatically.`
-          : `Firmware stored. MQTT not connected — OTA will be attempted on next ESP32 check-in.`,
+          ? `OTA command sent to ${nodeId}. Device will download over HTTPS (retries for ~5 min if offline briefly).`
+          : `Firmware stored. MQTT not connected — device can still pull via /api/firmware/check/${nodeId}, or OTA will retry when the broker is back.`,
       };
     },
   );
+
+  /**
+   * Device pull API (no auth): ESP can poll after MQTT connect or on a timer.
+   * Returns pending download URL if a binary is stored for this node.
+   */
+  app.get("/api/firmware/check/:nodeId", async (request) => {
+    const { nodeId } = request.params as { nodeId: string };
+    const fw = firmwareStore.get(nodeId);
+    if (!fw || new Date() > fw.expiresAt) {
+      return {
+        pending: false,
+        nodeId,
+      };
+    }
+    return {
+      pending: true,
+      nodeId,
+      filename: fw.filename,
+      size: fw.size,
+      url: publicDownloadUrl(nodeId),
+      expiresAt: fw.expiresAt.toISOString(),
+    };
+  });
 
   // ── ESP32 downloads firmware ──────────────────────────
   app.get("/api/firmware/download/:nodeId", async (request, reply) => {
     const { nodeId } = request.params as { nodeId: string };
     const fw = firmwareStore.get(nodeId);
 
-    if (!fw) {
+    if (!fw || new Date() > fw.expiresAt) {
+      if (fw) firmwareStore.delete(nodeId);
       return reply
         .code(404)
         .send({ error: "No firmware pending for this node" });
@@ -157,6 +240,7 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
         (e.status === "pending" || e.status === "downloading"),
     );
     if (entry) entry.status = "downloading";
+    if (!fw.downloadStartedAt) fw.downloadStartedAt = new Date();
 
     console.log(
       `[Firmware] ${nodeId} downloading ${fw.filename} (${(fw.size / 1024).toFixed(1)}KB)`,
@@ -167,11 +251,14 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
       "Content-Disposition",
       `attachment; filename="${fw.filename}"`,
     );
-    reply.header("Content-Length", fw.size);
+    reply.header("Content-Length", String(fw.size));
+    // Help dumb HTTP clients; avoid intermediary transforms
+    reply.header("Cache-Control", "no-store");
+    reply.header("X-Content-Type-Options", "nosniff");
 
-    // Full app image is returned in one buffer. ESP32 often reboots right after
-    // flash and never POSTs /firmware/result — that left UI stuck on "downloading".
-    // Mark success once the response is finished (or shortly after send).
+    // Keep the binary available for a while so a flaky ESP can retry the GET.
+    // Mark history success once the full response has been written; device may
+    // reboot without POSTing /firmware/result.
     const payload = fw.buffer;
     const markDelivered = () => {
       const hist = otaHistory.find(
@@ -185,11 +272,10 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
           `[Firmware] ${nodeId} full binary delivered (${(fw.size / 1024).toFixed(1)}KB) → status=success`,
         );
       }
-      firmwareStore.delete(nodeId);
+      // Do NOT delete immediately — leave until TTL or explicit result so
+      // HTTPUpdate retries still find the file.
     };
     reply.raw.once("finish", markDelivered);
-    // Fallback if 'finish' is not emitted for this payload path
-    setTimeout(markDelivered, 5000);
 
     return payload;
   });
@@ -229,6 +315,7 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
       }
     }
 
+    // On definitive result, drop the binary
     if (firmwareStore.has(nodeId)) {
       firmwareStore.delete(nodeId);
     }
@@ -262,6 +349,9 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
           size: fw.size,
           uploadedAt: fw.uploadedAt.toISOString(),
           expiresAt: fw.expiresAt.toISOString(),
+          publishCount: fw.publishCount,
+          lastPublishedAt: fw.lastPublishedAt?.toISOString() ?? null,
+          downloadStartedAt: fw.downloadStartedAt?.toISOString() ?? null,
         });
       }
       return { pending };

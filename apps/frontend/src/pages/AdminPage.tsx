@@ -210,7 +210,7 @@ export function AdminPage() {
         if (!silent) {
           appendLog(
             "warn",
-            "No nodes from backend right now — keeping previous list if any.",
+            "No nodes from backend right now. Keeping previous list if any.",
           );
         }
       } else {
@@ -339,7 +339,7 @@ export function AdminPage() {
 
       appendLog(
         "ok",
-        `Stored on server (${data.filename || selectedFile.name}, ${((data.size || selectedFile.size) / 1024).toFixed(1)} KB). Expires in ~5 min.`,
+        `Stored on server (${data.filename || selectedFile.name}, ${((data.size || selectedFile.size) / 1024).toFixed(1)} KB). Kept ~15 min for retries.`,
       );
 
       if (data.otaCommandSent) {
@@ -349,16 +349,20 @@ export function AdminPage() {
         );
         appendLog(
           "info",
-          "Waiting for ESP32 to download firmware over HTTPS (if OTA handler is in firmware)…",
+          "Server will re-publish the OTA command every ~12s until the device starts downloading (or ~5 min).",
+        );
+        appendLog(
+          "info",
+          "Waiting for ESP32 HTTPS download. LCD should show OTA queued/Downloading. Serial: OTA scheduled.",
         );
         appendLog(
           "warn",
-          "If the device has no OTA handler yet, it will ignore the command — serial/monitor will show nothing.",
+          "First-time devices need a USB flash of OTA-capable firmware once. After that, Admin upload works over MQTT.",
         );
       } else {
         appendLog(
           "warn",
-          "Firmware stored but MQTT command was NOT sent (broker disconnected).",
+          "Firmware stored but MQTT command was NOT sent (broker disconnected). Device can still pull via /api/firmware/check after the next deploy.",
         );
       }
 
@@ -372,11 +376,11 @@ export function AdminPage() {
       await loadHistory();
       await loadNodes(undefined, { silent: true });
 
-      // Poll history: pending → downloading → success/failed
+      // Poll history: pending → downloading → success/failed (~90s)
       let lastStatus = "";
       let sawDownload = false;
-      for (let i = 0; i < 12; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
         const hist = (await loadHistory()) ?? [];
         const entry = hist.find((e) => e.nodeId === targetNodeId);
         if (!entry) continue;
@@ -410,7 +414,7 @@ export function AdminPage() {
       if (lastStatus === "downloading") {
         appendLog(
           "warn",
-          "Still marked downloading — if the ESP already rebooted into the app, refresh history shortly (server marks success when the full file is sent).",
+          "Still marked downloading. If the ESP already rebooted into the app, refresh history shortly (server marks success when the full file is sent).",
         );
       }
     } catch (err: any) {
@@ -513,7 +517,7 @@ export function AdminPage() {
                     <option value="">
                       {nodesLoading
                         ? "Discovering nodes…"
-                        : "No nodes seen yet — enter ID below"}
+                        : "No nodes seen yet. Enter ID below"}
                     </option>
                   )}
                   {mqttNodes.map((n) => (
@@ -693,7 +697,7 @@ export function AdminPage() {
                 >
                   {otaLog.length === 0 ? (
                     <p className="text-gray-500">
-                      Idle — upload a .bin to see server steps here.
+                      Idle. Upload a .bin to see server steps here.
                     </p>
                   ) : (
                     otaLog.map((line, i) => (
@@ -764,7 +768,7 @@ export function AdminPage() {
                       HTTPUpdate
                     </code>
                     ) from the URL. Without that code in your sketch, the device
-                    will ignore the command — UI cannot force a flash.
+                    will ignore the command. UI cannot force a flash.
                   </p>
                 </div>
                 <div className="flex gap-3">
