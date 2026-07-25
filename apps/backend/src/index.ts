@@ -359,18 +359,6 @@ app.get(
       type?: string;
     };
 
-    if (range === "1h") {
-      const data = await getRecentLogs(60);
-      return data.reverse().map((r: any) => ({
-        timestamp: r.timestamp,
-        voltage: r.acVoltage,
-        power: r.acPower,
-        current: r.acCurrent,
-        temperature: r.temperature,
-        humidity: r.humidity,
-      }));
-    }
-
     const { from, to, bucketSize } = getRangeConfig(range);
 
     if (type === "energy") {
@@ -382,10 +370,11 @@ app.get(
       return energyData;
     }
 
+    // Pass UI range ("24h") so sampling uses adaptive intervals + LTTB + smooth
     return getReadingsInRange(
       from.toISOString(),
       to.toISOString(),
-      bucketSize ?? undefined,
+      range,
     );
   },
 );

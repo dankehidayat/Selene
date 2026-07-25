@@ -1556,7 +1556,10 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
 
         <div className="flex-1 overflow-y-auto flex flex-col">
           {mobileView === "nav" ? (
-            <div className="p-4 space-y-6 flex-1">
+            <div
+              key="settings-nav"
+              className="p-4 space-y-6 flex-1 animate-settingsNavIn"
+            >
               <div>
                 <p className="px-2 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
                   Account
@@ -1568,7 +1571,7 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
                       <button
                         key={item.key}
                         onClick={() => selectTab(item.key)}
-                        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+                        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition active:scale-[0.99]"
                       >
                         <Icon
                           size={18}
@@ -1591,7 +1594,12 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
               </div>
             </div>
           ) : (
-            <div className="p-4">{tabContent}</div>
+            <div
+              key={`settings-content-${activeTab}`}
+              className="p-4 animate-settingsPanelSlide"
+            >
+              {tabContent}
+            </div>
           )}
         </div>
       </div>
@@ -1685,8 +1693,12 @@ function SettingsOverlay({ open, onClose, initialTab }: SettingsOverlayProps) {
           </nav>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">{tabContent}</div>
+        {/* Content — animate on tab change */}
+        <div className="flex-1 overflow-y-auto">
+          <div key={activeTab} className="animate-settingsPanelSlide min-h-full">
+            {tabContent}
+          </div>
+        </div>
       </div>
     </div>
   );

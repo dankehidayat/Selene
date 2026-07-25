@@ -62,7 +62,7 @@ export const NAV_SEARCH_ITEMS: NavSearchItem[] = [
   },
   {
     id: "analytics-fuzzy",
-    label: "Energy Fuzzy (E-Fuzzy)",
+    label: "Energy Fuzzy (Ener. Fuzzy)",
     description: "Energy fuzzy classification",
     keywords: [
       "e-fuzzy",
@@ -77,7 +77,7 @@ export const NAV_SEARCH_ITEMS: NavSearchItem[] = [
   },
   {
     id: "analytics-climate-fuzzy",
-    label: "Climate Fuzzy (C-Fuzzy)",
+    label: "Climate Fuzzy (Clim. Fuzzy)",
     description: "Thermal comfort fuzzy analysis",
     keywords: [
       "c-fuzzy",

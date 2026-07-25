@@ -1,42 +1,56 @@
 // apps/frontend/src/lib/chartDomain.ts
-/** Y-axis domain with headroom so forecast lines aren't clipped at the top/bottom. */
-
-export type AxisDomain = [
-  number | "auto" | ((v: number) => number),
-  number | "auto" | ((v: number) => number),
-];
-
 /**
- * Soft padding for Recharts YAxis.
- * Prefer function form so domain tracks live + forecast series.
+ * Explicit [min, max] from series values (actual + forecast).
+ * Use this when charts plot multiple `data` arrays — Recharts function
+ * domains only see the primary series and mis-scale forecasts.
  */
-export function paddedYDomain(opts?: {
-  /** Extra fraction above max (default 12%). */
-  topPad?: number;
-  /** Extra fraction below min (default 8%). */
-  bottomPad?: number;
-  /** Absolute floor for padding when values are near 0. */
-  minPad?: number;
-  /** Force non-negative axis (power, humidity, etc.). */
-  clampZero?: boolean;
-}): AxisDomain {
-  const topPad = opts?.topPad ?? 0.12;
-  const bottomPad = opts?.bottomPad ?? 0.08;
-  const minPad = opts?.minPad ?? 1;
-  const clampZero = opts?.clampZero ?? false;
 
-  return [
-    (dataMin: number) => {
-      if (!Number.isFinite(dataMin)) return 0;
-      const span = Math.abs(dataMin) || minPad;
-      let lo = dataMin - Math.max(span * bottomPad, minPad);
-      if (clampZero) lo = Math.max(0, lo);
-      return lo;
-    },
-    (dataMax: number) => {
-      if (!Number.isFinite(dataMax)) return minPad;
-      const span = Math.abs(dataMax) || minPad;
-      return dataMax + Math.max(span * topPad, minPad);
-    },
-  ];
+export function computeDomain(
+  values: Array<number | null | undefined>,
+  opts?: {
+    /** Fraction of span to pad (default 10%). */
+    pad?: number;
+    minPad?: number;
+    floor?: number | null;
+    ceil?: number | null;
+  },
+): [number, number] {
+  const padFrac = opts?.pad ?? 0.1;
+  const minPad = opts?.minPad ?? 0.5;
+  const nums = values.filter(
+    (v): v is number => typeof v === "number" && Number.isFinite(v),
+  );
+
+  if (!nums.length) return [0, 1];
+
+  let min = Math.min(...nums);
+  let max = Math.max(...nums);
+
+  if (min === max) {
+    const d = Math.max(Math.abs(min) * 0.1, minPad);
+    min -= d;
+    max += d;
+  } else {
+    const span = max - min;
+    const pad = Math.max(span * padFrac, minPad);
+    min -= pad;
+    max += pad;
+  }
+
+  if (opts?.floor != null) min = Math.max(opts.floor, min);
+  if (opts?.ceil != null) max = Math.min(opts.ceil, max);
+  if (min >= max) max = min + minPad;
+
+  return [min, max];
+}
+
+/** Safe fallback when you only have the primary series. */
+export function paddedYDomain(_opts?: {
+  topPad?: number;
+  bottomPad?: number;
+  minPad?: number;
+  clampZero?: boolean;
+}): ["auto", "auto"] {
+  // Always auto — explicit computeDomain is preferred for forecast charts
+  return ["auto", "auto"];
 }

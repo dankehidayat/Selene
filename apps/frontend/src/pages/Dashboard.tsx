@@ -24,7 +24,7 @@ import {
 } from "@/services/api";
 import { useAuth } from "@/services/auth";
 import { ensembleForecast, confidenceBands } from "@/lib/forecast";
-import { paddedYDomain } from "@/lib/chartDomain";
+import { computeDomain } from "@/lib/chartDomain";
 
 const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
 const RANGE_LABELS: Record<string, string> = {
@@ -325,6 +325,60 @@ export function Dashboard() {
   const showConf = showForecast && avgConf > 0;
   const now = new Date().toISOString();
 
+  // Explicit domains from actual + forecast so lines aren't clipped/overscaled
+  const powerDomain = useMemo(
+    () =>
+      computeDomain(
+        [
+          ...history.map((h: any) => h.power),
+          ...pf.forecast.map((f) => f.value),
+          ...pb.upper.map((f) => f.value),
+          ...pb.lower.map((f) => f.value),
+        ],
+        { floor: 0, pad: 0.1, minPad: 1 },
+      ),
+    [history, pf.forecast, pb.upper, pb.lower],
+  );
+  const currentDomain = useMemo(
+    () =>
+      computeDomain(
+        [
+          ...history.map((h: any) => h.current),
+          ...cfc.forecast.map((f) => f.value),
+          ...cb.upper.map((f) => f.value),
+          ...cb.lower.map((f) => f.value),
+        ],
+        { floor: 0, pad: 0.1, minPad: 0.05 },
+      ),
+    [history, cfc.forecast, cb.upper, cb.lower],
+  );
+  const tempDomain = useMemo(
+    () =>
+      computeDomain(
+        [
+          ...ch.map((h: any) => h.temperature),
+          ...tf.forecast.map((f) => f.value),
+          ...tb.upper.map((f) => f.value),
+          ...tb.lower.map((f) => f.value),
+        ],
+        { pad: 0.12, minPad: 0.5 },
+      ),
+    [ch, tf.forecast, tb.upper, tb.lower],
+  );
+  const humidityDomain = useMemo(
+    () =>
+      computeDomain(
+        [
+          ...ch.map((h: any) => h.humidity),
+          ...hf.forecast.map((f) => f.value),
+          ...hb.upper.map((f) => f.value),
+          ...hb.lower.map((f) => f.value),
+        ],
+        { floor: 0, ceil: 100, pad: 0.08, minPad: 1 },
+      ),
+    [ch, hf.forecast, hb.upper, hb.lower],
+  );
+
   const localTz =
     typeof Intl !== "undefined"
       ? Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -506,7 +560,7 @@ export function Dashboard() {
                     axisLine={false}
                     tickLine={false}
                     width={45}
-                    domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                    domain={powerDomain}
                     allowDataOverflow={false}
                   />
                   <YAxis
@@ -516,7 +570,7 @@ export function Dashboard() {
                     axisLine={false}
                     tickLine={false}
                     width={45}
-                    domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                    domain={currentDomain}
                     allowDataOverflow={false}
                   />
                   <Tooltip content={<UnifiedTooltip range={chartRange} />} />
@@ -774,7 +828,7 @@ export function Dashboard() {
                     axisLine={false}
                     tickLine={false}
                     width={45}
-                    domain={paddedYDomain({ topPad: 0.15, bottomPad: 0.1 })}
+                    domain={tempDomain}
                     allowDataOverflow={false}
                   />
                   <YAxis
@@ -784,11 +838,7 @@ export function Dashboard() {
                     axisLine={false}
                     tickLine={false}
                     width={40}
-                    domain={paddedYDomain({
-                      clampZero: true,
-                      topPad: 0.12,
-                      minPad: 2,
-                    })}
+                    domain={humidityDomain}
                     allowDataOverflow={false}
                   />
                   <Tooltip content={<ClimateTooltip range={chartRange} />} />

@@ -1,5 +1,6 @@
 // apps/frontend/src/components/TopBar.tsx
 import {
+  BookOpen,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -24,6 +25,40 @@ function useIsApplePlatform(): boolean {
     setIsApple(/Mac|iPhone|iPad|iPod/i.test(p) || /Mac OS X/i.test(ua));
   }, []);
   return isApple;
+}
+
+/** Hide on scroll down, show on scroll up (desktop + mobile). */
+function useScrollTopBar() {
+  const [hidden, setHidden] = useState(false);
+  const lastY = useRef(0);
+  const ticking = useRef(false);
+
+  useEffect(() => {
+    lastY.current = window.scrollY || 0;
+
+    const onScroll = () => {
+      if (ticking.current) return;
+      ticking.current = true;
+      window.requestAnimationFrame(() => {
+        const y = window.scrollY || 0;
+        const delta = y - lastY.current;
+        if (y < 16) {
+          setHidden(false);
+        } else if (delta > 6 && y > 48) {
+          setHidden(true);
+        } else if (delta < -6) {
+          setHidden(false);
+        }
+        lastY.current = y;
+        ticking.current = false;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return hidden;
 }
 
 /** Keyboard shortcut hint: ⌘K on Apple, Ctrl+K elsewhere. */
@@ -55,6 +90,7 @@ export function TopBar({
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
   const isApple = useIsApplePlatform();
+  const barHidden = useScrollTopBar();
 
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -90,6 +126,7 @@ export function TopBar({
         e.preventDefault();
         inputRef.current?.focus();
         setOpen(true);
+        // Ensure bar is visible when opening search via shortcut
       }
     };
     document.addEventListener("keydown", onKey);
@@ -141,7 +178,11 @@ export function TopBar({
   const DesktopSidebarIcon = sidebarOpen ? PanelLeftClose : PanelLeftOpen;
 
   return (
-    <header className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-5 lg:px-8 py-4 border-b border-gray-200/50 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md sticky top-0 z-20">
+    <header
+      className={`grid grid-cols-[auto_1fr_auto] items-center gap-3 px-5 lg:px-8 py-4 border-b border-gray-200/50 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md sticky top-0 z-20 transition-transform duration-300 ease-out ${
+        barHidden && !open ? "-translate-y-full" : "translate-y-0"
+      }`}
+    >
       {/* Left: sidebar toggle */}
       <div className="flex items-center gap-2 shrink-0">
         <button
@@ -173,7 +214,10 @@ export function TopBar({
           />
           <input
             ref={inputRef}
-            type="search"
+            type="text"
+            inputMode="search"
+            enterKeyHint="search"
+            role="searchbox"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -182,7 +226,7 @@ export function TopBar({
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
             placeholder="Search pages, tabs…"
-            className="w-full h-10 pl-9 pr-[4.5rem] rounded-xl bg-gray-100/80 dark:bg-gray-800/80 border border-transparent focus:border-blue-300 dark:focus:border-blue-700 focus:bg-white dark:focus:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none transition"
+            className="search-field w-full h-10 pl-9 pr-[4.5rem] rounded-xl bg-gray-100/80 dark:bg-gray-800/80 border border-transparent focus:border-blue-300 dark:focus:border-blue-700 focus:bg-white dark:focus:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 outline-none transition"
             autoComplete="off"
             spellCheck={false}
             aria-label={`Search (${shortcutLabel})`}
@@ -255,11 +299,12 @@ export function TopBar({
       <div className="flex items-center justify-end gap-0.5 shrink-0">
         <a
           href="/docs"
-          className="inline-flex items-center px-2.5 py-2 rounded-lg text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+          className="inline-flex items-center justify-center p-2 sm:px-2.5 sm:py-2 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
           title="API documentation (Swagger)"
           aria-label="API documentation"
         >
-          Docs
+          <BookOpen size={18} className="sm:hidden" />
+          <span className="hidden sm:inline text-sm font-medium">Docs</span>
         </a>
         <NotificationBell />
       </div>

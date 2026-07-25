@@ -182,8 +182,12 @@ export function RangeSelect({
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <button className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition outline-none">
-          {labels?.[value] ?? value} <ChevronDown size={13} />
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500 active:scale-[0.98] transition outline-none"
+        >
+          {labels?.[value] ?? value}{" "}
+          <ChevronDown size={13} className="text-gray-500 dark:text-gray-400" />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

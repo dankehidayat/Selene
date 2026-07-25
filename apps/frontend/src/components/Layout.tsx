@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { SidebarContent } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { CookieBanner } from "./CookieBanner";
+import { NotificationToasts } from "./NotificationToasts";
 import {
   ShellLayoutProvider,
   useShellLayout,
@@ -103,6 +104,7 @@ function LayoutShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
+      <NotificationToasts />
       <CookieBanner />
     </div>
   );

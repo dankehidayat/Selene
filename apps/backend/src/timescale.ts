@@ -1,5 +1,6 @@
 // apps/backend/src/timescale.ts
 import { Pool } from "pg";
+import { emaSmooth, lttb } from "./lib/lttb";
 
 const TIMESCALE_URL = process.env.TIMESCALE_URL;
 
@@ -125,61 +126,114 @@ export async function getLatestReading(): Promise<any> {
   return result.rows[0] || null;
 }
 
+/**
+ * Range → fine sampling plan.
+ * Prefer last() samples (actual readings) over AVG, then LTTB for shape,
+ * then light EMA so charts stay precise without looking noisy.
+ */
+function getHistorySamplePlan(rangeOrBucket?: string): {
+  interval: string | null;
+  maxPoints: number;
+  smoothAlpha: number;
+  rawLimit: number;
+} {
+  // Legacy coarse buckets still supported
+  if (rangeOrBucket === "hour")
+    return {
+      interval: "15 minutes",
+      maxPoints: 400,
+      smoothAlpha: 0.2,
+      rawLimit: 10000,
+    };
+  if (rangeOrBucket === "day")
+    return {
+      interval: "1 hour",
+      maxPoints: 360,
+      smoothAlpha: 0.25,
+      rawLimit: 12000,
+    };
+  if (rangeOrBucket === "month")
+    return {
+      interval: "6 hours",
+      maxPoints: 300,
+      smoothAlpha: 0.28,
+      rawLimit: 12000,
+    };
+
+  switch (rangeOrBucket) {
+    case "1h":
+      return {
+        interval: null,
+        maxPoints: 480,
+        smoothAlpha: 0.12,
+        rawLimit: 3600,
+      };
+    case "24h":
+      return {
+        interval: "2 minutes",
+        maxPoints: 420,
+        smoothAlpha: 0.18,
+        rawLimit: 8000,
+      };
+    case "7d":
+      return {
+        interval: "15 minutes",
+        maxPoints: 400,
+        smoothAlpha: 0.22,
+        rawLimit: 10000,
+      };
+    case "30d":
+      return {
+        interval: "1 hour",
+        maxPoints: 360,
+        smoothAlpha: 0.25,
+        rawLimit: 12000,
+      };
+    case "3m":
+      return {
+        interval: "4 hours",
+        maxPoints: 320,
+        smoothAlpha: 0.28,
+        rawLimit: 12000,
+      };
+    case "6m":
+      return {
+        interval: "8 hours",
+        maxPoints: 300,
+        smoothAlpha: 0.3,
+        rawLimit: 12000,
+      };
+    case "1y":
+      return {
+        interval: "1 day",
+        maxPoints: 366,
+        smoothAlpha: 0.3,
+        rawLimit: 12000,
+      };
+    default:
+      return {
+        interval: "15 minutes",
+        maxPoints: 400,
+        smoothAlpha: 0.22,
+        rawLimit: 10000,
+      };
+  }
+}
+
 export async function getReadingsInRange(
   from: string,
   to: string,
-  bucketSize?: string,
+  /** UI range ("24h") or legacy bucket ("hour"|"day"|"month") */
+  rangeOrBucket?: string,
 ): Promise<any[]> {
   if (!pool) return [];
 
-  let query: string;
-  let params: any[] = [from, to];
+  const plan = getHistorySamplePlan(rangeOrBucket);
+  let rows: any[];
 
-  if (bucketSize === "hour") {
-    query = `
-      SELECT 
-        time_bucket('1 hour', time) AS bucket,
-        AVG(ac_voltage) AS voltage,
-        AVG(ac_power) AS power,
-        AVG(ac_current) AS current,
-        AVG(temperature) AS temperature,
-        AVG(humidity) AS humidity
-      FROM sensor_readings
-      WHERE time >= $1 AND time <= $2
-      GROUP BY bucket
-      ORDER BY bucket ASC
-    `;
-  } else if (bucketSize === "day") {
-    query = `
-      SELECT 
-        time_bucket('1 day', time) AS bucket,
-        AVG(ac_voltage) AS voltage,
-        AVG(ac_power) AS power,
-        AVG(ac_current) AS current,
-        AVG(temperature) AS temperature,
-        AVG(humidity) AS humidity
-      FROM sensor_readings
-      WHERE time >= $1 AND time <= $2
-      GROUP BY bucket
-      ORDER BY bucket ASC
-    `;
-  } else if (bucketSize === "month") {
-    query = `
-      SELECT 
-        time_bucket('1 month', time) AS bucket,
-        AVG(ac_voltage) AS voltage,
-        AVG(ac_power) AS power,
-        AVG(ac_current) AS current,
-        AVG(temperature) AS temperature,
-        AVG(humidity) AS humidity
-      FROM sensor_readings
-      WHERE time >= $1 AND time <= $2
-      GROUP BY bucket
-      ORDER BY bucket ASC
-    `;
-  } else {
-    query = `
-      SELECT 
+  if (!plan.interval) {
+    const result = await pool.query(
+      `SELECT
         time,
         ac_voltage AS voltage,
         ac_power AS power,
@@ -189,21 +243,75 @@ export async function getReadingsInRange(
       FROM sensor_readings
       WHERE time >= $1 AND time <= $2
       ORDER BY time ASC
-      LIMIT 2000
-    `;
+      LIMIT $3`,
+      [from, to, plan.rawLimit],
+    );
+    rows = result.rows;
+  } else {
+    // last(value, time) keeps a real measured sample per bucket (not an average)
+    const result = await pool.query(
+      `SELECT
+        time_bucket($3::interval, time) AS bucket,
+        last(ac_voltage, time) AS voltage,
+        last(ac_power, time) AS power,
+        last(ac_current, time) AS current,
+        last(temperature, time) AS temperature,
+        last(humidity, time) AS humidity
+      FROM sensor_readings
+      WHERE time >= $1 AND time <= $2
+      GROUP BY bucket
+      ORDER BY bucket ASC`,
+      [from, to, plan.interval],
+    );
+    rows = result.rows;
   }
 
-  const result = await pool.query(query, params);
-  return result.rows.map((row: any) => ({
+  let points = rows.map((row: any) => ({
     timestamp: row.bucket
       ? new Date(row.bucket).toISOString()
       : new Date(row.time).toISOString(),
-    voltage: Number(row.voltage?.toFixed(2)) || 0,
-    power: Number(row.power?.toFixed(2)) || 0,
-    current: Number(row.current?.toFixed(3)) || 0,
-    temperature: Number(row.temperature?.toFixed(2)) || 0,
-    humidity: Number(row.humidity?.toFixed(2)) || 0,
+    voltage: Number(Number(row.voltage).toFixed(3)) || 0,
+    power: Number(Number(row.power).toFixed(3)) || 0,
+    current: Number(Number(row.current).toFixed(4)) || 0,
+    temperature: Number(Number(row.temperature).toFixed(3)) || 0,
+    humidity: Number(Number(row.humidity).toFixed(3)) || 0,
   }));
+
+  // Shape-preserving downsample (keeps peaks/valleys; not min/max collapse)
+  if (points.length > plan.maxPoints) {
+    points = lttb(
+      points,
+      plan.maxPoints,
+      (p) => new Date(p.timestamp).getTime(),
+      (p) => p.power,
+    );
+  }
+
+  // Light EMA — softens sensor noise without flattening the series
+  if (points.length > 3 && plan.smoothAlpha > 0) {
+    const keys = [
+      "voltage",
+      "power",
+      "current",
+      "temperature",
+      "humidity",
+    ] as const;
+    for (const key of keys) {
+      const smoothed = emaSmooth(
+        points.map((p) => p[key]),
+        plan.smoothAlpha,
+      );
+      points = points.map((p, i) => ({
+        ...p,
+        [key]:
+          key === "current"
+            ? Number(smoothed[i].toFixed(4))
+            : Number(smoothed[i].toFixed(3)),
+      }));
+    }
+  }
+
+  return points;
 }
 
 export async function getRecentLogs(limit: number = 20): Promise<any[]> {

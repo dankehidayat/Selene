@@ -1,5 +1,5 @@
 // apps/frontend/src/pages/Analytics.tsx
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import * as Plot from "@observablehq/plot";
 
 import {
@@ -42,7 +42,7 @@ import { ChartCard, RangeSelect } from "@/components/ChartCard";
 import { StatCard, EST_COST_INFO } from "@/components/StatCard";
 import { InfoTip } from "@/components/InfoTip";
 import { useTabFromSearch } from "@/hooks/useTabFromSearch";
-import { paddedYDomain } from "@/lib/chartDomain";
+import { computeDomain } from "@/lib/chartDomain";
 import {
   useAnalyticsSummary,
   useReadingHistory,
@@ -1017,6 +1017,67 @@ export function Analytics() {
 
   const now = new Date().toISOString();
 
+  const energyPowerDomain = useMemo(
+    () =>
+      computeDomain(
+        [
+          ...enrichedHistory.map((h: any) => h.power),
+          ...pf.forecast.map((f) => f.value),
+          ...pb.upper.map((f) => f.value),
+          ...pb.lower.map((f) => f.value),
+        ],
+        { floor: 0, pad: 0.1, minPad: 1 },
+      ),
+    [enrichedHistory, pf.forecast, pb.upper, pb.lower],
+  );
+  const energyCurrentDomain = useMemo(
+    () =>
+      computeDomain(
+        enrichedHistory.map((h: any) => h.current),
+        { floor: 0, pad: 0.1, minPad: 0.05 },
+      ),
+    [enrichedHistory],
+  );
+  const energyKwhDomain = useMemo(
+    () =>
+      computeDomain(
+        [
+          ...energyHistory.map((h: any) => h.energy_kwh),
+          ...efc.forecast.map((f) => f.value),
+          ...efb.upper.map((f) => f.value),
+          ...efb.lower.map((f) => f.value),
+        ],
+        { floor: 0, pad: 0.1, minPad: 0.01 },
+      ),
+    [energyHistory, efc.forecast, efb.upper, efb.lower],
+  );
+  const envTempDomain = useMemo(
+    () =>
+      computeDomain(
+        [
+          ...envHistory.map((h: any) => h.temperature),
+          ...tf.forecast.map((f) => f.value),
+          ...tb.upper.map((f) => f.value),
+          ...tb.lower.map((f) => f.value),
+        ],
+        { pad: 0.12, minPad: 0.5 },
+      ),
+    [envHistory, tf.forecast, tb.upper, tb.lower],
+  );
+  const envHumidityDomain = useMemo(
+    () =>
+      computeDomain(
+        [
+          ...envHistory.map((h: any) => h.humidity),
+          ...hf.forecast.map((f) => f.value),
+          ...hb.upper.map((f) => f.value),
+          ...hb.lower.map((f) => f.value),
+        ],
+        { floor: 0, ceil: 100, pad: 0.08, minPad: 1 },
+      ),
+    [envHistory, hf.forecast, hb.upper, hb.lower],
+  );
+
   return (
     <div className="space-y-8 font-sans">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -1050,8 +1111,8 @@ export function Analytics() {
                     : tab.key === "environment"
                       ? "Env"
                       : tab.key === "fuzzy"
-                        ? "E-Fuzzy"
-                        : "C-Fuzzy"}
+                        ? "Ener. Fuzzy"
+                        : "Clim. Fuzzy"}
                 </span>
               </button>
             );
@@ -1210,7 +1271,7 @@ export function Analytics() {
                     axisLine={false}
                     tickLine={false}
                     width={50}
-                    domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                    domain={energyPowerDomain}
                     allowDataOverflow={false}
                   />
                   <YAxis
@@ -1220,7 +1281,7 @@ export function Analytics() {
                     axisLine={false}
                     tickLine={false}
                     width={45}
-                    domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                    domain={energyCurrentDomain}
                     allowDataOverflow={false}
                   />
                   <Tooltip content={<PowerTooltip range={energyRange} />} />
@@ -1504,7 +1565,7 @@ export function Analytics() {
                       axisLine={false}
                       tickLine={false}
                       width={50}
-                      domain={paddedYDomain({ clampZero: true, topPad: 0.15 })}
+                      domain={energyKwhDomain}
                       allowDataOverflow={false}
                       label={{
                         value: "Wh",
@@ -1867,7 +1928,7 @@ export function Analytics() {
                       axisLine={false}
                       tickLine={false}
                       width={36}
-                      domain={paddedYDomain({ topPad: 0.15, bottomPad: 0.1 })}
+                      domain={envTempDomain}
                       allowDataOverflow={false}
                     />
                     <YAxis
@@ -1877,11 +1938,7 @@ export function Analytics() {
                       axisLine={false}
                       tickLine={false}
                       width={36}
-                      domain={paddedYDomain({
-                        clampZero: true,
-                        topPad: 0.12,
-                        minPad: 2,
-                      })}
+                      domain={envHumidityDomain}
                       allowDataOverflow={false}
                     />
                     <Tooltip content={<EnvTooltip range={climateRange} />} />

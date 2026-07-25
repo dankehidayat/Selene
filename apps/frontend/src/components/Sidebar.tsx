@@ -209,15 +209,19 @@ export function SidebarContent({
               />
             </button>
 
-            {/* Theme toggle */}
+            {/* Theme toggle — higher contrast so Moon/Sun don't blend on mobile */}
             <button
               onClick={cycleTheme}
-              className={`p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all duration-200 shrink-0 active:scale-90 ${
+              className={`p-1.5 rounded-lg text-gray-600 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 shrink-0 active:scale-90 ${
                 themePulse ? "animate-themePop" : ""
               }`}
               title={themeTooltip}
+              aria-label={themeTooltip}
             >
-              <ThemeIcon size={15} className="transition-transform duration-200" />
+              <ThemeIcon
+                size={15}
+                className="transition-transform duration-200 stroke-[2]"
+              />
             </button>
           </div>
         ) : (

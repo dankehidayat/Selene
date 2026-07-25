@@ -137,10 +137,14 @@ export function Login() {
     <div className="min-h-screen bg-app-surface flex items-center justify-center p-4 font-sans">
       <button
         onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="fixed top-4 right-4 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition z-10"
+        className="fixed top-4 right-4 p-2 rounded-lg text-gray-700 dark:text-gray-100 bg-white/80 dark:bg-gray-800/80 border border-gray-200/80 dark:border-gray-600/80 hover:bg-white dark:hover:bg-gray-800 shadow-sm transition z-10"
         aria-label="Toggle theme"
       >
-        {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+        {theme === "dark" ? (
+          <Sun size={18} className="stroke-[2]" />
+        ) : (
+          <Moon size={18} className="stroke-[2]" />
+        )}
       </button>
 
       <div className="w-full max-w-4xl grid md:grid-cols-2 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-card overflow-hidden">

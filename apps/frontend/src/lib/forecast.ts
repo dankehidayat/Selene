@@ -182,13 +182,23 @@ export function ensembleForecast(
     return { forecast: lr.length ? lr : pat, confidence: 0.5 };
   const lrW = Math.max(0.1, Math.min(0.7, 1 - points / 200));
   const patW = 1 - lrW;
-  const forecast = lr.map((l, i) => ({
-    timestamp: l.timestamp,
-    value: Number(
-      (l.value * lrW + (pat[i]?.value ?? l.value) * patW).toFixed(2),
-    ),
-    isForecast: true,
-  }));
+  const histVals = data.map((d) => d.value).filter(Number.isFinite);
+  const histMin = histVals.length ? Math.min(...histVals) : 0;
+  const histMax = histVals.length ? Math.max(...histVals) : 1;
+  const histSpan = Math.max(histMax - histMin, Math.abs(histMax) * 0.15, 1);
+  // Keep forecast in a plausible band so the chart scale stays sane
+  const lo = Math.max(0, histMin - histSpan * 0.25);
+  const hi = histMax + histSpan * 0.5;
+
+  const forecast = lr.map((l, i) => {
+    const raw = l.value * lrW + (pat[i]?.value ?? l.value) * patW;
+    const clamped = Math.min(hi, Math.max(lo, raw));
+    return {
+      timestamp: l.timestamp,
+      value: Number(clamped.toFixed(2)),
+      isForecast: true,
+    };
+  });
   const dataScore = Math.min(1, data.length / 500);
   const horizonPenalty = Math.max(0.3, 1 - points / 200);
   return {

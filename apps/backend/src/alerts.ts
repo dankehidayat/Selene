@@ -13,11 +13,19 @@ interface SensorAlertInput {
   climateCategory: string;
 }
 
+/** Wrap node id so the UI can bold it (**node**). */
+function nodeLabel(nodeId: string): string {
+  return `**${nodeId}**`;
+}
+
 /**
  * Create energy/climate notifications for active users (deduped by title).
- * Called from MQTT ingest after a successful reading.
+ * Messages are plain-language for non-technical readers.
  */
-export async function evaluateSensorAlerts(input: SensorAlertInput): Promise<void> {
+export async function evaluateSensorAlerts(
+  input: SensorAlertInput,
+): Promise<void> {
+  const n = nodeLabel(input.nodeId);
   const alerts: Array<{
     type: "energy" | "climate";
     title: string;
@@ -28,22 +36,22 @@ export async function evaluateSensorAlerts(input: SensorAlertInput): Promise<voi
   if (input.energyCategory === "WASTEFUL") {
     alerts.push({
       type: "energy",
-      title: "High energy use detected",
-      message: `Node ${input.nodeId}: power ${input.acPower.toFixed(0)} W classified as WASTEFUL. Check loads and power factor.`,
+      title: "High electricity use",
+      message: `${n} is using more electricity than usual right now (${input.acPower.toFixed(0)} W). Check whether large devices were left on or something is running harder than expected.`,
     });
   }
   if (input.acPower >= 80) {
     alerts.push({
       type: "energy",
-      title: "Power spike",
-      message: `Node ${input.nodeId}: active power reached ${input.acPower.toFixed(1)} W.`,
+      title: "Sudden power jump",
+      message: `${n} just jumped to about ${input.acPower.toFixed(0)} W. Something may have turned on — take a quick look at nearby equipment if that was unexpected.`,
     });
   }
   if (input.cosPhi > 0 && input.cosPhi < 0.6 && input.acPower > 15) {
     alerts.push({
       type: "energy",
-      title: "Low power factor",
-      message: `Node ${input.nodeId}: cos φ = ${input.cosPhi.toFixed(2)}. Significant reactive power present.`,
+      title: "Inefficient power use",
+      message: `${n} is not using electricity efficiently. Extra “wasted” load on the line is common with motors, compressors, or older gear — worth a check if this keeps happening.`,
     });
   }
 
@@ -51,29 +59,29 @@ export async function evaluateSensorAlerts(input: SensorAlertInput): Promise<voi
   if (input.climateCategory === "HOT") {
     alerts.push({
       type: "climate",
-      title: "Hot environment",
-      message: `Node ${input.nodeId}: ${input.temperature.toFixed(1)}°C / ${input.humidity.toFixed(0)}% RH — thermal comfort is HOT.`,
+      title: "Room feels hot",
+      message: `${n} reports about ${input.temperature.toFixed(1)}°C with ${input.humidity.toFixed(0)}% humidity. The space may feel uncomfortably warm — cooling or better airflow can help.`,
     });
   }
   if (input.climateCategory === "COLD") {
     alerts.push({
       type: "climate",
-      title: "Cold environment",
-      message: `Node ${input.nodeId}: ${input.temperature.toFixed(1)}°C — thermal comfort is COLD.`,
+      title: "Room feels cold",
+      message: `${n} reports about ${input.temperature.toFixed(1)}°C. The space may feel chilly — heating or reducing drafts can help.`,
     });
   }
   if (input.humidity >= 75) {
     alerts.push({
       type: "climate",
-      title: "High humidity",
-      message: `Node ${input.nodeId}: humidity ${input.humidity.toFixed(0)}% RH. Consider ventilation.`,
+      title: "Air is very humid",
+      message: `${n} humidity is around ${input.humidity.toFixed(0)}%. The air may feel sticky — open a window or use a dehumidifier if you can.`,
     });
   }
   if (input.temperature >= 32) {
     alerts.push({
       type: "climate",
-      title: "High temperature",
-      message: `Node ${input.nodeId}: temperature ${input.temperature.toFixed(1)}°C exceeds comfort threshold.`,
+      title: "Temperature is high",
+      message: `${n} is about ${input.temperature.toFixed(1)}°C — warmer than a comfortable desk environment. Cooling or shade may help.`,
     });
   }
 

@@ -16,6 +16,7 @@ import {
   loadNotificationPrefs,
   type NotificationPrefs,
 } from "@/lib/notificationPrefs";
+import { formatNotificationMessage } from "@/lib/formatNotification";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 const POLL_INTERVAL = 45_000;
@@ -271,8 +272,8 @@ export function NotificationBell() {
                             <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
-                          {n.message}
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-3">
+                          {formatNotificationMessage(n.message)}
                         </p>
                         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                           {formatTime(n.createdAt)}
