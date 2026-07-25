@@ -16,7 +16,6 @@ import {
   Area,
   ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
 } from "recharts";
 import { StableResponsiveContainer as ResponsiveContainer } from "@/components/StableResponsiveContainer";
@@ -31,17 +30,17 @@ import {
   Gauge,
   PieChartIcon,
   Info,
-  ChevronDown,
   TrendingDown,
   Minus,
   Leaf,
   Brain,
   CloudSun,
 } from "lucide-react";
-import { ChartCard, RangeSelect } from "@/components/ChartCard";
+import { ChartCard, RangeSelect, ToggleControl } from "@/components/ChartCard";
 import { StatCard, EST_COST_INFO } from "@/components/StatCard";
 import { InfoTip } from "@/components/InfoTip";
 import { useTabFromSearch } from "@/hooks/useTabFromSearch";
+import { useChartMaxPoints } from "@/hooks/useChartMaxPoints";
 import { computeDomain } from "@/lib/chartDomain";
 import {
   useAnalyticsSummary,
@@ -394,73 +393,33 @@ function MembershipTooltip({
   );
 }
 
-/**
- * Disclosure with enter/exit fade+slide. Charts mount only while open so we
- * never animate Recharts height (that reflows hard). Close waits for exit anim.
- */
-function Accordion({
+/** Soft overlapping membership curves — always visible, no accordion bury. */
+function MembershipPanel({
   title,
-  defaultOpen,
+  description,
   children,
-  hint,
 }: {
   title: string;
-  defaultOpen?: boolean;
+  description: string;
   children: React.ReactNode;
-  hint?: string;
 }) {
-  const [open, setOpen] = useState(defaultOpen ?? false);
-  const [rendered, setRendered] = useState(defaultOpen ?? false);
-  const [leaving, setLeaving] = useState(false);
-
-  const toggle = () => {
-    if (open) {
-      setLeaving(true);
-      setOpen(false);
-      window.setTimeout(() => {
-        setRendered(false);
-        setLeaving(false);
-      }, 220);
-    } else {
-      setRendered(true);
-      setLeaving(false);
-      setOpen(true);
-    }
-  };
-
   return (
-    <div className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-card overflow-hidden">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-gray-50/80 dark:hover:bg-gray-800/50 transition"
-      >
-        <div className="min-w-0">
-          <p className="text-[15px] font-semibold text-gray-900 dark:text-white">
+    <section className="space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 px-0.5">
+        <div>
+          <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">
             {title}
+          </h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium max-w-xl">
+            {description}
           </p>
-          {hint ? (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
-              {hint}
-            </p>
-          ) : null}
         </div>
-        <ChevronDown
-          size={18}
-          className={`text-gray-400 shrink-0 transition-transform duration-200 ease-out ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {rendered ? (
-        <div
-          className={`px-5 pb-5 border-t border-gray-100 dark:border-gray-800 pt-4 ${
-            leaving ? "animate-accordionOut" : "animate-accordionIn"
-          }`}
-        >
-          {children}
-        </div>
-      ) : null}
-    </div>
+        <p className="text-[10px] uppercase tracking-wide font-semibold text-gray-400 dark:text-gray-500">
+          μ ∈ [0, 1]
+        </p>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -866,23 +825,50 @@ export function Analytics() {
     { key: "climate-fuzzy", label: "Climate Fuzzy", icon: CloudSun },
   ];
 
-  const { data: summary, isLoading: summaryLoading } = useAnalyticsSummary(
-    energyRange as any,
-  );
+  const isEnergyTab = activeTab === "energy";
+  const isEnvTab = activeTab === "environment";
+  const isFuzzyTab = activeTab === "fuzzy";
+  const isClimateFuzzyTab = activeTab === "climate-fuzzy";
+  const chartMaxPoints = useChartMaxPoints();
+
+  // Stage 1: lightweight summary/stats first
+  const {
+    data: summary,
+    isLoading: summaryLoading,
+    isSuccess: summaryReady,
+    isError: summaryFailed,
+  } = useAnalyticsSummary(energyRange as any, isEnergyTab);
+
+  const {
+    data: climate,
+    isLoading: climateLoading,
+    isSuccess: climateReady,
+    isError: climateFailed,
+  } = useClimateSummary(climateRange as any, isEnvTab);
+
+  // Stage 2: charts only after summary settles (progressive loading)
+  const energyChartsReady =
+    isEnergyTab && (summaryReady || summaryFailed || !summaryLoading);
+  const envChartsReady =
+    isEnvTab && (climateReady || climateFailed || !climateLoading);
+
   const { data: history = [], isLoading: historyLoading } = useReadingHistory(
     energyRange as any,
+    energyChartsReady,
+    chartMaxPoints,
   );
   const { data: energyHistory = [], isLoading: energyLoading } =
-    useEnergyHistory(energyRange as any);
-  const { data: climate, isLoading: climateLoading } = useClimateSummary(
-    climateRange as any,
+    useEnergyHistory(energyRange as any, energyChartsReady, chartMaxPoints);
+
+  // Fuzzy: distribution first wave; heavy static bits after distribution lands
+  const { data: fuzzy, isLoading: fuzzyLoading, isSuccess: fuzzyReady } =
+    useFuzzyDistribution(energyRange, isFuzzyTab);
+  const { data: membership } = useMembershipData(isFuzzyTab && fuzzyReady);
+  const { data: decisionSurface } = useDecisionSurface(
+    isFuzzyTab && fuzzyReady,
   );
-  const { data: fuzzy, isLoading: fuzzyLoading } =
-    useFuzzyDistribution(energyRange);
-  const { data: membership } = useMembershipData();
-  const { data: decisionSurface } = useDecisionSurface();
   const { data: climateFuzzy, isLoading: climateFuzzyLoading } =
-    useClimateFuzzyDistribution(climateFuzzyRange);
+    useClimateFuzzyDistribution(climateFuzzyRange, isClimateFuzzyTab);
 
   const allPeakHours = Array.from({ length: 24 }, (_, i) => {
     const found = summary?.peakHours?.find((p: any) => p.hour === i);
@@ -938,27 +924,37 @@ export function Analytics() {
         },
       ].filter((d) => d.value > 0)
     : [];
-  const blandAltmanData = fuzzy?.results
-    ? (() => {
-        const points = fuzzy.results.map((d: any) => {
-          const fs =
-            d.category === "ECONOMICAL" ? 1 : d.category === "NORMAL" ? 2 : 3;
-          const ts = d.power <= 30 ? 1 : d.power <= 70 ? 2 : 3;
-          return { mean: (fs + ts) / 2, difference: fs - ts };
-        });
-        const diffs = points.map((p) => p.difference);
-        const md = diffs.reduce((a, b) => a + b, 0) / diffs.length;
-        const sd = Math.sqrt(
-          diffs.reduce((a, b) => a + (b - md) ** 2, 0) / diffs.length,
-        );
-        return {
-          data: points,
-          meanDiff: +md.toFixed(3),
-          upperLoA: +(md + 1.96 * sd).toFixed(3),
-          lowerLoA: +(md - 1.96 * sd).toFixed(3),
-        };
-      })()
-    : null;
+  const blandAltmanData =
+    fuzzy?.blandAltman ??
+    (fuzzy?.boxSamples
+      ? null
+      : fuzzy?.results
+        ? (() => {
+            // Legacy fallback if API still returns results
+            const points = fuzzy.results.map((d: any) => {
+              const fs =
+                d.category === "ECONOMICAL"
+                  ? 1
+                  : d.category === "NORMAL"
+                    ? 2
+                    : 3;
+              const ts = d.power <= 30 ? 1 : d.power <= 70 ? 2 : 3;
+              return { mean: (fs + ts) / 2, difference: fs - ts };
+            });
+            const diffs = points.map((p) => p.difference);
+            const md = diffs.reduce((a, b) => a + b, 0) / (diffs.length || 1);
+            const sd = Math.sqrt(
+              diffs.reduce((a, b) => a + (b - md) ** 2, 0) /
+                (diffs.length || 1),
+            );
+            return {
+              data: points,
+              meanDiff: +md.toFixed(3),
+              upperLoA: +(md + 1.96 * sd).toFixed(3),
+              lowerLoA: +(md - 1.96 * sd).toFixed(3),
+            };
+          })()
+        : null);
 
   const pf = showForecast
     ? ensembleForecast(
@@ -1135,12 +1131,12 @@ export function Analytics() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowForecast(!showForecast)}
-                className={`text-xs font-medium px-2 py-1 rounded-lg border transition ${showForecast ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" : "text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+              <ToggleControl
+                pressed={showForecast}
+                onPressedChange={setShowForecast}
               >
                 Forecast
-              </button>
+              </ToggleControl>
               <RangeSelect
                 options={RANGE_OPTIONS}
                 value={energyRange}
@@ -1186,9 +1182,9 @@ export function Analytics() {
           </div>
 
           <ChartCard title="Energy Usage" chartId="chart-energy-usage">
-            {historyLoading ? (
+            {!energyChartsReady || historyLoading ? (
               <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                Loading...
+                Loading chart…
               </div>
             ) : enrichedHistory.length === 0 ? (
               <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -1205,7 +1201,7 @@ export function Analytics() {
                       <stop
                         offset="0%"
                         stopColor="#3B82F6"
-                        stopOpacity={0.15}
+                        stopOpacity={0.32}
                       />
                       <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
                     </linearGradient>
@@ -1219,7 +1215,7 @@ export function Analytics() {
                       <stop
                         offset="0%"
                         stopColor="#F59E0B"
-                        stopOpacity={0.15}
+                        stopOpacity={0.32}
                       />
                       <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
                     </linearGradient>
@@ -1348,7 +1344,8 @@ export function Analytics() {
                     dataKey="power"
                     fill="url(#ePowerGrad)"
                     stroke="none"
-                    hide
+                      tooltipType="none"
+                      legendType="none"
                   />
                   <Line
                     yAxisId="left"
@@ -1366,7 +1363,8 @@ export function Analytics() {
                     dataKey="current"
                     fill="url(#eCurrentGrad)"
                     stroke="none"
-                    hide
+                      tooltipType="none"
+                      legendType="none"
                   />
                   <Line
                     yAxisId="right"
@@ -1384,7 +1382,8 @@ export function Analytics() {
                     dataKey="apparentPower"
                     fill="url(#eApparentGrad)"
                     stroke="none"
-                    hide
+                      tooltipType="none"
+                      legendType="none"
                   />
                   <Line
                     yAxisId="left"
@@ -1402,7 +1401,8 @@ export function Analytics() {
                     dataKey="reactivePower"
                     fill="url(#eReactiveGrad)"
                     stroke="none"
-                    hide
+                      tooltipType="none"
+                      legendType="none"
                   />
                   <Line
                     yAxisId="left"
@@ -1421,8 +1421,9 @@ export function Analytics() {
                       data={pb.upper}
                       dataKey="value"
                       stroke="none"
+                      tooltipType="none"
+                      legendType="none"
                       fill="url(#epfb)"
-                      hide
                     />
                   )}
                   {pf.forecast.length > 0 && (
@@ -1526,7 +1527,7 @@ export function Analytics() {
                         <stop
                           offset="0%"
                           stopColor="#10B981"
-                          stopOpacity={0.2}
+                          stopOpacity={0.35}
                         />
                         <stop
                           offset="100%"
@@ -1583,7 +1584,7 @@ export function Analytics() {
                       payload={[
                         {
                           value: "Energy (Wh)",
-                          type: "rect",
+                          type: "line" as const,
                           color: "#10B981",
                           id: "energy_kwh",
                         },
@@ -1618,13 +1619,19 @@ export function Analytics() {
                       dataKey="energy_kwh"
                       fill="url(#energyGrad)"
                       stroke="none"
-                      hide
+                      tooltipType="none"
+                      legendType="none"
+                      isAnimationActive={false}
                     />
-                    <Bar
+                    <Line
+                      type="monotone"
                       dataKey="energy_kwh"
-                      fill="#10B981"
-                      radius={[4, 4, 0, 0]}
+                      stroke="#10B981"
+                      strokeWidth={2.5}
+                      dot={false}
+                      activeDot={{ r: 4, fill: "#10B981" }}
                       name="Energy (Wh)"
+                      isAnimationActive={false}
                     />
                     {efb.upper.length > 0 && (
                       <Area
@@ -1632,8 +1639,9 @@ export function Analytics() {
                         data={efb.upper}
                         dataKey="value"
                         stroke="none"
+                      tooltipType="none"
+                      legendType="none"
                         fill="url(#efbGrad)"
-                        hide
                       />
                     )}
                     {efc.forecast.length > 0 && (
@@ -1774,12 +1782,12 @@ export function Analytics() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowForecast(!showForecast)}
-                className={`text-xs font-medium px-2 py-1 rounded-lg border transition ${showForecast ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" : "text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+              <ToggleControl
+                pressed={showForecast}
+                onPressedChange={setShowForecast}
               >
                 Forecast
-              </button>
+              </ToggleControl>
               <RangeSelect
                 options={RANGE_OPTIONS}
                 value={climateRange}
@@ -1852,7 +1860,7 @@ export function Analytics() {
                         <stop
                           offset="0%"
                           stopColor="#EF4444"
-                          stopOpacity={0.15}
+                          stopOpacity={0.32}
                         />
                         <stop
                           offset="100%"
@@ -1870,7 +1878,7 @@ export function Analytics() {
                         <stop
                           offset="0%"
                           stopColor="#3B82F6"
-                          stopOpacity={0.15}
+                          stopOpacity={0.32}
                         />
                         <stop
                           offset="100%"
@@ -1988,7 +1996,8 @@ export function Analytics() {
                       dataKey="temperature"
                       fill="url(#climTempGrad)"
                       stroke="none"
-                      hide
+                      tooltipType="none"
+                      legendType="none"
                     />
                     <Line
                       yAxisId="left"
@@ -2005,7 +2014,8 @@ export function Analytics() {
                       dataKey="humidity"
                       fill="url(#climHumGrad)"
                       stroke="none"
-                      hide
+                      tooltipType="none"
+                      legendType="none"
                     />
                     <Line
                       yAxisId="right"
@@ -2023,8 +2033,9 @@ export function Analytics() {
                         data={tb.upper}
                         dataKey="value"
                         stroke="none"
+                      tooltipType="none"
+                      legendType="none"
                         fill="url(#ctfb)"
-                        hide
                       />
                     )}
                     {tf.forecast.length > 0 && (
@@ -2048,8 +2059,9 @@ export function Analytics() {
                         data={hb.upper}
                         dataKey="value"
                         stroke="none"
+                      tooltipType="none"
+                      legendType="none"
                         fill="url(#chfb)"
-                        hide
                       />
                     )}
                     {hf.forecast.length > 0 && (
@@ -2277,30 +2289,26 @@ export function Analytics() {
               chartId="chart-fuzzy-pie"
             >
               {fuzzyLoading ? (
-                <div className="flex h-[350px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   Loading...
                 </div>
               ) : pieData.length === 0 ? (
-                <div className="flex h-[350px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   No data
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <PieChart
-                    margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                  >
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                     <Pie
                       data={pieData}
                       cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={110}
-                      paddingAngle={4}
+                      cy="46%"
+                      innerRadius="42%"
+                      outerRadius="68%"
+                      paddingAngle={3}
                       dataKey="value"
-                      label={({ name, percent }) =>
-                        `${name} ${(percent * 100).toFixed(0)}%`
-                      }
-                      labelLine={{ stroke: "#9CA3AF", strokeWidth: 1 }}
+                      stroke="none"
+                      label={false}
                     >
                       {pieData.map((entry, index) => (
                         <Cell
@@ -2311,6 +2319,25 @@ export function Analytics() {
                     </Pie>
                     <Tooltip
                       content={<PieTooltip total={fuzzy?.total || 0} />}
+                    />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      wrapperStyle={{
+                        fontSize: 11,
+                        fontFamily: "Inter, sans-serif",
+                        paddingTop: 4,
+                      }}
+                      formatter={(value: string) => {
+                        const row = pieData.find((d) => d.name === value);
+                        const total = pieData.reduce((s, d) => s + d.value, 0) || 1;
+                        const pct = row
+                          ? Math.round((row.value / total) * 100)
+                          : 0;
+                        const label =
+                          value.charAt(0) + value.slice(1).toLowerCase();
+                        return `${label} ${pct}%`;
+                      }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -2357,16 +2384,21 @@ export function Analytics() {
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   Loading...
                 </div>
-              ) : !fuzzy?.results?.length ? (
+              ) : !(
+                  fuzzy?.boxSamples?.length || fuzzy?.results?.length
+                ) ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   No data
                 </div>
               ) : (
                 <ObsBoxPlot
-                  data={fuzzy.results.map((d: any) => ({
-                    power: d.power,
-                    category: d.category,
-                  }))}
+                  data={
+                    fuzzy.boxSamples ??
+                    fuzzy.results!.map((d: any) => ({
+                      power: d.power,
+                      category: d.category,
+                    }))
+                  }
                 />
               )}
             </ChartCard>
@@ -2385,26 +2417,56 @@ export function Analytics() {
               />
             )}
           </ChartCard>
-          <Accordion
+          <MembershipPanel
             title="Membership Functions"
-            hint="Static fuzzy sets for voltage & power — expand to inspect shapes"
-            defaultOpen={false}
+            description="How voltage and power map to fuzzy sets (μ). Overlaps are intentional — they define soft boundaries between categories."
           >
             <div className="grid lg:grid-cols-2 gap-4">
-              <ChartCard title="Voltage Membership" chartId="chart-voltage-mf">
+              <ChartCard title="Voltage" chartId="chart-voltage-mf">
                 {!membership ? (
-                  <div className="flex h-[220px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                  <div className="flex h-[200px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                     Loading…
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart
+                  <ResponsiveContainer width="100%" height={200}>
+                    <ComposedChart
                       data={membership.voltageMembership}
                       margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
                     >
-                      <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
-                      <XAxis dataKey="x" tick={CHART_FONT} />
-                      <YAxis domain={[0, 1]} tick={CHART_FONT} width={32} />
+                      <defs>
+                        <linearGradient id="mfLow" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#EF4444" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#EF4444" stopOpacity={0.04} />
+                        </linearGradient>
+                        <linearGradient id="mfVNorm" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#10B981" stopOpacity={0.04} />
+                        </linearGradient>
+                        <linearGradient id="mfHigh" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.04} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid vertical={false} stroke="#E5E7EB" strokeOpacity={0.3} />
+                      <XAxis
+                        dataKey="x"
+                        tick={CHART_FONT}
+                        axisLine={false}
+                        tickLine={false}
+                        label={{
+                          value: "V",
+                          position: "insideBottomRight",
+                          offset: -2,
+                          style: CHART_FONT,
+                        }}
+                      />
+                      <YAxis
+                        domain={[0, 1]}
+                        tick={CHART_FONT}
+                        width={28}
+                        axisLine={false}
+                        tickLine={false}
+                      />
                       <Tooltip content={<MembershipTooltip />} />
                       <Legend
                         wrapperStyle={{
@@ -2412,51 +2474,85 @@ export function Analytics() {
                           fontFamily: "Inter, sans-serif",
                         }}
                       />
-                      <Line
+                      <Area
                         type="monotone"
                         dataKey="low"
                         stroke="#EF4444"
                         strokeWidth={2}
+                        fill="url(#mfLow)"
                         dot={false}
                         isAnimationActive={false}
                         name="Low"
                       />
-                      <Line
+                      <Area
                         type="monotone"
                         dataKey="normal"
                         stroke="#10B981"
                         strokeWidth={2}
+                        fill="url(#mfVNorm)"
                         dot={false}
                         isAnimationActive={false}
                         name="Normal"
                       />
-                      <Line
+                      <Area
                         type="monotone"
                         dataKey="high"
                         stroke="#3B82F6"
                         strokeWidth={2}
+                        fill="url(#mfHigh)"
                         dot={false}
                         isAnimationActive={false}
                         name="High"
                       />
-                    </LineChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 )}
               </ChartCard>
-              <ChartCard title="Power Membership" chartId="chart-power-mf">
+              <ChartCard title="Power" chartId="chart-power-mf">
                 {!membership ? (
-                  <div className="flex h-[220px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                  <div className="flex h-[200px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                     Loading…
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart
+                  <ResponsiveContainer width="100%" height={200}>
+                    <ComposedChart
                       data={membership.powerMembership}
                       margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
                     >
-                      <CartesianGrid stroke="#E5E7EB" strokeOpacity={0.3} />
-                      <XAxis dataKey="x" tick={CHART_FONT} />
-                      <YAxis domain={[0, 1]} tick={CHART_FONT} width={32} />
+                      <defs>
+                        <linearGradient id="mfEco" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#2ecc71" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#2ecc71" stopOpacity={0.04} />
+                        </linearGradient>
+                        <linearGradient id="mfPNorm" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3498db" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#3498db" stopOpacity={0.04} />
+                        </linearGradient>
+                        <linearGradient id="mfWaste" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#e74c3c" stopOpacity={0.35} />
+                          <stop offset="100%" stopColor="#e74c3c" stopOpacity={0.04} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid vertical={false} stroke="#E5E7EB" strokeOpacity={0.3} />
+                      <XAxis
+                        dataKey="x"
+                        tick={CHART_FONT}
+                        axisLine={false}
+                        tickLine={false}
+                        label={{
+                          value: "W",
+                          position: "insideBottomRight",
+                          offset: -2,
+                          style: CHART_FONT,
+                        }}
+                      />
+                      <YAxis
+                        domain={[0, 1]}
+                        tick={CHART_FONT}
+                        width={28}
+                        axisLine={false}
+                        tickLine={false}
+                      />
                       <Tooltip content={<MembershipTooltip />} />
                       <Legend
                         wrapperStyle={{
@@ -2464,39 +2560,42 @@ export function Analytics() {
                           fontFamily: "Inter, sans-serif",
                         }}
                       />
-                      <Line
+                      <Area
                         type="monotone"
                         dataKey="economical"
                         stroke="#2ecc71"
                         strokeWidth={2}
+                        fill="url(#mfEco)"
                         dot={false}
                         isAnimationActive={false}
                         name="Economical"
                       />
-                      <Line
+                      <Area
                         type="monotone"
                         dataKey="normal"
                         stroke="#3498db"
                         strokeWidth={2}
+                        fill="url(#mfPNorm)"
                         dot={false}
                         isAnimationActive={false}
                         name="Normal"
                       />
-                      <Line
+                      <Area
                         type="monotone"
                         dataKey="wasteful"
                         stroke="#e74c3c"
                         strokeWidth={2}
+                        fill="url(#mfWaste)"
                         dot={false}
                         isAnimationActive={false}
                         name="Wasteful"
                       />
-                    </LineChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 )}
               </ChartCard>
             </div>
-          </Accordion>
+          </MembershipPanel>
         </section>
       )}
 
@@ -2589,30 +2688,26 @@ export function Analytics() {
               chartId="chart-climate-fuzzy-pie"
             >
               {climateFuzzyLoading ? (
-                <div className="flex h-[350px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   Loading...
                 </div>
               ) : climatePieData.length === 0 ? (
-                <div className="flex h-[350px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   No data
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={350}>
-                  <PieChart
-                    margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                  >
+                <ResponsiveContainer width="100%" height={280}>
+                  <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                     <Pie
                       data={climatePieData}
                       cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={110}
-                      paddingAngle={4}
+                      cy="46%"
+                      innerRadius="42%"
+                      outerRadius="68%"
+                      paddingAngle={3}
                       dataKey="value"
-                      label={({ name, percent }) =>
-                        `${name} ${(percent * 100).toFixed(0)}%`
-                      }
-                      labelLine={{ stroke: "#9CA3AF", strokeWidth: 1 }}
+                      stroke="none"
+                      label={false}
                     >
                       {climatePieData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -2620,6 +2715,26 @@ export function Analytics() {
                     </Pie>
                     <Tooltip
                       content={<PieTooltip total={climateFuzzy?.total || 0} />}
+                    />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={40}
+                      wrapperStyle={{
+                        fontSize: 11,
+                        fontFamily: "Inter, sans-serif",
+                        paddingTop: 4,
+                      }}
+                      formatter={(value: string) => {
+                        const row = climatePieData.find((d) => d.name === value);
+                        const total =
+                          climatePieData.reduce((s, d) => s + d.value, 0) || 1;
+                        const pct = row
+                          ? Math.round((row.value / total) * 100)
+                          : 0;
+                        const label =
+                          value.charAt(0) + value.slice(1).toLowerCase();
+                        return `${label} ${pct}%`;
+                      }}
                     />
                   </PieChart>
                 </ResponsiveContainer>

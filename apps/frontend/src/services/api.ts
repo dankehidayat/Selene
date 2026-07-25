@@ -1,5 +1,5 @@
 // apps/frontend/src/services/api.ts
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { EnergyReading } from "@/types/energy";
 
@@ -52,7 +52,8 @@ export function useLiveReading() {
 export interface AnalyticsSummary {
   range: string;
   dataPoints: number;
-  bucketSize: string;
+  bucketSize?: string;
+  source?: "cagg" | "series";
   timeSpan: { from: string; to: string };
   power: {
     average: number;
@@ -71,7 +72,7 @@ export interface AnalyticsSummary {
 export interface ClimateSummary {
   range: string;
   dataPoints: number;
-  bucketSize: string;
+  bucketSize?: string;
   temperature: {
     average: number;
     median: number;
@@ -101,15 +102,15 @@ export interface FuzzyDistribution {
   distribution: { ECONOMICAL: number; NORMAL: number; WASTEFUL: number };
   total: number;
   scatterData: Array<{ power: number; powerFactor: number; category: string }>;
-  results: Array<{
-    timestamp: string;
-    voltage: number;
+  /** Sampled points for box plots (Plot.boxX) — not full history */
+  boxSamples: Array<{ power: number; category: string }>;
+  boxPlot?: BoxPlotData[];
+  blandAltman?: BlandAltmanResult;
+  /** @deprecated use boxSamples / blandAltman */
+  results?: Array<{
+    timestamp?: string;
     power: number;
-    powerFactor: number;
-    reactivePower: number;
     category: string;
-    confidence: number;
-    strengths: { economical: number; normal: number; wasteful: number };
   }>;
 }
 
@@ -149,8 +150,10 @@ export interface BlandAltmanResult {
   lowerLoA: number;
 }
 
-async function fetchHistory(range: string) {
-  const res = await fetch(`${API_BASE}/readings/history?range=${range}`);
+async function fetchHistory(range: string, maxPoints?: number) {
+  const qs = new URLSearchParams({ range });
+  if (maxPoints != null) qs.set("maxPoints", String(maxPoints));
+  const res = await fetch(`${API_BASE}/readings/history?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch history");
   return res.json();
 }
@@ -207,16 +210,18 @@ async function fetchBlandAltman(range: string): Promise<BlandAltmanResult> {
   return res.json();
 }
 
-async function fetchEnergyHistory(range: string) {
-  const res = await fetch(
-    `${API_BASE}/readings/history?range=${range}&type=energy`,
-  );
+async function fetchEnergyHistory(range: string, maxPoints?: number) {
+  const qs = new URLSearchParams({ range, type: "energy" });
+  if (maxPoints != null) qs.set("maxPoints", String(maxPoints));
+  const res = await fetch(`${API_BASE}/readings/history?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch energy history");
   return res.json();
 }
 
 export function useReadingHistory(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
+  enabled = true,
+  maxPoints?: number,
 ) {
   return useQuery<
     Array<{
@@ -228,19 +233,25 @@ export function useReadingHistory(
       humidity: number;
     }>
   >({
-    queryKey: ["reading-history", range],
-    queryFn: () => fetchHistory(range),
+    queryKey: ["reading-history", range, maxPoints ?? "auto"],
+    queryFn: () => fetchHistory(range, maxPoints),
     refetchInterval: 30_000,
+    enabled,
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useEnergyHistory(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
+  enabled = true,
+  maxPoints?: number,
 ) {
   return useQuery<Array<{ timestamp: string; energy_kwh: number }>>({
-    queryKey: ["energy-history", range],
-    queryFn: () => fetchEnergyHistory(range),
+    queryKey: ["energy-history", range, maxPoints ?? "auto"],
+    queryFn: () => fetchEnergyHistory(range, maxPoints),
     refetchInterval: 30_000,
+    enabled,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -254,61 +265,78 @@ export function useRecentReadings(limit = 20) {
 
 export function useAnalyticsSummary(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
+  enabled = true,
 ) {
   return useQuery<AnalyticsSummary>({
     queryKey: ["analytics-summary", range],
     queryFn: () => fetchAnalyticsSummary(range),
     refetchInterval: 30_000,
+    enabled,
+    placeholderData: keepPreviousData,
+    // Summary is stage-1: prefer it over charts when both fire
+    staleTime: 15_000,
   });
 }
 
 export function useClimateSummary(
   range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
+  enabled = true,
 ) {
   return useQuery<ClimateSummary>({
     queryKey: ["climate-summary", range],
     queryFn: () => fetchClimateSummary(range),
     refetchInterval: 30_000,
+    enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
   });
 }
 
-export function useFuzzyDistribution(range: string) {
+export function useFuzzyDistribution(range: string, enabled = true) {
   return useQuery<FuzzyDistribution>({
     queryKey: ["fuzzy-distribution", range],
     queryFn: () => fetchFuzzyDistribution(range),
     refetchInterval: 60_000,
+    enabled,
+    placeholderData: keepPreviousData,
   });
 }
 
-export function useMembershipData() {
+export function useMembershipData(enabled = true) {
   return useQuery<MembershipData>({
     queryKey: ["membership-data"],
     queryFn: fetchMembershipData,
     staleTime: 5 * 60_000,
+    enabled,
   });
 }
 
-export function useDecisionSurface() {
+export function useDecisionSurface(enabled = true) {
   return useQuery<DecisionSurfacePoint[]>({
     queryKey: ["decision-surface"],
     queryFn: fetchDecisionSurface,
     staleTime: 5 * 60_000,
+    enabled,
   });
 }
 
-export function useBoxPlot(range: string) {
+export function useBoxPlot(range: string, enabled = true) {
   return useQuery<BoxPlotData[]>({
     queryKey: ["box-plot", range],
     queryFn: () => fetchBoxPlot(range),
     refetchInterval: 60_000,
+    enabled,
+    placeholderData: keepPreviousData,
   });
 }
 
-export function useBlandAltman(range: string) {
+export function useBlandAltman(range: string, enabled = true) {
   return useQuery<BlandAltmanResult>({
     queryKey: ["bland-altman", range],
     queryFn: () => fetchBlandAltman(range),
     refetchInterval: 60_000,
+    enabled,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -326,13 +354,6 @@ export interface ClimateFuzzyDistribution {
     humidity: number;
     category: string;
   }>;
-  results: Array<{
-    timestamp: string;
-    temperature: number;
-    humidity: number;
-    category: string;
-    confidence: number;
-  }>;
 }
 
 async function fetchClimateFuzzyDistribution(
@@ -345,11 +366,13 @@ async function fetchClimateFuzzyDistribution(
   return res.json();
 }
 
-export function useClimateFuzzyDistribution(range: string) {
+export function useClimateFuzzyDistribution(range: string, enabled = true) {
   return useQuery<ClimateFuzzyDistribution>({
     queryKey: ["climate-fuzzy-distribution", range],
     queryFn: () => fetchClimateFuzzyDistribution(range),
     refetchInterval: 60_000,
+    enabled,
+    placeholderData: keepPreviousData,
   });
 }
 

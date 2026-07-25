@@ -173,6 +173,13 @@ interface RangeSelectProps {
   labels?: Record<string, string>;
 }
 
+/** Shared chrome for compact chart/header controls (range, forecast, export). */
+export const controlBtnClass =
+  "inline-flex items-center gap-1.5 text-xs font-semibold text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500 active:scale-[0.98] transition outline-none";
+
+export const controlBtnActiveClass =
+  "inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 shadow-sm border transition outline-none active:scale-[0.98] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/40 border-blue-300 dark:border-blue-600";
+
 export function RangeSelect({
   options,
   value,
@@ -182,10 +189,7 @@ export function RangeSelect({
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500 active:scale-[0.98] transition outline-none"
-        >
+        <button type="button" className={controlBtnClass}>
           {labels?.[value] ?? value}{" "}
           <ChevronDown size={13} className="text-gray-500 dark:text-gray-400" />
         </button>
@@ -213,5 +217,29 @@ export function RangeSelect({
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
+  );
+}
+
+/** Pressable control matching RangeSelect (e.g. Forecast toggle). */
+export function ToggleControl({
+  pressed,
+  onPressedChange,
+  children,
+  className,
+}: {
+  pressed: boolean;
+  onPressedChange: (next: boolean) => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={() => onPressedChange(!pressed)}
+      className={cn(pressed ? controlBtnActiveClass : controlBtnClass, className)}
+    >
+      {children}
+    </button>
   );
 }

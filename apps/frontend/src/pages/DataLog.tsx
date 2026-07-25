@@ -11,8 +11,9 @@ import {
   FileSpreadsheet,
   FileText,
 } from "lucide-react";
-import { ChartCard } from "@/components/ChartCard";
+import { ChartCard, controlBtnClass } from "@/components/ChartCard";
 import { useRecentReadings } from "@/services/api";
+import { cn } from "@/lib/utils";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -113,8 +114,10 @@ export function DataLog() {
         </div>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
-            <button className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition outline-none">
-              <Download size={14} /> Export <ChevronDown size={14} />
+            <button type="button" className={cn(controlBtnClass, "px-3")}>
+              <Download size={13} className="text-gray-500 dark:text-gray-400" />
+              Export
+              <ChevronDown size={13} className="text-gray-500 dark:text-gray-400" />
             </button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>

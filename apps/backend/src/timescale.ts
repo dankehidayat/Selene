@@ -12,6 +12,12 @@ const pool = TIMESCALE_URL
   ? new Pool({ connectionString: TIMESCALE_URL, max: 10 })
   : null;
 
+/** Continuous aggregate names (materialized hourly / 5-minute rollups). */
+export const CAGG_1H = "sensor_readings_1h";
+export const CAGG_5M = "sensor_readings_5m";
+
+let caggReady = false;
+
 export async function initTimescaleDB(): Promise<void> {
   if (!pool) return;
 
@@ -42,22 +48,128 @@ export async function initTimescaleDB(): Promise<void> {
     `);
 
     await client.query(`
-      SELECT create_hypertable('sensor_readings', 'time', 
+      SELECT create_hypertable('sensor_readings', 'time',
         chunk_time_interval => INTERVAL '7 days',
         if_not_exists => TRUE
       );
     `);
 
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_readings_time_desc 
+      CREATE INDEX IF NOT EXISTS idx_readings_time_desc
       ON sensor_readings (time DESC);
     `);
 
+    await ensureContinuousAggregates(client);
     console.log("TimescaleDB initialized successfully");
   } catch (error) {
     console.error("TimescaleDB initialization failed:", error);
   } finally {
     client.release();
+  }
+}
+
+async function ensureContinuousAggregates(client: {
+  query: (sql: string, params?: unknown[]) => Promise<unknown>;
+}): Promise<void> {
+  const create5m = `
+    CREATE MATERIALIZED VIEW ${CAGG_5M}
+    WITH (timescaledb.continuous) AS
+    SELECT
+      time_bucket('5 minutes', time) AS bucket,
+      AVG(ac_voltage) AS avg_voltage,
+      AVG(ac_current) AS avg_current,
+      AVG(ac_power) AS avg_power,
+      AVG(cos_phi) AS avg_cos_phi,
+      AVG(reactive_power) AS avg_reactive,
+      AVG(apparent_power) AS avg_apparent,
+      AVG(temperature) AS avg_temperature,
+      AVG(humidity) AS avg_humidity,
+      MIN(ac_power) AS min_power,
+      MAX(ac_power) AS max_power,
+      last(temp_comfort, time) AS temp_comfort,
+      last(energy_status, time) AS energy_status,
+      COUNT(*)::int AS n
+    FROM sensor_readings
+    GROUP BY bucket
+    WITH NO DATA;
+  `;
+  const create1h = `
+    CREATE MATERIALIZED VIEW ${CAGG_1H}
+    WITH (timescaledb.continuous) AS
+    SELECT
+      time_bucket('1 hour', time) AS bucket,
+      AVG(ac_voltage) AS avg_voltage,
+      AVG(ac_current) AS avg_current,
+      AVG(ac_power) AS avg_power,
+      AVG(cos_phi) AS avg_cos_phi,
+      AVG(reactive_power) AS avg_reactive,
+      AVG(apparent_power) AS avg_apparent,
+      AVG(temperature) AS avg_temperature,
+      AVG(humidity) AS avg_humidity,
+      MIN(ac_power) AS min_power,
+      MAX(ac_power) AS max_power,
+      last(temp_comfort, time) AS temp_comfort,
+      last(energy_status, time) AS energy_status,
+      COUNT(*)::int AS n
+    FROM sensor_readings
+    GROUP BY bucket
+    WITH NO DATA;
+  `;
+
+  // Create if missing (already-exists is fine on restart)
+  for (const [name, sql] of [
+    [CAGG_5M, create5m],
+    [CAGG_1H, create1h],
+  ] as const) {
+    try {
+      await client.query(sql);
+      console.log(`Created continuous aggregate ${name}`);
+    } catch (e) {
+      const msg = (e as Error).message || "";
+      if (!/already exists/i.test(msg)) {
+        console.warn(`CAGG ${name}:`, msg);
+      }
+    }
+  }
+
+  // Refresh policies (ignore if already exist)
+  try {
+    await client.query(`
+      SELECT add_continuous_aggregate_policy('${CAGG_5M}',
+        start_offset => INTERVAL '2 days',
+        end_offset   => INTERVAL '5 minutes',
+        schedule_interval => INTERVAL '5 minutes',
+        if_not_exists => TRUE);
+    `);
+  } catch (e) {
+    console.warn("5m CAGG policy:", (e as Error).message);
+  }
+  try {
+    await client.query(`
+      SELECT add_continuous_aggregate_policy('${CAGG_1H}',
+        start_offset => INTERVAL '30 days',
+        end_offset   => INTERVAL '1 hour',
+        schedule_interval => INTERVAL '15 minutes',
+        if_not_exists => TRUE);
+    `);
+  } catch (e) {
+    console.warn("1h CAGG policy:", (e as Error).message);
+  }
+
+  // Backfill so existing data is usable immediately
+  try {
+    await client.query(
+      `CALL refresh_continuous_aggregate('${CAGG_5M}', NULL, NULL);`,
+    );
+    await client.query(
+      `CALL refresh_continuous_aggregate('${CAGG_1H}', NULL, NULL);`,
+    );
+    caggReady = true;
+    console.log("Continuous aggregates refreshed (5m + 1h)");
+  } catch (e) {
+    console.warn("CAGG refresh:", (e as Error).message);
+    // Views may still exist and fill on schedule
+    caggReady = true;
   }
 }
 
@@ -126,112 +238,142 @@ export async function getLatestReading(): Promise<any> {
   return result.rows[0] || null;
 }
 
+/** Clamp client-requested chart budget (~2× CSS pixels). */
+export function clampMaxPoints(requested?: number, fallback = 400): number {
+  if (requested == null || !Number.isFinite(requested)) return fallback;
+  return Math.max(48, Math.min(1000, Math.floor(requested)));
+}
+
 /**
- * Range → fine sampling plan.
- * Prefer last() samples (actual readings) over AVG, then LTTB for shape,
- * then light EMA so charts stay precise without looking noisy.
+ * Which store to read for a UI range.
+ * Short: raw. Medium: 5m CAGG. Long: 1h CAGG.
  */
-function getHistorySamplePlan(rangeOrBucket?: string): {
+function chartSourceForRange(rangeOrBucket?: string): {
+  source: "raw" | "5m" | "1h";
   interval: string | null;
-  maxPoints: number;
+  defaultMax: number;
   smoothAlpha: number;
   rawLimit: number;
 } {
-  // Legacy coarse buckets still supported
   if (rangeOrBucket === "hour")
     return {
-      interval: "15 minutes",
-      maxPoints: 400,
+      source: "5m",
+      interval: "5 minutes",
+      defaultMax: 400,
       smoothAlpha: 0.2,
-      rawLimit: 10000,
+      rawLimit: 4000,
     };
   if (rangeOrBucket === "day")
     return {
+      source: "1h",
       interval: "1 hour",
-      maxPoints: 360,
+      defaultMax: 360,
       smoothAlpha: 0.25,
-      rawLimit: 12000,
+      rawLimit: 4000,
     };
   if (rangeOrBucket === "month")
     return {
-      interval: "6 hours",
-      maxPoints: 300,
+      source: "1h",
+      interval: "1 hour",
+      defaultMax: 300,
       smoothAlpha: 0.28,
-      rawLimit: 12000,
+      rawLimit: 4000,
     };
 
   switch (rangeOrBucket) {
     case "1h":
       return {
+        source: "raw",
         interval: null,
-        maxPoints: 480,
+        defaultMax: 480,
         smoothAlpha: 0.12,
         rawLimit: 3600,
       };
     case "24h":
       return {
-        interval: "2 minutes",
-        maxPoints: 420,
+        source: "5m",
+        interval: "5 minutes",
+        defaultMax: 420,
         smoothAlpha: 0.18,
-        rawLimit: 8000,
+        rawLimit: 4000,
       };
     case "7d":
       return {
-        interval: "15 minutes",
-        maxPoints: 400,
+        source: "5m",
+        interval: "5 minutes",
+        defaultMax: 400,
         smoothAlpha: 0.22,
-        rawLimit: 10000,
+        rawLimit: 4000,
       };
     case "30d":
       return {
+        source: "1h",
         interval: "1 hour",
-        maxPoints: 360,
+        defaultMax: 360,
         smoothAlpha: 0.25,
-        rawLimit: 12000,
+        rawLimit: 4000,
       };
     case "3m":
       return {
-        interval: "4 hours",
-        maxPoints: 320,
+        source: "1h",
+        interval: "1 hour",
+        defaultMax: 320,
         smoothAlpha: 0.28,
-        rawLimit: 12000,
+        rawLimit: 4000,
       };
     case "6m":
       return {
-        interval: "8 hours",
-        maxPoints: 300,
+        source: "1h",
+        interval: "1 hour",
+        defaultMax: 300,
         smoothAlpha: 0.3,
-        rawLimit: 12000,
+        rawLimit: 4000,
       };
     case "1y":
       return {
-        interval: "1 day",
-        maxPoints: 366,
+        source: "1h",
+        interval: "1 hour",
+        defaultMax: 366,
         smoothAlpha: 0.3,
-        rawLimit: 12000,
+        rawLimit: 4000,
       };
     default:
       return {
+        source: "5m",
         interval: "15 minutes",
-        maxPoints: 400,
+        defaultMax: 400,
         smoothAlpha: 0.22,
-        rawLimit: 10000,
+        rawLimit: 4000,
       };
+  }
+}
+
+async function caggHasRows(view: string, from: string, to: string): Promise<boolean> {
+  if (!pool || !caggReady) return false;
+  try {
+    const r = await pool.query(
+      `SELECT 1 FROM ${view} WHERE bucket >= $1 AND bucket <= $2 LIMIT 1`,
+      [from, to],
+    );
+    return r.rows.length > 0;
+  } catch {
+    return false;
   }
 }
 
 export async function getReadingsInRange(
   from: string,
   to: string,
-  /** UI range ("24h") or legacy bucket ("hour"|"day"|"month") */
   rangeOrBucket?: string,
+  maxPointsArg?: number,
 ): Promise<any[]> {
   if (!pool) return [];
 
-  const plan = getHistorySamplePlan(rangeOrBucket);
+  const plan = chartSourceForRange(rangeOrBucket);
+  const maxPoints = clampMaxPoints(maxPointsArg, plan.defaultMax);
   let rows: any[];
 
-  if (!plan.interval) {
+  if (plan.source === "raw" || !plan.interval) {
     const result = await pool.query(
       `SELECT
         time,
@@ -246,48 +388,79 @@ export async function getReadingsInRange(
       LIMIT $3`,
       [from, to, plan.rawLimit],
     );
-    rows = result.rows;
+    rows = result.rows.map((row: any) => ({
+      timestamp: new Date(row.time).toISOString(),
+      voltage: Number(Number(row.voltage).toFixed(3)) || 0,
+      power: Number(Number(row.power).toFixed(3)) || 0,
+      current: Number(Number(row.current).toFixed(4)) || 0,
+      temperature: Number(Number(row.temperature).toFixed(3)) || 0,
+      humidity: Number(Number(row.humidity).toFixed(3)) || 0,
+    }));
   } else {
-    // last(value, time) keeps a real measured sample per bucket (not an average)
-    const result = await pool.query(
-      `SELECT
-        time_bucket($3::interval, time) AS bucket,
-        last(ac_voltage, time) AS voltage,
-        last(ac_power, time) AS power,
-        last(ac_current, time) AS current,
-        last(temperature, time) AS temperature,
-        last(humidity, time) AS humidity
-      FROM sensor_readings
-      WHERE time >= $1 AND time <= $2
-      GROUP BY bucket
-      ORDER BY bucket ASC`,
-      [from, to, plan.interval],
-    );
-    rows = result.rows;
+    const view = plan.source === "1h" ? CAGG_1H : CAGG_5M;
+    const useCagg = await caggHasRows(view, from, to);
+
+    if (useCagg) {
+      const result = await pool.query(
+        `SELECT
+          bucket,
+          avg_voltage AS voltage,
+          avg_power AS power,
+          avg_current AS current,
+          avg_temperature AS temperature,
+          avg_humidity AS humidity
+        FROM ${view}
+        WHERE bucket >= $1 AND bucket <= $2
+        ORDER BY bucket ASC`,
+        [from, to],
+      );
+      rows = result.rows.map((row: any) => ({
+        timestamp: new Date(row.bucket).toISOString(),
+        voltage: Number(Number(row.voltage).toFixed(3)) || 0,
+        power: Number(Number(row.power).toFixed(3)) || 0,
+        current: Number(Number(row.current).toFixed(4)) || 0,
+        temperature: Number(Number(row.temperature).toFixed(3)) || 0,
+        humidity: Number(Number(row.humidity).toFixed(3)) || 0,
+      }));
+    } else {
+      // Fallback: live time_bucket on raw hypertable
+      const result = await pool.query(
+        `SELECT
+          time_bucket($3::interval, time) AS bucket,
+          last(ac_voltage, time) AS voltage,
+          last(ac_power, time) AS power,
+          last(ac_current, time) AS current,
+          last(temperature, time) AS temperature,
+          last(humidity, time) AS humidity
+        FROM sensor_readings
+        WHERE time >= $1 AND time <= $2
+        GROUP BY bucket
+        ORDER BY bucket ASC`,
+        [from, to, plan.interval],
+      );
+      rows = result.rows.map((row: any) => ({
+        timestamp: new Date(row.bucket).toISOString(),
+        voltage: Number(Number(row.voltage).toFixed(3)) || 0,
+        power: Number(Number(row.power).toFixed(3)) || 0,
+        current: Number(Number(row.current).toFixed(4)) || 0,
+        temperature: Number(Number(row.temperature).toFixed(3)) || 0,
+        humidity: Number(Number(row.humidity).toFixed(3)) || 0,
+      }));
+    }
   }
 
-  let points = rows.map((row: any) => ({
-    timestamp: row.bucket
-      ? new Date(row.bucket).toISOString()
-      : new Date(row.time).toISOString(),
-    voltage: Number(Number(row.voltage).toFixed(3)) || 0,
-    power: Number(Number(row.power).toFixed(3)) || 0,
-    current: Number(Number(row.current).toFixed(4)) || 0,
-    temperature: Number(Number(row.temperature).toFixed(3)) || 0,
-    humidity: Number(Number(row.humidity).toFixed(3)) || 0,
-  }));
+  let points = rows;
 
-  // Shape-preserving downsample (keeps peaks/valleys; not min/max collapse)
-  if (points.length > plan.maxPoints) {
+  // Shape-preserving downsample to ~2× pixel width
+  if (points.length > maxPoints) {
     points = lttb(
       points,
-      plan.maxPoints,
+      maxPoints,
       (p) => new Date(p.timestamp).getTime(),
       (p) => p.power,
     );
   }
 
-  // Light EMA — softens sensor noise without flattening the series
   if (points.length > 3 && plan.smoothAlpha > 0) {
     const keys = [
       "voltage",
@@ -340,35 +513,247 @@ export async function getRecentLogs(limit: number = 20): Promise<any[]> {
   }));
 }
 
+/** Systematic sample — preserves time order. */
+export function systematicSample<T>(items: T[], max: number): T[] {
+  if (items.length <= max) return items;
+  const out: T[] = [];
+  const step = items.length / max;
+  for (let i = 0; i < max; i++) {
+    out.push(items[Math.min(items.length - 1, Math.floor(i * step))]);
+  }
+  return out;
+}
+
+function mapCaggToAnalytics(row: any) {
+  return {
+    timestamp: new Date(row.bucket).toISOString(),
+    acVoltage: Number(row.avg_voltage) || 0,
+    acCurrent: Number(row.avg_current) || 0,
+    acPower: Number(row.avg_power) || 0,
+    cosPhi: Number(row.avg_cos_phi) || 0,
+    apparentPower: Number(row.avg_apparent) || 0,
+    totalEnergy: 0,
+    frequency: 0,
+    reactivePower: Number(row.avg_reactive) || 0,
+    temperature: Number(row.avg_temperature) || 0,
+    humidity: Number(row.avg_humidity) || 0,
+    tempComfort: row.temp_comfort ?? "COMFORTABLE",
+    energyStatus: row.energy_status ?? "NORMAL",
+    n: Number(row.n) || 1,
+    minPower: Number(row.min_power) || 0,
+    maxPower: Number(row.max_power) || 0,
+  };
+}
+
+/**
+ * Analytics series — prefers continuous aggregates for ranges ≥ 24h.
+ * Caps classification set size so fuzzy never sees 12k raw points.
+ */
 export async function getAllReadingsForAnalytics(
   from: string,
   to: string,
+  rangeOrBucket?: string,
 ): Promise<any[]> {
   if (!pool) return [];
 
+  const longRange = ["24h", "7d", "30d", "3m", "6m", "1y", "day", "month"].includes(
+    rangeOrBucket ?? "",
+  );
+  const prefer1h = ["30d", "3m", "6m", "1y", "month"].includes(rangeOrBucket ?? "");
+  const maxClassify = prefer1h ? 2500 : longRange ? 3000 : 2000;
+
+  if (longRange) {
+    const view = prefer1h ? CAGG_1H : CAGG_5M;
+    if (await caggHasRows(view, from, to)) {
+      const result = await pool.query(
+        `SELECT * FROM ${view}
+         WHERE bucket >= $1 AND bucket <= $2
+         ORDER BY bucket ASC`,
+        [from, to],
+      );
+      let points = result.rows.map(mapCaggToAnalytics);
+      if (points.length > maxClassify) {
+        points = systematicSample(points, maxClassify);
+      }
+      return points;
+    }
+  }
+
+  // Short range or CAGG miss: raw with hard limit
+  if (rangeOrBucket === "1h" || !longRange) {
+    const result = await pool.query(
+      `SELECT * FROM sensor_readings
+       WHERE time >= $1 AND time <= $2
+       ORDER BY time ASC
+       LIMIT $3`,
+      [from, to, maxClassify],
+    );
+    return result.rows.map((row: any) => ({
+      timestamp: new Date(row.time).toISOString(),
+      acVoltage: row.ac_voltage,
+      acCurrent: row.ac_current,
+      acPower: row.ac_power,
+      cosPhi: row.cos_phi,
+      apparentPower: row.apparent_power,
+      totalEnergy: row.total_energy,
+      frequency: row.frequency,
+      reactivePower: row.reactive_power,
+      temperature: row.temperature,
+      humidity: row.humidity,
+      tempComfort: row.temp_comfort,
+      energyStatus: row.energy_status,
+      n: 1,
+    }));
+  }
+
+  // Fallback time_bucket on raw
+  const interval = prefer1h ? "1 hour" : "5 minutes";
   const result = await pool.query(
-    `SELECT * FROM sensor_readings WHERE time >= $1 AND time <= $2 ORDER BY time ASC`,
+    `SELECT
+      time_bucket($3::interval, time) AS bucket,
+      AVG(ac_voltage) AS avg_voltage,
+      AVG(ac_current) AS avg_current,
+      AVG(ac_power) AS avg_power,
+      AVG(cos_phi) AS avg_cos_phi,
+      AVG(reactive_power) AS avg_reactive,
+      AVG(apparent_power) AS avg_apparent,
+      AVG(temperature) AS avg_temperature,
+      AVG(humidity) AS avg_humidity,
+      MIN(ac_power) AS min_power,
+      MAX(ac_power) AS max_power,
+      last(temp_comfort, time) AS temp_comfort,
+      last(energy_status, time) AS energy_status,
+      COUNT(*)::int AS n
+    FROM sensor_readings
+    WHERE time >= $1 AND time <= $2
+    GROUP BY bucket
+    ORDER BY bucket ASC`,
+    [from, to, interval],
+  );
+  let points = result.rows.map(mapCaggToAnalytics);
+  if (points.length > maxClassify) points = systematicSample(points, maxClassify);
+  return points;
+}
+
+/**
+ * Fast SQL summary from continuous aggregates (no full series into Node).
+ * Falls back to series-based stats if CAGG empty.
+ */
+export async function getEnergySummaryFromCagg(
+  from: string,
+  to: string,
+  range: string,
+): Promise<null | {
+  dataPoints: number;
+  timeSpan: { from: string; to: string };
+  power: {
+    average: number;
+    median: number;
+    stdDeviation: number;
+    min: number;
+    max: number;
+  };
+  voltage: { average: number };
+  powerFactor: { average: number };
+  reactivePower: { average: number; ratio: number };
+  energy: { totalKwh: number; estimatedCost: string };
+  peakHours: Array<{ hour: number; avgPower: number }>;
+}> {
+  if (!pool) return null;
+
+  const prefer1h = ["30d", "3m", "6m", "1y"].includes(range);
+  const view = prefer1h || range !== "1h" ? (prefer1h ? CAGG_1H : CAGG_5M) : null;
+  if (!view || !(await caggHasRows(view, from, to))) return null;
+
+  // Weighted averages by sample count n
+  const stats = await pool.query(
+    `SELECT
+      SUM(n)::bigint AS data_points,
+      MIN(bucket) AS t_from,
+      MAX(bucket) AS t_to,
+      SUM(avg_power * n) / NULLIF(SUM(n), 0) AS avg_power,
+      SUM(avg_voltage * n) / NULLIF(SUM(n), 0) AS avg_voltage,
+      SUM(avg_cos_phi * n) / NULLIF(SUM(n), 0) AS avg_pf,
+      SUM(avg_reactive * n) / NULLIF(SUM(n), 0) AS avg_reactive,
+      MIN(min_power) AS min_power,
+      MAX(max_power) AS max_power,
+      -- energy Wh ≈ avg_power * hours_in_bucket; 5m = 1/12h, 1h = 1h
+      SUM(avg_power * CASE WHEN $3 = '1h' THEN 1.0 ELSE (5.0/60.0) END) AS energy_wh
+    FROM ${view}
+    WHERE bucket >= $1 AND bucket <= $2`,
+    [from, to, prefer1h ? "1h" : "5m"],
+  );
+
+  const s = stats.rows[0];
+  if (!s || !s.data_points) return null;
+
+  // Approximate median/std from bucket avgs (weighted not exact; fine for UI)
+  const series = await pool.query(
+    `SELECT avg_power FROM ${view}
+     WHERE bucket >= $1 AND bucket <= $2
+     ORDER BY avg_power ASC`,
     [from, to],
   );
-  return result.rows.map((row: any) => ({
-    timestamp: new Date(row.time).toISOString(),
-    acVoltage: row.ac_voltage,
-    acCurrent: row.ac_current,
-    acPower: row.ac_power,
-    cosPhi: row.cos_phi,
-    apparentPower: row.apparent_power,
-    totalEnergy: row.total_energy,
-    frequency: row.frequency,
-    reactivePower: row.reactive_power,
-    temperature: row.temperature,
-    humidity: row.humidity,
-    tempComfort: row.temp_comfort,
-    energyStatus: row.energy_status,
-    currentPerKW: row.current_per_kw,
-    powerQualityScore: row.power_quality_score,
-    energyCost: row.energy_cost,
-    voltageStability: row.voltage_stability,
+  const powers = series.rows.map((r: any) => Number(r.avg_power) || 0);
+  const mid = Math.floor(powers.length / 2);
+  const median =
+    powers.length === 0
+      ? 0
+      : powers.length % 2
+        ? powers[mid]
+        : (powers[mid - 1] + powers[mid]) / 2;
+  const avg = Number(s.avg_power) || 0;
+  const variance =
+    powers.length > 0
+      ? powers.reduce((a: number, p: number) => a + (p - avg) ** 2, 0) /
+        powers.length
+      : 0;
+
+  const peak = await pool.query(
+    `SELECT EXTRACT(HOUR FROM bucket)::int AS hour,
+            AVG(avg_power) AS avg_power
+     FROM ${view}
+     WHERE bucket >= $1 AND bucket <= $2
+     GROUP BY 1
+     ORDER BY 1`,
+    [from, to],
+  );
+  const peakMap = new Map<number, number>(
+    peak.rows.map((r: any) => [Number(r.hour), Number(r.avg_power) || 0]),
+  );
+  const peakHours = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    avgPower: +(peakMap.get(hour) ?? 0).toFixed(2),
   }));
+
+  const totalKwh = (Number(s.energy_wh) || 0) / 1000;
+  const avgReactive = Number(s.avg_reactive) || 0;
+
+  return {
+    dataPoints: Number(s.data_points) || powers.length,
+    timeSpan: {
+      from: new Date(s.t_from).toISOString(),
+      to: new Date(s.t_to).toISOString(),
+    },
+    power: {
+      average: +avg.toFixed(2),
+      median: +median.toFixed(2),
+      stdDeviation: +Math.sqrt(variance).toFixed(2),
+      min: +(Number(s.min_power) || 0).toFixed(2),
+      max: +(Number(s.max_power) || 0).toFixed(2),
+    },
+    voltage: { average: +(Number(s.avg_voltage) || 0).toFixed(2) },
+    powerFactor: { average: +(Number(s.avg_pf) || 0).toFixed(2) },
+    reactivePower: {
+      average: +avgReactive.toFixed(2),
+      ratio: +(avgReactive / (avg || 1)).toFixed(3),
+    },
+    energy: {
+      totalKwh: +totalKwh.toFixed(3),
+      estimatedCost: `Rp ${Math.round(totalKwh * 1444.7).toLocaleString()}`,
+    },
+    peakHours,
+  };
 }
 
 export async function getExportData(): Promise<any[]> {
@@ -398,64 +783,116 @@ export async function getEnergyInRange(
   from: string,
   to: string,
   bucketSize?: string,
+  maxPointsArg?: number,
 ): Promise<{ timestamp: string; energy_kwh: number }[]> {
   if (!pool) return [];
 
-  const result = await pool.query(
-    `SELECT time, ac_power FROM sensor_readings 
-     WHERE time >= $1 AND time <= $2 
-     ORDER BY time ASC`,
-    [from, to],
-  );
+  const interval =
+    bucketSize === "month"
+      ? "1 month"
+      : bucketSize === "day"
+        ? "1 day"
+        : "1 hour";
 
-  const rows = result.rows;
-  if (rows.length < 2) return [];
-
-  const buckets = new Map<string, { energy_wh: number; timestamp: string }>();
-
-  for (let i = 1; i < rows.length; i++) {
-    const prev = rows[i - 1];
-    const curr = rows[i];
-    const intervalHours =
-      (new Date(curr.time).getTime() - new Date(prev.time).getTime()) / 3600000;
-    const energyWh = ((prev.ac_power + curr.ac_power) / 2) * intervalHours;
-
-    let key: string;
-    if (bucketSize === "hour") key = curr.time.toISOString().slice(0, 13);
-    else if (bucketSize === "day") key = curr.time.toISOString().slice(0, 10);
-    else if (bucketSize === "month") key = curr.time.toISOString().slice(0, 7);
-    else key = curr.time.toISOString().slice(0, 13);
-
-    const existing = buckets.get(key);
-    if (existing) {
-      existing.energy_wh += energyWh;
-    } else {
-      let bucketTimestamp: string;
-      if (bucketSize === "hour") bucketTimestamp = `${key}:00:00.000Z`;
-      else if (bucketSize === "day") bucketTimestamp = `${key}T12:00:00.000Z`;
-      else if (bucketSize === "month")
-        bucketTimestamp = `${key}-01T12:00:00.000Z`;
-      else bucketTimestamp = `${key}:00:00.000Z`;
-      buckets.set(key, { energy_wh: energyWh, timestamp: bucketTimestamp });
+  // Prefer hourly CAGG when bucketing by hour/day
+  if (
+    (bucketSize === "hour" || bucketSize === "day" || !bucketSize) &&
+    (await caggHasRows(CAGG_1H, from, to))
+  ) {
+    const outer =
+      bucketSize === "day"
+        ? "1 day"
+        : bucketSize === "month"
+          ? "1 month"
+          : "1 hour";
+    const result = await pool.query(
+      `WITH src AS (
+         SELECT bucket, avg_power
+         FROM ${CAGG_1H}
+         WHERE bucket >= $1 AND bucket <= $2
+       ),
+       rolled AS (
+         SELECT
+           time_bucket($3::interval, bucket) AS b,
+           AVG(avg_power) AS avg_power,
+           COUNT(*)::float AS hours
+         FROM src
+         GROUP BY 1
+       )
+       SELECT b AS bucket, avg_power, hours FROM rolled ORDER BY 1`,
+      [from, to, outer],
+    );
+    let points = result.rows.map((row: any) => ({
+      timestamp: new Date(row.bucket).toISOString(),
+      energy_kwh: +(Number(row.avg_power) * (Number(row.hours) || 1)).toFixed(1),
+    }));
+    const maxP = clampMaxPoints(maxPointsArg, 400);
+    if (points.length > maxP) {
+      points = lttb(
+        points,
+        maxP,
+        (p) => new Date(p.timestamp).getTime(),
+        (p) => p.energy_kwh,
+      );
     }
+    return points;
   }
 
-  return Array.from(buckets.values())
-    .map((b) => ({
-      timestamp: b.timestamp,
-      energy_kwh: +b.energy_wh.toFixed(1),
-    }))
-    .sort(
-      (a, b) =>
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  const result = await pool.query(
+    `WITH buckets AS (
+       SELECT
+         time_bucket($3::interval, time) AS bucket,
+         AVG(ac_power) AS avg_power
+       FROM sensor_readings
+       WHERE time >= $1 AND time <= $2
+       GROUP BY bucket
+     )
+     SELECT
+       bucket,
+       avg_power,
+       EXTRACT(
+         EPOCH FROM (
+           LEAD(bucket) OVER (ORDER BY bucket) - bucket
+         )
+       ) / 3600.0 AS hours
+     FROM buckets
+     ORDER BY bucket ASC`,
+    [from, to, interval],
+  );
+
+  const fallbackHours =
+    bucketSize === "month" ? 30 * 24 : bucketSize === "day" ? 24 : 1;
+
+  let points = result.rows
+    .filter((row: any) => row.avg_power != null)
+    .map((row: any) => {
+      const hours =
+        row.hours != null && Number(row.hours) > 0
+          ? Number(row.hours)
+          : fallbackHours;
+      return {
+        timestamp: new Date(row.bucket).toISOString(),
+        energy_kwh: +(Number(row.avg_power) * hours).toFixed(1),
+      };
+    });
+
+  const maxP = clampMaxPoints(maxPointsArg, 400);
+  if (points.length > maxP) {
+    points = lttb(
+      points,
+      maxP,
+      (p) => new Date(p.timestamp).getTime(),
+      (p) => p.energy_kwh,
     );
+  }
+  return points;
 }
 
 export async function getTimescaleStats(): Promise<any> {
   if (!pool) return null;
 
   const result = await pool.query(`
-    SELECT 
+    SELECT
       COUNT(*) AS total_rows,
       MIN(time) AS first_reading,
       MAX(time) AS last_reading,

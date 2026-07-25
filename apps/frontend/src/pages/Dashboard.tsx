@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { Zap, Activity, Gauge, DollarSign, Info, Clock } from "lucide-react";
 import { StatCard, EST_COST_INFO } from "@/components/StatCard";
-import { ChartCard, RangeSelect } from "@/components/ChartCard";
+import { ChartCard, RangeSelect, ToggleControl } from "@/components/ChartCard";
 import { PowerOverview } from "@/components/PowerOverview";
 import { ClimateOverview } from "@/components/ClimateOverview";
 import { StableResponsiveContainer as ResponsiveContainer } from "@/components/StableResponsiveContainer";
@@ -25,6 +25,7 @@ import {
 import { useAuth } from "@/services/auth";
 import { ensembleForecast, confidenceBands } from "@/lib/forecast";
 import { computeDomain } from "@/lib/chartDomain";
+import { useChartMaxPoints } from "@/hooks/useChartMaxPoints";
 
 const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
 const RANGE_LABELS: Record<string, string> = {
@@ -271,9 +272,22 @@ export function Dashboard() {
 
   // ── SSE Live Data ────────────────────────────────────
   const { data: live } = useLiveReading();
+  const chartMaxPoints = useChartMaxPoints();
 
-  const { data: history = [] } = useReadingHistory(chartRange as any);
-  const { data: summary } = useAnalyticsSummary("24h");
+  // Stage 1: summary (cheap CAGG path) — paints stat cards first
+  const {
+    data: summary,
+    isSuccess: summaryReady,
+    isError: summaryFailed,
+    isLoading: summaryLoading,
+  } = useAnalyticsSummary("24h");
+  // Stage 2: chart series after summary (or if summary fails) + pixel budget
+  const chartsReady = summaryReady || summaryFailed || !summaryLoading;
+  const { data: history = [], isFetching: historyFetching } = useReadingHistory(
+    chartRange as any,
+    chartsReady,
+    chartMaxPoints,
+  );
   const ec = summary?.energy?.estimatedCost ?? "—";
   const tk = summary?.energy?.totalKwh ?? "—";
   const ch = history.map((h: any) => ({
@@ -435,19 +449,11 @@ export function Dashboard() {
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Energy
           </p>
-          <div className="flex items-center gap-2">
-            {showConf && (
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
-                {Math.round((avgConf / 4) * 100)}% confidence
-              </span>
-            )}
-            <button
-              onClick={() => setShowForecast(!showForecast)}
-              className={`text-xs font-medium px-2 py-1 rounded-lg border transition ${showForecast ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" : "text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
-            >
-              Forecast
-            </button>
-          </div>
+          {showConf && (
+            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
+              {Math.round((avgConf / 4) * 100)}% confidence
+            </span>
+          )}
         </div>
         {showForecast && (
           <div className="mb-3">
@@ -492,27 +498,39 @@ export function Dashboard() {
             title="Energy Usage"
             chartId="chart-energy-usage"
             action={
-              <RangeSelect
-                options={RANGE_OPTIONS}
-                value={chartRange}
-                onChange={setChartRange}
-                labels={RANGE_LABELS}
-              />
+              <div className="flex items-center gap-2">
+                <ToggleControl
+                  pressed={showForecast}
+                  onPressedChange={setShowForecast}
+                >
+                  Forecast
+                </ToggleControl>
+                <RangeSelect
+                  options={RANGE_OPTIONS}
+                  value={chartRange}
+                  onChange={setChartRange}
+                  labels={RANGE_LABELS}
+                />
+              </div>
             }
           >
             {history.length === 0 ? (
               <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                No data
+                {historyFetching || !chartsReady ? "Loading…" : "No data"}
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer
+                width="100%"
+                height={300}
+                className={historyFetching ? "opacity-70 transition-opacity" : undefined}
+              >
                 <ComposedChart data={history} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
                       <stop
                         offset="0%"
                         stopColor="#3B82F6"
-                        stopOpacity={0.15}
+                        stopOpacity={0.32}
                       />
                       <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
                     </linearGradient>
@@ -520,7 +538,7 @@ export function Dashboard() {
                       <stop
                         offset="0%"
                         stopColor="#F59E0B"
-                        stopOpacity={0.15}
+                        stopOpacity={0.32}
                       />
                       <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
                     </linearGradient>
@@ -635,7 +653,8 @@ export function Dashboard() {
                     dataKey="power"
                     fill="url(#pg)"
                     stroke="none"
-                    hide
+                      tooltipType="none"
+                      legendType="none"
                   />
                   <Line
                     yAxisId="left"
@@ -653,7 +672,8 @@ export function Dashboard() {
                     dataKey="current"
                     fill="url(#cg)"
                     stroke="none"
-                    hide
+                      tooltipType="none"
+                      legendType="none"
                   />
                   <Line
                     yAxisId="right"
@@ -672,8 +692,9 @@ export function Dashboard() {
                       data={pb.upper}
                       dataKey="value"
                       stroke="none"
+                      tooltipType="none"
+                      legendType="none"
                       fill="url(#pfb)"
-                      hide
                     />
                   )}
                   {pf.forecast.length > 0 && (
@@ -697,8 +718,9 @@ export function Dashboard() {
                       data={cb.upper}
                       dataKey="value"
                       stroke="none"
+                      tooltipType="none"
+                      legendType="none"
                       fill="url(#cfb)"
-                      hide
                     />
                   )}
                   {cfc.forecast.length > 0 && (
@@ -736,19 +758,11 @@ export function Dashboard() {
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Environment
           </p>
-          <div className="flex items-center gap-2">
-            {showConf && (
-              <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
-                {Math.round((avgConf / 4) * 100)}% confidence
-              </span>
-            )}
-            <button
-              onClick={() => setShowForecast(!showForecast)}
-              className={`text-xs font-medium px-2 py-1 rounded-lg border transition ${showForecast ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800" : "text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
-            >
-              Forecast
-            </button>
-          </div>
+          {showConf && (
+            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
+              {Math.round((avgConf / 4) * 100)}% confidence
+            </span>
+          )}
         </div>
         {showForecast && (
           <div className="mb-3">
@@ -760,12 +774,20 @@ export function Dashboard() {
             title="Climate History"
             chartId="chart-climate"
             action={
-              <RangeSelect
-                options={RANGE_OPTIONS}
-                value={chartRange}
-                onChange={setChartRange}
-                labels={RANGE_LABELS}
-              />
+              <div className="flex items-center gap-2">
+                <ToggleControl
+                  pressed={showForecast}
+                  onPressedChange={setShowForecast}
+                >
+                  Forecast
+                </ToggleControl>
+                <RangeSelect
+                  options={RANGE_OPTIONS}
+                  value={chartRange}
+                  onChange={setChartRange}
+                  labels={RANGE_LABELS}
+                />
+              </div>
             }
           >
             {ch.length === 0 ? (
@@ -780,7 +802,7 @@ export function Dashboard() {
                       <stop
                         offset="0%"
                         stopColor="#EF4444"
-                        stopOpacity={0.15}
+                        stopOpacity={0.32}
                       />
                       <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
                     </linearGradient>
@@ -788,7 +810,7 @@ export function Dashboard() {
                       <stop
                         offset="0%"
                         stopColor="#3B82F6"
-                        stopOpacity={0.15}
+                        stopOpacity={0.32}
                       />
                       <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
                     </linearGradient>
@@ -883,7 +905,8 @@ export function Dashboard() {
                     dataKey="temperature"
                     fill="url(#tg)"
                     stroke="none"
-                    hide
+                      tooltipType="none"
+                      legendType="none"
                   />
                   <Line
                     yAxisId="left"
@@ -901,7 +924,8 @@ export function Dashboard() {
                     dataKey="humidity"
                     fill="url(#hg)"
                     stroke="none"
-                    hide
+                      tooltipType="none"
+                      legendType="none"
                   />
                   <Line
                     yAxisId="right"
@@ -920,8 +944,9 @@ export function Dashboard() {
                       data={tb.upper}
                       dataKey="value"
                       stroke="none"
+                      tooltipType="none"
+                      legendType="none"
                       fill="url(#tfb)"
-                      hide
                     />
                   )}
                   {tf.forecast.length > 0 && (
@@ -945,8 +970,9 @@ export function Dashboard() {
                       data={hb.upper}
                       dataKey="value"
                       stroke="none"
+                      tooltipType="none"
+                      legendType="none"
                       fill="url(#hfb)"
-                      hide
                     />
                   )}
                   {hf.forecast.length > 0 && (

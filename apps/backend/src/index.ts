@@ -10,12 +10,15 @@ import { registerNotificationRoutes } from "./routes/notifications";
 import { registerAdminRoutes } from "./routes/admin";
 import {
   classifyEnergyFuzzy,
-  classifyClimateFuzzy,
   generateMembershipData,
   generateDecisionSurface,
   generateBoxPlotData,
   generateBlandAltmanData,
 } from "./analytics/fuzzy";
+import {
+  classifyEnergyDistribution,
+  classifyClimateDistribution,
+} from "./analytics/classifyBatch";
 import {
   initTimescaleDB,
   getLatestReading,
@@ -24,6 +27,8 @@ import {
   getAllReadingsForAnalytics,
   getExportData,
   getEnergyInRange,
+  getEnergySummaryFromCagg,
+  clampMaxPoints,
 } from "./timescale";
 import { startMqttIngestor } from "./mqtt";
 import { onNewReading } from "./events";
@@ -342,39 +347,54 @@ app.get(
   "/api/readings/history",
   {
     schema: {
-      description: "Get aggregated historical sensor data",
+      description:
+        "Historical series for charts. Prefer continuous aggregates; LTTB to maxPoints (~2× CSS pixels).",
       tags: ["Readings"],
       querystring: {
         type: "object",
         properties: {
           range: { type: "string", default: "24h" },
           type: { type: "string", enum: ["power", "energy"], default: "power" },
+          maxPoints: {
+            type: "integer",
+            minimum: 48,
+            maximum: 1000,
+            description: "Chart budget ≈ 2 × width in CSS pixels",
+          },
         },
       },
     },
   },
   async (request) => {
-    const { range = "24h", type = "power" } = request.query as {
+    const {
+      range = "24h",
+      type = "power",
+      maxPoints: maxPointsRaw,
+    } = request.query as {
       range?: string;
       type?: string;
+      maxPoints?: number | string;
     };
 
+    const maxPoints = clampMaxPoints(
+      maxPointsRaw != null ? Number(maxPointsRaw) : undefined,
+    );
     const { from, to, bucketSize } = getRangeConfig(range);
 
     if (type === "energy") {
-      const energyData = await getEnergyInRange(
+      return getEnergyInRange(
         from.toISOString(),
         to.toISOString(),
         bucketSize ?? undefined,
+        maxPoints,
       );
-      return energyData;
     }
 
-    // Pass UI range ("24h") so sampling uses adaptive intervals + LTTB + smooth
     return getReadingsInRange(
       from.toISOString(),
       to.toISOString(),
       range,
+      maxPoints,
     );
   },
 );
@@ -502,9 +522,21 @@ app.get(
     const query = request.query as { range?: string };
     const range = query.range ?? "7d";
     const { from, to } = getRangeConfig(range);
+
+    // Prefer continuous-aggregate SQL path (no full series into Node)
+    const cagg = await getEnergySummaryFromCagg(
+      from.toISOString(),
+      to.toISOString(),
+      range,
+    );
+    if (cagg) {
+      return { range, source: "cagg", ...cagg };
+    }
+
     const data = await getAllReadingsForAnalytics(
       from.toISOString(),
       to.toISOString(),
+      range,
     );
     if (!data.length) return { error: "No data in range" };
 
@@ -545,6 +577,7 @@ app.get(
 
     return {
       range,
+      source: "series",
       dataPoints: data.length,
       timeSpan: {
         from: data[0].timestamp,
@@ -591,6 +624,7 @@ app.get(
     const data = await getAllReadingsForAnalytics(
       from.toISOString(),
       to.toISOString(),
+      range,
     );
     if (!data.length) return { error: "No data in range" };
 
@@ -718,36 +752,12 @@ app.get(
         : await getAllReadingsForAnalytics(
             from.toISOString(),
             to.toISOString(),
+            range,
           );
     if (!data.length) return { error: "No data" };
 
-    const results = data.map((r: any) => ({
-      ...classifyEnergyFuzzy(r.acVoltage, r.acPower, r.cosPhi, r.reactivePower),
-      timestamp: r.timestamp,
-      power: r.acPower,
-      powerFactor: r.cosPhi,
-      voltage: r.acVoltage,
-      reactivePower: r.reactivePower,
-    }));
-    const distribution: Record<string, number> = {
-      ECONOMICAL: 0,
-      NORMAL: 0,
-      WASTEFUL: 0,
-    };
-    const scatterData: Array<{
-      power: number;
-      powerFactor: number;
-      category: string;
-    }> = [];
-    for (const r of results) {
-      distribution[r.category]++;
-      scatterData.push({
-        power: r.power,
-        powerFactor: r.powerFactor,
-        category: r.category,
-      });
-    }
-    return { distribution, total: data.length, scatterData, results };
+    // Chunked classification (yields event loop); thin JSON only
+    return classifyEnergyDistribution(data);
   },
 );
 
@@ -795,6 +805,7 @@ app.get(
         : await getAllReadingsForAnalytics(
             from.toISOString(),
             to.toISOString(),
+            range,
           );
     if (!data.length) return [];
     const categorized = data.map((r: any) => ({
@@ -832,6 +843,7 @@ app.get(
         : await getAllReadingsForAnalytics(
             from.toISOString(),
             to.toISOString(),
+            range,
           );
     if (!data.length) return { error: "No data" };
     const input = data.map((r: any) => ({
@@ -866,35 +878,10 @@ app.get(
         : await getAllReadingsForAnalytics(
             from.toISOString(),
             to.toISOString(),
+            range,
           );
     if (!data.length) return { error: "No data" };
-    const results = data.map((r: any) => ({
-      ...classifyClimateFuzzy(r.temperature, r.humidity),
-      timestamp: r.timestamp,
-      temperature: r.temperature,
-      humidity: r.humidity,
-    }));
-    const distribution: Record<string, number> = {
-      COLD: 0,
-      COOL: 0,
-      COMFORTABLE: 0,
-      WARM: 0,
-      HOT: 0,
-    };
-    const scatterData: Array<{
-      temperature: number;
-      humidity: number;
-      category: string;
-    }> = [];
-    for (const r of results) {
-      distribution[r.category]++;
-      scatterData.push({
-        temperature: r.temperature,
-        humidity: r.humidity,
-        category: r.category,
-      });
-    }
-    return { distribution, total: data.length, scatterData, results };
+    return classifyClimateDistribution(data);
   },
 );
 
