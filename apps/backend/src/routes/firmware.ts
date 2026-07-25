@@ -37,13 +37,13 @@ setInterval(() => {
   }
 }, 60_000);
 
-// Re-push OTA MQTT commands so a briefly-busy ESP still gets the update
+// Re-push OTA MQTT commands so a briefly-busy ESP still gets the update.
+// Keep publishing even after a download GET: a browser/curl probe or a failed
+// ESP attempt should not silence the device forever.
 setInterval(() => {
   const now = Date.now();
   for (const fw of firmwareStore.values()) {
     if (now > fw.expiresAt.getTime()) continue;
-    // Stop nagging once the device has started downloading
-    if (fw.downloadStartedAt) continue;
     if (fw.publishCount >= OTA_REPUBLISH_MAX) continue;
     const last = fw.lastPublishedAt?.getTime() ?? 0;
     if (now - last < OTA_REPUBLISH_MS) continue;
@@ -54,7 +54,8 @@ setInterval(() => {
       fw.publishCount += 1;
       fw.lastPublishedAt = new Date();
       console.log(
-        `[Firmware] Re-published OTA to ${fw.nodeId} (attempt ${fw.publishCount}/${OTA_REPUBLISH_MAX})`,
+        `[Firmware] Re-published OTA to ${fw.nodeId} (attempt ${fw.publishCount}/${OTA_REPUBLISH_MAX})` +
+          (fw.downloadStartedAt ? " [download already hit once]" : ""),
       );
     }
   }
