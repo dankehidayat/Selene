@@ -29,14 +29,19 @@ import {
   TrendingUp,
   Gauge,
   PieChartIcon,
-  Info,
   TrendingDown,
   Minus,
   Leaf,
   Brain,
   CloudSun,
 } from "lucide-react";
-import { ChartCard, RangeSelect, ToggleControl } from "@/components/ChartCard";
+import {
+  ChartCard,
+  RangeSelect,
+  ToggleControl,
+  ConfidencePill,
+  ForecastLegendHint,
+} from "@/components/ChartCard";
 import { StatCard, EST_COST_INFO } from "@/components/StatCard";
 import { InfoTip } from "@/components/InfoTip";
 import { useTabFromSearch } from "@/hooks/useTabFromSearch";
@@ -172,15 +177,6 @@ function formatTick(v: string, range: string): string {
     default:
       return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
-}
-
-function ForecastBanner() {
-  return (
-    <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-[11px] text-blue-600 dark:text-blue-300 w-fit">
-      <Info size={12} className="shrink-0" />
-      <span>Dashed = predicted. Solid = actual readings.</span>
-    </div>
-  );
 }
 
 /**
@@ -1190,7 +1186,6 @@ export function Analytics() {
               Power consumption patterns and statistical summaries
             </p>
           </div>
-          {showForecast && <ForecastBanner />}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Avg Power"
@@ -1230,7 +1225,16 @@ export function Analytics() {
             title="Energy Usage"
             chartId="chart-energy-usage"
             action={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {showForecast && <ForecastLegendHint />}
+                {showForecast &&
+                  (pf.confidence > 0 || efc.confidence > 0) && (
+                    <ConfidencePill
+                      percent={Math.round(
+                        ((pf.confidence + efc.confidence) / 2) * 100,
+                      )}
+                    />
+                  )}
                 <ToggleControl
                   pressed={showForecast}
                   onPressedChange={setShowForecast}
@@ -1844,7 +1848,6 @@ export function Analytics() {
               Temperature, humidity, and climate comfort analytics
             </p>
           </div>
-          {showForecast && <ForecastBanner />}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Avg Temp"
@@ -1889,7 +1892,16 @@ export function Analytics() {
               title="Climate History"
               chartId="chart-climate-history"
               action={
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {showForecast && <ForecastLegendHint />}
+                  {showForecast &&
+                    (tf.confidence > 0 || hf.confidence > 0) && (
+                      <ConfidencePill
+                        percent={Math.round(
+                          ((tf.confidence + hf.confidence) / 2) * 100,
+                        )}
+                      />
+                    )}
                   <ToggleControl
                     pressed={showForecast}
                     onPressedChange={setShowForecast}

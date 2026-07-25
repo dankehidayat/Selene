@@ -11,9 +11,15 @@ import {
   ComposedChart,
   ReferenceLine,
 } from "recharts";
-import { Zap, Activity, Gauge, DollarSign, Info, Clock } from "lucide-react";
+import { Zap, Activity, Gauge, DollarSign, Clock } from "lucide-react";
 import { StatCard, EST_COST_INFO } from "@/components/StatCard";
-import { ChartCard, RangeSelect, ToggleControl } from "@/components/ChartCard";
+import {
+  ChartCard,
+  RangeSelect,
+  ToggleControl,
+  ConfidencePill,
+  ForecastLegendHint,
+} from "@/components/ChartCard";
 import { PowerOverview } from "@/components/PowerOverview";
 import { ClimateOverview } from "@/components/ClimateOverview";
 import { StableResponsiveContainer as ResponsiveContainer } from "@/components/StableResponsiveContainer";
@@ -104,15 +110,6 @@ function formatTick(v: string, range: string): string {
 const CF = { fontSize: 11, fontFamily: "Inter, sans-serif", fill: "#9CA3AF" };
 const TC =
   "bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg px-3.5 py-2.5 text-xs font-sans";
-
-function ForecastBanner() {
-  return (
-    <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 text-[11px] text-blue-600 dark:text-blue-300 w-fit">
-      <Info size={12} className="shrink-0" />
-      <span>Dashed = predicted. Solid = actual readings.</span>
-    </div>
-  );
-}
 
 /** Drop Area fill twins (raw dataKey labels) so only Line series show. */
 function uniqueTooltipRows(
@@ -527,17 +524,7 @@ export function Dashboard() {
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Energy
           </p>
-          {showConf && (
-            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
-              {Math.round((avgConf / 4) * 100)}% confidence
-            </span>
-          )}
         </div>
-        {showForecast && (
-          <div className="mb-3">
-            <ForecastBanner />
-          </div>
-        )}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-4">
           <StatCard
             label="AC Voltage"
@@ -576,7 +563,11 @@ export function Dashboard() {
             title="Energy Usage"
             chartId="chart-energy-usage"
             action={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {showForecast && <ForecastLegendHint />}
+                {showConf && (
+                  <ConfidencePill percent={Math.round((avgConf / 4) * 100)} />
+                )}
                 <ToggleControl
                   pressed={showForecast}
                   onPressedChange={setShowForecast}
@@ -836,23 +827,17 @@ export function Dashboard() {
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Environment
           </p>
-          {showConf && (
-            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
-              {Math.round((avgConf / 4) * 100)}% confidence
-            </span>
-          )}
         </div>
-        {showForecast && (
-          <div className="mb-3">
-            <ForecastBanner />
-          </div>
-        )}
         <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
           <ChartCard
             title="Climate History"
             chartId="chart-climate"
             action={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {showForecast && <ForecastLegendHint />}
+                {showConf && (
+                  <ConfidencePill percent={Math.round((avgConf / 4) * 100)} />
+                )}
                 <ToggleControl
                   pressed={showForecast}
                   onPressedChange={setShowForecast}

@@ -111,11 +111,11 @@ export function ChartCard({
         className,
       )}
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-4">
         <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">
           {title}
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
           {action}
           {chartId && (
             <DropdownMenu.Root>
@@ -173,12 +173,56 @@ interface RangeSelectProps {
   labels?: Record<string, string>;
 }
 
-/** Shared chrome for compact chart/header controls (range, forecast, export). */
+/**
+ * Soft control chrome — inset ring instead of a heavy black outline so
+ * Forecast / Range sit lightly on the card header.
+ */
 export const controlBtnClass =
-  "inline-flex items-center gap-1.5 text-xs font-semibold text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-2.5 py-1.5 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500 active:scale-[0.98] transition outline-none";
+  "inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-gray-50/90 dark:bg-gray-800/70 ring-1 ring-inset ring-gray-200/90 dark:ring-gray-700/90 rounded-lg px-2.5 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700/80 active:scale-[0.98] transition outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50";
 
 export const controlBtnActiveClass =
-  "inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 shadow-sm border transition outline-none active:scale-[0.98] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/40 border-blue-300 dark:border-blue-600";
+  "inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 transition outline-none active:scale-[0.98] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/45 ring-1 ring-inset ring-blue-200/80 dark:ring-blue-800/50 focus-visible:ring-2 focus-visible:ring-blue-400/50";
+
+/** Readable confidence chip for chart toolbars. */
+export function ConfidencePill({ percent }: { percent: number }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-800/90 ring-1 ring-inset ring-gray-200/80 dark:ring-gray-700/80 rounded-lg px-2.5 py-1.5"
+      title="Ensemble forecast confidence"
+    >
+      {Math.round(percent)}%
+      <span className="font-semibold text-gray-600 dark:text-gray-300">
+        conf.
+      </span>
+    </span>
+  );
+}
+
+/** Compact visual key for solid vs dashed series (replaces text banner). */
+export function ForecastLegendHint() {
+  return (
+    <div
+      className="inline-flex items-center gap-2.5 text-xs font-semibold text-gray-700 dark:text-gray-200"
+      title="Solid lines are measured readings; dashed lines are predicted"
+    >
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          aria-hidden
+          className="w-4 h-0 border-t-2 border-solid border-gray-700 dark:border-gray-200"
+        />
+        Actual
+      </span>
+      <span className="text-gray-300 dark:text-gray-600 font-normal">·</span>
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          aria-hidden
+          className="w-4 h-0 border-t-2 border-dashed border-blue-500 dark:border-blue-400"
+        />
+        Predicted
+      </span>
+    </div>
+  );
+}
 
 export function RangeSelect({
   options,
