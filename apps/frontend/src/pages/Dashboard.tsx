@@ -269,31 +269,31 @@ function getGreeting(): string {
   return "Good evening";
 }
 
-/** Rotating dashboard taglines — stable per calendar day. */
+/** Rotating dashboard taglines, stable per calendar day. */
 const GREETING_MESSAGES = [
   "Review today's energy patterns and plan for tomorrow.",
   "Start your day with insights into your energy usage.",
   "Monitor power consumption and environmental conditions.",
   "A calm dashboard for a clearer view of your fleet.",
-  "Small watts add up — see where the day is going.",
+  "Small watts add up. See where the day is going.",
   "Track the grid, the room, and the story between them.",
   "Live readings when you need them; history when you dig deeper.",
   "Keep an eye on peaks, comfort, and quiet efficiency.",
-  "Your sensors are talking — here's the plain-language summary.",
+  "Your sensors are talking. Here's the plain-language summary.",
   "Steady power and comfortable air: today's twin goals.",
   "Glance at the numbers, then decide what needs attention.",
-  "From Jakarta nights to office afternoons — one place to check in.",
+  "From Jakarta nights to office afternoons, one place to check in.",
   "Efficiency is a habit; this page helps you keep it.",
   "When the load spikes, you'll see it here first.",
-  "Climate and current on the same stage — take a seat.",
+  "Climate and current on the same stage. Take a seat.",
   "Plan the next shift with yesterday's peaks still in mind.",
-  "Good data, fewer surprises — welcome back.",
+  "Good data, fewer surprises. Welcome back.",
   "A quiet pulse of telemetry so you don't have to guess.",
   "Tune the room, respect the grid, enjoy the clarity.",
   "Every chart is a conversation with your building.",
   "Fresh metrics for a focused hour of work.",
   "Watch frequency stay on beat and comfort stay kind.",
-  "Energy is a budget — spend it where it matters.",
+  "Energy is a budget. Spend it where it matters.",
   "The moon watches overnight; Selene keeps the lights honest.",
   "Open the day with voltage, close it with a clear summary.",
   "Insights first, deep analytics when you're ready.",

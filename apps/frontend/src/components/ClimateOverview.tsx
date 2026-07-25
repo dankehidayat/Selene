@@ -102,29 +102,29 @@ function climateNarration(
   let core = "";
   switch ((comfort || "").toUpperCase()) {
     case "COLD":
-      core = `It's a sweater day in here at ${t} with ${h}. Fingers might prefer a heater — or a hot coffee.`;
+      core = `It's a sweater day in here at ${t} with ${h}. Fingers might prefer a heater, or a hot coffee.`;
       break;
     case "COOL":
       core = `Crisp and workable: ${t}, ${h}. A little cool, still friendly for focus and long coding sessions.`;
       break;
     case "COMFORTABLE":
-      core = `Goldilocks zone unlocked — ${t} and ${h}. The kind of air that lets you forget the HVAC and get stuff done.`;
+      core = `Goldilocks zone unlocked: ${t} and ${h}. The kind of air that lets you forget the HVAC and get stuff done.`;
       break;
     case "WARM":
       core = `Things are heating up: ${t} with ${h}. A window crack or a fan cameo would be a good plot twist.`;
       break;
     case "HOT":
-      core = `It's properly hot — ${t}, ${h}. Cooling is the hero of this episode; productivity is the damsel.`;
+      core = `It's properly hot: ${t}, ${h}. Cooling is the hero of this episode; productivity is the damsel.`;
       break;
     default:
-      core = `Current snapshot: ${t}, ${h}. Comfort band hasn't classified yet — still a fine day for sensors.`;
+      core = `Current snapshot: ${t}, ${h}. Comfort band hasn't classified yet. Still a fine day for sensors.`;
   }
 
   if (humidity !== undefined) {
     if (humidity > 70) {
       core += " Air is on the muggy side.";
     } else if (humidity < 40) {
-      core += " Air is a bit dry — plants and sinuses take note.";
+      core += " Air is a bit dry; plants and sinuses take note.";
     }
   }
 
@@ -168,7 +168,7 @@ export function ClimateOverview({
   const tempStory =
     temperature === undefined
       ? "Thermometer is still calibrating its monologue. No temperature reading yet."
-      : `It's ${temperature.toFixed(1)}°C in the room — ${
+      : `It's ${temperature.toFixed(1)}°C in the room, ${
           temperature < 20
             ? "cool enough to keep you alert"
             : temperature < 26
@@ -180,12 +180,12 @@ export function ClimateOverview({
 
   const humStory =
     humidity === undefined
-      ? "Humidity is camera-shy at the moment — no sample yet."
+      ? "Humidity is camera-shy at the moment. No sample yet."
       : humidity > 70
-        ? `Humidity is ${humidity.toFixed(0)}% — muggy territory. It can feel stickier than the thermometer alone suggests.`
+        ? `Humidity is ${humidity.toFixed(0)}%, muggy territory. It can feel stickier than the thermometer alone suggests.`
         : humidity < 40
-          ? `Humidity is ${humidity.toFixed(0)}% — on the dry side. A humidifier (or a houseplant army) could help.`
-          : `Humidity is ${humidity.toFixed(0)}% — a comfortable middle ground that rarely steals the show.`;
+          ? `Humidity is ${humidity.toFixed(0)}%, on the dry side. A humidifier (or a houseplant army) could help.`
+          : `Humidity is ${humidity.toFixed(0)}%, a comfortable middle ground that rarely steals the show.`;
 
   return (
     <div className="space-y-4 mt-1">

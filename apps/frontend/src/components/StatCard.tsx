@@ -58,11 +58,11 @@ export function StatCard({
 export const TOTAL_ENERGY_INFO = {
   title: "How total energy is calculated",
   content:
-    "Total energy uses the PZEM cumulative counter as stored by the ESP32 (already in kWh — e.g. 30.356, 30.357…). Selene sums positive increments over the selected range (resets handled). That is the same series that went to Google Sheets / Timescale as total_energy. It is not power × full time buckets. Lifetime meter reading ≈ latest total_energy; range total ≈ last − first (with reset handling).",
+    "This is energy used over the selected time range, in kilowatt-hours (kWh). The meter on the device keeps a running total of energy. Selene records that total with each reading, then adds up how much it rose during the range (and handles meter resets). It is not a rough guess from average power times every hour, which can overstate usage when samples are sparse. The latest meter reading is the lifetime total; this card shows only what was used inside the range you picked.",
 } as const;
 
 export const EST_COST_INFO = {
   title: "How estimated cost is calculated",
   content:
-    "Estimated cost = total energy (kWh) over the selected period × Rp 1.444,70 per kWh. Rate: PLN R-1/TR 1.300–2.200 VA non-subsidized residential, Triwulan III 2026 (Juli–September) — official ESDM/PLN flat tariff (unchanged). Energy comes from the PZEM cumulative kWh counter, not from summing power × full time buckets. Guide only — actual bills may add PPJ and admin fees.",
+    "Estimated cost multiplies total energy (kWh) for the selected period by Rp 1.444,70 per kWh. That is the official PLN R-1/TR rate for 1.300 to 2.200 VA non-subsidized residential customers for Q3 2026 (July to September), set by ESDM/PLN and unchanged this quarter. This is a guide only. Your real bill can also include street lighting tax (PPJ) and other fees.",
 } as const;

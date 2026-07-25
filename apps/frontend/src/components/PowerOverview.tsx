@@ -64,10 +64,10 @@ function qualityHeadline(score: number | undefined): string {
 
 function qualityNarration(score: number | undefined): string {
   if (score === undefined) {
-    return "We're waiting for the first electrical heartbeat from your sensors. Hang tight — the story starts when data arrives.";
+    return "We're waiting for the first electrical heartbeat from your sensors. Hang tight; the story starts when data arrives.";
   }
   if (score >= 80) {
-    return "Your power line is humming along nicely. Efficiency and frequency are in a happy place — the kind of day an engineer would high-five.";
+    return "Your power line is humming along nicely. Efficiency and frequency are in a happy place, the kind of day an engineer would high-five.";
   }
   if (score >= 60) {
     return "Things look healthy overall. Nothing dramatic on the wire, just a steady workday for your circuits.";
@@ -75,22 +75,22 @@ function qualityNarration(score: number | undefined): string {
   if (score >= 40) {
     return "There's a little drama on the grid today. Worth a glance at how efficiently power is used, or how steady the frequency is.";
   }
-  return "The electrical side is waving a yellow flag. Check loads, wiring, or the sensor — your gear will thank you.";
+  return "The electrical side is waving a yellow flag. Check loads, wiring, or the sensor; your gear will thank you.";
 }
 
-/** Human wording — avoid greek symbols / jargon in the sentence. */
+/** Human wording: avoid greek symbols / jargon in the sentence. */
 function efficiencyNarration(cp: number | undefined): string {
   if (cp === undefined) {
     return "We don't have an efficiency reading yet. Once the meters speak, we'll tell you how cleanly the load is drawing power.";
   }
   if (cp >= 0.95) {
-    return `Efficiency looks excellent at ${cp.toFixed(2)} — almost all the power is doing real work.`;
+    return `Efficiency looks excellent at ${cp.toFixed(2)}. Almost all the power is doing real work.`;
   }
   if (cp >= 0.85) {
-    return `Efficiency sits at a solid ${cp.toFixed(2)} — a polite, efficient guest at the table.`;
+    return `Efficiency sits at a solid ${cp.toFixed(2)}, a polite, efficient guest at the table.`;
   }
   if (cp >= 0.6) {
-    return `Efficiency is ${cp.toFixed(2)} — workable, but the circuit is carrying some wasted effort. Correction gear could help.`;
+    return `Efficiency is ${cp.toFixed(2)}. Workable, but the circuit is carrying some wasted effort. Correction gear could help.`;
   }
   if (cp > 0) {
     return `Efficiency is down at ${cp.toFixed(2)}. The wire is working harder than it needs to for the useful power you get.`;
@@ -103,12 +103,12 @@ function frequencyNarration(freq: number | undefined): string {
     return "Frequency hasn't checked in yet. When it does, we'll tell you if the grid is dancing on beat.";
   }
   if (freq >= 49.8 && freq <= 50.2) {
-    return `Frequency is a calm ${freq.toFixed(1)} Hz — right on the 50 Hz beat. The grid is keeping good time.`;
+    return `Frequency is a calm ${freq.toFixed(1)} Hz, right on the 50 Hz beat. The grid is keeping good time.`;
   }
   if (freq >= 49.5 && freq <= 50.5) {
-    return `Frequency is ${freq.toFixed(1)} Hz — a slight wobble around 50 Hz. Not an emergency, but worth a casual watch.`;
+    return `Frequency is ${freq.toFixed(1)} Hz, a slight wobble around 50 Hz. Not an emergency, but worth a casual watch.`;
   }
-  return `Frequency is ${freq.toFixed(1)} Hz — outside the cozy 50 Hz band. Unstable grids make motors and clocks grumpy.`;
+  return `Frequency is ${freq.toFixed(1)} Hz, outside the cozy 50 Hz band. Unstable grids make motors and clocks grumpy.`;
 }
 
 function consumptionNarration(kwh: string | number): string {
@@ -117,18 +117,18 @@ function consumptionNarration(kwh: string | number): string {
   }
   const n = typeof kwh === "number" ? kwh : parseFloat(String(kwh));
   if (!Number.isFinite(n)) {
-    return `Today's energy tally reads ${kwh} kWh — still writing the rest of the chapter.`;
+    return `Today's energy tally reads ${kwh} kWh. Still writing the rest of the chapter.`;
   }
   if (n < 0.5) {
-    return `Only ${n} kWh over the last day — a light sip. Either the office is calm or someone unplugged the party.`;
+    return `Only ${n} kWh over the last day, a light sip. Either the office is calm or someone unplugged the party.`;
   }
   if (n < 2) {
-    return `${n} kWh in the last 24 hours — a moderate day. Enough to keep the lights on without setting records.`;
+    return `${n} kWh in the last 24 hours, a moderate day. Enough to keep the lights on without setting records.`;
   }
   if (n < 5) {
-    return `${n} kWh in 24 hours — a solid workday appetite. Charts upstairs will show where the watts went.`;
+    return `${n} kWh in 24 hours, a solid workday appetite. Charts upstairs will show where the watts went.`;
   }
-  return `${n} kWh over 24 hours — a hungry day on the meter. Peak hours in Analytics can reveal the main characters.`;
+  return `${n} kWh over 24 hours, a hungry day on the meter. Peak hours in Analytics can reveal the main characters.`;
 }
 
 function MetricStory({
