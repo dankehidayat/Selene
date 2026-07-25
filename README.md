@@ -49,7 +49,7 @@ ESP32 + PZEM-004T + DHT11
 
 ### Analytics
 
-- **Energy**: Multi-line power chart (Power, Current, Apparent, Reactive), hourly usage pattern, energy consumption (Wh) with time-weighted integration
+- **Energy**: Multi-line power chart (Power, Current, Apparent, Reactive), hourly usage pattern, energy consumption (kWh) from the PZEM cumulative counter
 - **Environment**: Climate history with temperature and humidity, comfort distribution
 - **Energy Fuzzy**: Pie charts, scatter plots, membership functions, box plots, Bland-Altman analysis, decision surface
 - **Climate Fuzzy**: ASHRAE 55 & SNI 03-6572 based thermal comfort classification with scatter plots and distribution charts

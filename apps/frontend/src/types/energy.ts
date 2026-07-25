@@ -12,7 +12,7 @@ export interface EnergyReading {
   acPower: number;
   cosPhi: number;
   apparentPower: number;
-  totalEnergy: number; // Wh
+  totalEnergy: number; // kWh (firmware cumulative)
   frequency: number;
   reactivePower: number;
   /** DHT11 (device may calibrate before publish) */

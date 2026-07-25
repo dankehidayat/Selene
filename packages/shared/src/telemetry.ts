@@ -11,7 +11,7 @@ export interface Pzem004tSample {
   voltage: number; // V
   current: number; // A
   power: number; // W
-  energy: number; // Wh (firmware cumulative)
+  energy: number; // kWh (firmware cumulative; PZEM 1 Wh steps → 0.001 kWh)
   frequency: number; // Hz
   pf: number; // power factor 0–1
   apparentPower: number; // VA

@@ -225,7 +225,7 @@ function seriesUnit(name: string): string {
   if (/current/i.test(name)) return "A";
   if (/temp/i.test(name)) return "°C";
   if (/humid/i.test(name)) return "%";
-  if (/energy/i.test(name)) return "Wh";
+  if (/energy/i.test(name)) return "kWh";
   if (/apparent/i.test(name)) return "VA";
   if (/reactive/i.test(name)) return "VAR";
   if (/power/i.test(name)) return "W";
@@ -299,10 +299,10 @@ function EnergyTooltip({
           className="inline-block w-2 h-2 rounded-full shrink-0"
           style={{ backgroundColor: color }}
         />
-        {row.name && row.name !== row.dataKey ? row.name : "Energy (Wh)"}:{" "}
+        {row.name && row.name !== row.dataKey ? row.name : "Energy (kWh)"}:{" "}
         <span className="text-gray-900 dark:text-white font-semibold">
           {row.value}
-          {/\([^)]+\)/.test(String(row.name)) ? "" : " Wh"}
+          {/\([^)]+\)/.test(String(row.name)) ? "" : " kWh"}
         </span>
       </p>
     </div>
@@ -1653,7 +1653,7 @@ export function Analytics() {
                       }}
                       payload={[
                         {
-                          value: "Energy (Wh)",
+                          value: "Energy (kWh)",
                           type: "line" as const,
                           color: "#10B981",
                           id: "energy_kwh",
@@ -1700,7 +1700,7 @@ export function Analytics() {
                       strokeWidth={2.5}
                       dot={false}
                       activeDot={{ r: 4, fill: "#10B981" }}
-                      name="Energy (Wh)"
+                      name="Energy (kWh)"
                       isAnimationActive={false}
                     />
                     {efb.upper.length > 0 && (

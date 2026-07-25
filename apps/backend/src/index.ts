@@ -28,7 +28,7 @@ import {
   getExportData,
   getEnergyInRange,
   getEnergySummaryFromCagg,
-  getCumulativeEnergyWh,
+  getCumulativeEnergyKwh,
   formatEstimatedCost,
   clampMaxPoints,
 } from "./timescale";
@@ -458,7 +458,7 @@ app.get(
       "AC Power (W)",
       "Cos Phi",
       "Apparent Power (VA)",
-      "Total Energy (Wh)",
+      "Total Energy (kWh)",
       "Frequency (Hz)",
       "Reactive Power (VAR)",
       "Temperature (°C)",
@@ -555,15 +555,15 @@ app.get(
       avgCosPhi = mean(cosPhis),
       avgReactive = mean(reactivePowers);
 
-    // Prefer PZEM cumulative Wh (same counter Blynk shows). Trapezoidal
-    // power integration only if the counter is missing from the series.
-    const cumulativeWh = await getCumulativeEnergyWh(
+    // Prefer PZEM cumulative kWh (firmware stores total_energy as kWh).
+    // Trapezoidal power integration only if the counter is missing.
+    const cumulativeKwh = await getCumulativeEnergyKwh(
       from.toISOString(),
       to.toISOString(),
     );
     let totalEnergyKwh: number;
-    if (cumulativeWh != null) {
-      totalEnergyKwh = cumulativeWh / 1000;
+    if (cumulativeKwh != null) {
+      totalEnergyKwh = cumulativeKwh;
     } else {
       totalEnergyKwh = 0;
       for (let i = 1; i < data.length; i++) {

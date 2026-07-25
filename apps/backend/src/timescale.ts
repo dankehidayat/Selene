@@ -658,15 +658,17 @@ export async function getAllReadingsForAnalytics(
 }
 
 /**
- * Energy (Wh) over [from, to] from the PZEM cumulative counter (`total_energy`).
- * This matches Blynk/hardware lifetime Wh far better than integrating avg_power ×
- * full bucket duration (which overestimates badly when samples are sparse).
+ * Energy (kWh) over [from, to] from the PZEM cumulative counter (`total_energy`).
+ *
+ * Firmware / Google Sheets / Timescale store this as **kWh** (not Wh): values
+ * like 30.356, 30.357… match PZEM’s 1 Wh resolution reported as 0.001 kWh.
+ * Do not divide by 1000 again.
  *
  * Handles meter resets: when the counter drops, treat it as a reset to 0 and
  * continue summing positive increments.
  * Returns null when there is no usable cumulative data (caller may fall back).
  */
-export async function getCumulativeEnergyWh(
+export async function getCumulativeEnergyKwh(
   from: string,
   to: string,
 ): Promise<number | null> {
@@ -690,10 +692,10 @@ export async function getCumulativeEnergyWh(
        COALESCE(SUM(
          CASE
            WHEN prev IS NULL THEN 0
-           WHEN e + 1e-6 >= prev THEN e - prev
+           WHEN e + 1e-9 >= prev THEN e - prev
            ELSE e
          END
-       ), 0) AS energy_wh,
+       ), 0) AS energy_kwh,
        COALESCE(MAX(e), 0) AS max_e
      FROM deltas`,
     [from, to],
@@ -702,25 +704,29 @@ export async function getCumulativeEnergyWh(
   const row = result.rows[0];
   if (!row || !row.n || Number(row.n) < 2) return null;
 
-  const wh = Number(row.energy_wh);
+  const kwh = Number(row.energy_kwh);
   const maxE = Number(row.max_e);
-  if (!Number.isFinite(wh)) return null;
+  if (!Number.isFinite(kwh)) return null;
 
   // Firmware never populated the counter (always 0) → let caller fall back
   // to density-weighted power integration.
-  if (maxE <= 0 && wh <= 0) return null;
+  if (maxE <= 0 && kwh <= 0) return null;
 
   // Counter present: report 0 when it didn't move in-range (do NOT invent
   // energy by multiplying sparse power samples by full bucket hours).
-  return Math.max(0, wh);
+  return Math.max(0, kwh);
 }
 
+/** @deprecated Use getCumulativeEnergyKwh — total_energy is already kWh. */
+export const getCumulativeEnergyWh = getCumulativeEnergyKwh;
+
 /**
- * Density-weighted power integration (Wh) — fallback only when cumulative
+ * Density-weighted power integration (kWh) — fallback only when cumulative
  * energy is unavailable. Weights each CAGG bucket by how full it is so a
  * single sample in an hour is not treated as a full hour of that power.
+ * Power is in W → Wh = W × hours → kWh = Wh / 1000.
  */
-async function getIntegratedEnergyWhFromCagg(
+async function getIntegratedEnergyKwhFromCagg(
   view: string,
   from: string,
   to: string,
@@ -738,7 +744,8 @@ async function getIntegratedEnergyWhFromCagg(
      WHERE bucket >= $1 AND bucket <= $2`,
     [from, to, expectedN, bucketHours],
   );
-  return Math.max(0, Number(result.rows[0]?.energy_wh) || 0);
+  const wh = Math.max(0, Number(result.rows[0]?.energy_wh) || 0);
+  return wh / 1000;
 }
 
 /**
@@ -793,13 +800,13 @@ export async function getEnergySummaryFromCagg(
   const s = stats.rows[0];
   if (!s || !s.data_points) return null;
 
-  // Prefer PZEM cumulative Wh (same source as Blynk). Fall back to
-  // density-weighted power integration only when the counter is missing.
-  const cumulativeWh = await getCumulativeEnergyWh(from, to);
-  const energyWh =
-    cumulativeWh != null
-      ? cumulativeWh
-      : await getIntegratedEnergyWhFromCagg(view, from, to, bucketKind);
+  // Prefer PZEM cumulative kWh (firmware / Sheets / Timescale unit). Fall back
+  // to density-weighted power integration only when the counter is missing.
+  const cumulativeKwh = await getCumulativeEnergyKwh(from, to);
+  const totalKwhRaw =
+    cumulativeKwh != null
+      ? cumulativeKwh
+      : await getIntegratedEnergyKwhFromCagg(view, from, to, bucketKind);
 
   // Approximate median/std from bucket avgs (weighted not exact; fine for UI)
   const series = await pool.query(
@@ -840,7 +847,7 @@ export async function getEnergySummaryFromCagg(
     avgPower: +(peakMap.get(hour) ?? 0).toFixed(2),
   }));
 
-  const totalKwh = energyWh / 1000;
+  const totalKwh = totalKwhRaw;
   const avgReactive = Number(s.avg_reactive) || 0;
 
   return {
@@ -908,9 +915,9 @@ export async function getEnergyInRange(
         ? "1 day"
         : "1 hour";
 
-  // Prefer cumulative PZEM counter per outer bucket (matches Blynk Wh / 1000).
-  // Global LAG keeps continuity across bucket edges; delta is attributed to the
-  // later sample's bucket. Fall back to density-weighted power when empty.
+  // Prefer cumulative PZEM counter per outer bucket (`total_energy` is already
+  // kWh from firmware). Global LAG keeps continuity across bucket edges; delta
+  // is attributed to the later sample's bucket. Fall back to power when empty.
   const result = await pool.query(
     `WITH samples AS (
        SELECT
@@ -935,10 +942,10 @@ export async function getEnergyInRange(
          COALESCE(SUM(
            CASE
              WHEN prev IS NULL THEN 0
-             WHEN e + 1e-6 >= prev THEN e - prev
+             WHEN e + 1e-9 >= prev THEN e - prev
              ELSE e
            END
-         ), 0) AS energy_wh
+         ), 0) AS energy_kwh
        FROM energy_deltas
        GROUP BY bucket
      ),
@@ -953,7 +960,7 @@ export async function getEnergyInRange(
      )
      SELECT
        COALESCE(e.bucket, p.bucket) AS bucket,
-       e.energy_wh,
+       e.energy_kwh,
        p.avg_power,
        p.n
      FROM energy_per_bucket e
@@ -975,10 +982,11 @@ export async function getEnergyInRange(
   let points = result.rows
     .filter((row: any) => row.bucket != null)
     .map((row: any) => {
-      const cumulativeWh = Number(row.energy_wh) || 0;
+      const cumulativeKwh = Number(row.energy_kwh) || 0;
       let energyKwh: number;
-      if (cumulativeWh > 0) {
-        energyKwh = cumulativeWh / 1000;
+      if (cumulativeKwh > 0) {
+        // total_energy is already kWh — use delta as-is
+        energyKwh = cumulativeKwh;
       } else {
         // Density-weighted: avg_power (W) × effective hours → Wh → kWh
         const n = Number(row.n) || 0;
