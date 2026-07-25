@@ -183,6 +183,59 @@ function ForecastBanner() {
   );
 }
 
+/**
+ * Area+Line share a dataKey; Recharts puts both in the tooltip payload.
+ * Keep only the labeled Line (name ≠ dataKey) so we don't show raw "power: …".
+ */
+function uniqueTooltipRows(payload?: any[]): any[] {
+  if (!payload?.length) return [];
+  const byKey = new Map<string, any>();
+  for (const e of payload) {
+    if (e == null || e.value == null || e.hide) continue;
+    const dataKey = String(e.dataKey ?? e.name ?? "");
+    const name = String(e.name ?? dataKey);
+    const isRawKeyLabel = name === dataKey || name === dataKey.toLowerCase();
+    const isFillOnly =
+      (e.stroke === "none" || e.stroke === undefined) &&
+      e.fill &&
+      e.fill !== "none";
+    if (isFillOnly && isRawKeyLabel) continue;
+    if (isRawKeyLabel && !e.stroke) continue;
+
+    const key = dataKey || name;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, e);
+      continue;
+    }
+    const prevRaw =
+      String(prev.name) === String(prev.dataKey) ||
+      String(prev.name) === String(prev.dataKey).toLowerCase();
+    if (!isRawKeyLabel && prevRaw) byKey.set(key, e);
+  }
+  return Array.from(byKey.values()).filter(
+    (e) =>
+      typeof e.name === "string" &&
+      e.name.length > 0 &&
+      e.name !== String(e.dataKey),
+  );
+}
+
+/** Unit suffix only when the series name doesn't already include one. */
+function seriesUnit(name: string): string {
+  if (/\([^)]+\)/.test(name)) return "";
+  if (/forecast/i.test(name) && /temp/i.test(name)) return "°C";
+  if (/forecast/i.test(name) && /humid/i.test(name)) return "%";
+  if (/current/i.test(name)) return "A";
+  if (/temp/i.test(name)) return "°C";
+  if (/humid/i.test(name)) return "%";
+  if (/energy/i.test(name)) return "Wh";
+  if (/apparent/i.test(name)) return "VA";
+  if (/reactive/i.test(name)) return "VAR";
+  if (/power/i.test(name)) return "W";
+  return "";
+}
+
 function PowerTooltip({
   active,
   payload,
@@ -194,32 +247,33 @@ function PowerTooltip({
   label?: string;
   range: string;
 }) {
-  if (!active || !payload?.length || !label) return null;
+  const rows = uniqueTooltipRows(payload);
+  if (!active || !rows.length || !label) return null;
   return (
     <div className={TOOLTIP_CLASS}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
         {formatDateForTooltip(label, range)}
       </p>
-      {payload.map((e: any) => (
-        <p
-          key={e.name}
-          className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
-        >
-          <span
-            className="inline-block w-2 h-2 rounded-full"
-            style={{ backgroundColor: e.color }}
-          />
-          {e.name}:{" "}
-          <span className="text-gray-900 dark:text-white font-semibold">
-            {e.value}{" "}
-            {e.name.includes("Power") || e.name === "Reactive"
-              ? "W"
-              : e.name === "Current"
-                ? "A"
-                : ""}
-          </span>
-        </p>
-      ))}
+      {rows.map((e: any) => {
+        const unit = seriesUnit(String(e.name));
+        const color = e.color || e.stroke || "#6B7280";
+        return (
+          <p
+            key={e.name}
+            className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: color }}
+            />
+            {e.name}:{" "}
+            <span className="text-gray-900 dark:text-white font-semibold">
+              {e.value}
+              {unit ? ` ${unit}` : ""}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -234,17 +288,25 @@ function EnergyTooltip({
   label?: string;
   range: string;
 }) {
-  if (!active || !payload?.length || !label) return null;
+  const rows = uniqueTooltipRows(payload);
+  const row =
+    rows.find((e) => /energy/i.test(String(e.name))) ?? rows[0] ?? payload?.[0];
+  if (!active || !row || !label) return null;
+  const color = row.color || row.stroke || "#10B981";
   return (
     <div className={TOOLTIP_CLASS}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
         {formatDateForTooltip(label, range)}
       </p>
       <p className="text-gray-400 dark:text-gray-400 flex items-center gap-2">
-        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
-        Energy:{" "}
+        <span
+          className="inline-block w-2 h-2 rounded-full shrink-0"
+          style={{ backgroundColor: color }}
+        />
+        {row.name && row.name !== row.dataKey ? row.name : "Energy (Wh)"}:{" "}
         <span className="text-gray-900 dark:text-white font-semibold">
-          {payload[0]?.value} Wh
+          {row.value}
+          {/\([^)]+\)/.test(String(row.name)) ? "" : " Wh"}
         </span>
       </p>
     </div>
@@ -261,28 +323,33 @@ function EnvTooltip({
   label?: string;
   range: string;
 }) {
-  if (!active || !payload?.length || !label) return null;
+  const rows = uniqueTooltipRows(payload);
+  if (!active || !rows.length || !label) return null;
   return (
     <div className={TOOLTIP_CLASS}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
         {formatDateForTooltip(label, range)}
       </p>
-      {payload.map((e: any) => (
-        <p
-          key={e.name}
-          className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
-        >
-          <span
-            className="inline-block w-2 h-2 rounded-full"
-            style={{ backgroundColor: e.color }}
-          />
-          {e.name}:{" "}
-          <span className="text-gray-900 dark:text-white font-semibold">
-            {e.value}
-            {e.name?.includes("Temp") ? "°C" : "%"}
-          </span>
-        </p>
-      ))}
+      {rows.map((e: any) => {
+        const unit = seriesUnit(String(e.name));
+        const color = e.color || e.stroke || "#6B7280";
+        return (
+          <p
+            key={e.name}
+            className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: color }}
+            />
+            {e.name}:{" "}
+            <span className="text-gray-900 dark:text-white font-semibold">
+              {e.value}
+              {unit ? ` ${unit}` : ""}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -1085,8 +1152,8 @@ export function Analytics() {
             Energy, environment, and fuzzy intelligence across your fleet
           </p>
         </div>
-        {/* Mobile: equal-width grid; desktop: compact pills */}
-        <div className="w-full sm:w-auto grid grid-cols-4 sm:flex sm:items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+        {/* Full labels — 2×2 on narrow screens, row on sm+ */}
+        <div className="w-full sm:w-auto grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
           {analyticsTabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -1094,21 +1161,15 @@ export function Analytics() {
                 key={tab.key}
                 type="button"
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 min-w-0 px-1 sm:px-3.5 py-2 text-[10px] sm:text-sm font-semibold rounded-lg transition-all duration-200 active:scale-[0.97] ${
+                className={`flex flex-row items-center justify-center gap-1.5 sm:gap-2 min-w-0 px-2 sm:px-3.5 py-2 text-[11px] sm:text-sm font-semibold rounded-lg transition-all duration-200 active:scale-[0.97] ${
                   activeTab === tab.key
                     ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
                     : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                 }`}
               >
                 <Icon size={15} className="shrink-0" />
-                <span className="truncate w-full text-center sm:w-auto sm:text-left">
-                  {tab.key === "energy"
-                    ? "Energy"
-                    : tab.key === "environment"
-                      ? "Env"
-                      : tab.key === "fuzzy"
-                        ? "Ener. Fuzzy"
-                        : "Clim. Fuzzy"}
+                <span className="text-center sm:text-left leading-tight">
+                  {tab.label}
                 </span>
               </button>
             );

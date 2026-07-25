@@ -114,6 +114,59 @@ function ForecastBanner() {
   );
 }
 
+/** Drop Area fill twins (raw dataKey labels) so only Line series show. */
+function uniqueTooltipRows(
+  payload?: Array<{
+    value?: number;
+    name?: string;
+    color?: string;
+    dataKey?: string | number;
+    stroke?: string;
+    fill?: string;
+    hide?: boolean;
+  }>,
+) {
+  if (!payload?.length) return [];
+  const byKey = new Map<string, (typeof payload)[number]>();
+  for (const e of payload) {
+    if (e == null || e.value == null || e.hide) continue;
+    const dataKey = String(e.dataKey ?? e.name ?? "");
+    const name = String(e.name ?? dataKey);
+    const isRaw = name === dataKey || name === dataKey.toLowerCase();
+    const isFillOnly =
+      (e.stroke === "none" || e.stroke === undefined) &&
+      !!e.fill &&
+      e.fill !== "none";
+    if (isFillOnly && isRaw) continue;
+    if (isRaw && !e.stroke) continue;
+    const key = dataKey || name;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, e);
+      continue;
+    }
+    const prevRaw =
+      String(prev.name) === String(prev.dataKey) ||
+      String(prev.name) === String(prev.dataKey).toLowerCase();
+    if (!isRaw && prevRaw) byKey.set(key, e);
+  }
+  return Array.from(byKey.values()).filter(
+    (e) =>
+      typeof e.name === "string" &&
+      e.name.length > 0 &&
+      e.name !== String(e.dataKey),
+  );
+}
+
+function unitForSeries(name: string): string {
+  if (/\([^)]+\)/.test(name)) return "";
+  if (/current/i.test(name)) return "A";
+  if (/temp/i.test(name)) return "°C";
+  if (/humid/i.test(name)) return "%";
+  if (/power/i.test(name)) return "W";
+  return "";
+}
+
 function UnifiedTooltip({
   active,
   payload,
@@ -121,31 +174,44 @@ function UnifiedTooltip({
   range,
 }: {
   active?: boolean;
-  payload?: Array<{ value: number; name: string; color: string }>;
+  payload?: Array<{
+    value: number;
+    name: string;
+    color: string;
+    dataKey?: string;
+    stroke?: string;
+    fill?: string;
+  }>;
   label?: string;
   range: string;
 }) {
-  if (!active || !payload?.length || !label) return null;
+  const rows = uniqueTooltipRows(payload);
+  if (!active || !rows.length || !label) return null;
   return (
     <div className={TC}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
         {formatDateForTooltip(label, range)}
       </p>
-      {payload.map((e) => (
-        <p
-          key={e.name}
-          className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
-        >
-          <span
-            className="inline-block w-2 h-2 rounded-full"
-            style={{ backgroundColor: e.color }}
-          />
-          {e.name}:{" "}
-          <span className="text-gray-900 dark:text-white font-semibold">
-            {e.value} W
-          </span>
-        </p>
-      ))}
+      {rows.map((e) => {
+        const unit = unitForSeries(String(e.name));
+        const color = e.color || e.stroke || "#6B7280";
+        return (
+          <p
+            key={e.name}
+            className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: color }}
+            />
+            {e.name}:{" "}
+            <span className="text-gray-900 dark:text-white font-semibold">
+              {e.value}
+              {unit ? ` ${unit}` : ""}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -157,32 +223,44 @@ function ClimateTooltip({
   range,
 }: {
   active?: boolean;
-  payload?: Array<{ value: number; name: string; color: string }>;
+  payload?: Array<{
+    value: number;
+    name: string;
+    color: string;
+    dataKey?: string;
+    stroke?: string;
+    fill?: string;
+  }>;
   label?: string;
   range: string;
 }) {
-  if (!active || !payload?.length || !label) return null;
+  const rows = uniqueTooltipRows(payload);
+  if (!active || !rows.length || !label) return null;
   return (
     <div className={TC}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
         {formatDateForTooltip(label, range)}
       </p>
-      {payload.map((e) => (
-        <p
-          key={e.name}
-          className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
-        >
-          <span
-            className="inline-block w-2 h-2 rounded-full"
-            style={{ backgroundColor: e.color }}
-          />
-          {e.name}:{" "}
-          <span className="text-gray-900 dark:text-white font-semibold">
-            {e.value}
-            {e.name?.includes("Temp") ? "°C" : "%"}
-          </span>
-        </p>
-      ))}
+      {rows.map((e) => {
+        const unit = unitForSeries(String(e.name));
+        const color = e.color || e.stroke || "#6B7280";
+        return (
+          <p
+            key={e.name}
+            className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: color }}
+            />
+            {e.name}:{" "}
+            <span className="text-gray-900 dark:text-white font-semibold">
+              {e.value}
+              {unit ? ` ${unit}` : ""}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }

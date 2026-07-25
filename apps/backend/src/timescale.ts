@@ -547,7 +547,13 @@ function mapCaggToAnalytics(row: any) {
 
 /**
  * Analytics series — prefers continuous aggregates for ranges ≥ 24h.
- * Caps classification set size so fuzzy never sees 12k raw points.
+ *
+ * Coverage: the range window [from, to] is always respected (full 1y when
+ * selected). Sampling is even across time (oldest → newest), not “latest N
+ * only”, so a 1y selection still spans the whole year.
+ *
+ * Hourly CAGG for 1y is at most ~8760 buckets — classify all of them.
+ * Only apply a hard ceiling when buckets explode (raw / 5m over long windows).
  */
 export async function getAllReadingsForAnalytics(
   from: string,
@@ -560,7 +566,8 @@ export async function getAllReadingsForAnalytics(
     rangeOrBucket ?? "",
   );
   const prefer1h = ["30d", "3m", "6m", "1y", "month"].includes(rangeOrBucket ?? "");
-  const maxClassify = prefer1h ? 2500 : longRange ? 3000 : 2000;
+  // 1y hourly ≈ 8760; keep full span. Ceiling only for denser series.
+  const maxClassify = prefer1h ? 9000 : longRange ? 6000 : 3000;
 
   if (longRange) {
     const view = prefer1h ? CAGG_1H : CAGG_5M;
@@ -572,6 +579,7 @@ export async function getAllReadingsForAnalytics(
         [from, to],
       );
       let points = result.rows.map(mapCaggToAnalytics);
+      // Even time coverage if we ever exceed the ceiling (not "last N only")
       if (points.length > maxClassify) {
         points = systematicSample(points, maxClassify);
       }
@@ -579,7 +587,7 @@ export async function getAllReadingsForAnalytics(
     }
   }
 
-  // Short range or CAGG miss: raw with hard limit
+  // Short range or CAGG miss: raw with hard limit (still ASC = full window start)
   if (rangeOrBucket === "1h" || !longRange) {
     const result = await pool.query(
       `SELECT * FROM sensor_readings
@@ -606,7 +614,7 @@ export async function getAllReadingsForAnalytics(
     }));
   }
 
-  // Fallback time_bucket on raw
+  // Fallback time_bucket on raw — full [from,to], then even sample if needed
   const interval = prefer1h ? "1 hour" : "5 minutes";
   const result = await pool.query(
     `SELECT
@@ -631,7 +639,9 @@ export async function getAllReadingsForAnalytics(
     [from, to, interval],
   );
   let points = result.rows.map(mapCaggToAnalytics);
-  if (points.length > maxClassify) points = systematicSample(points, maxClassify);
+  if (points.length > maxClassify) {
+    points = systematicSample(points, maxClassify);
+  }
   return points;
 }
 
