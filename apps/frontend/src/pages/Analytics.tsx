@@ -1121,29 +1121,13 @@ export function Analytics() {
       {/* ═════ ENERGY ═════ */}
       {activeTab === "energy" && (
         <section className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Energy Analysis
-              </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
-                Power consumption patterns and statistical summaries
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <ToggleControl
-                pressed={showForecast}
-                onPressedChange={setShowForecast}
-              >
-                Forecast
-              </ToggleControl>
-              <RangeSelect
-                options={RANGE_OPTIONS}
-                value={energyRange}
-                onChange={setEnergyRange}
-                labels={RANGE_LABELS}
-              />
-            </div>
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Energy Analysis
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
+              Power consumption patterns and statistical summaries
+            </p>
           </div>
           {showForecast && <ForecastBanner />}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1181,7 +1165,26 @@ export function Analytics() {
             />
           </div>
 
-          <ChartCard title="Energy Usage" chartId="chart-energy-usage">
+          <ChartCard
+            title="Energy Usage"
+            chartId="chart-energy-usage"
+            action={
+              <div className="flex items-center gap-2">
+                <ToggleControl
+                  pressed={showForecast}
+                  onPressedChange={setShowForecast}
+                >
+                  Forecast
+                </ToggleControl>
+                <RangeSelect
+                  options={RANGE_OPTIONS}
+                  value={energyRange}
+                  onChange={setEnergyRange}
+                  labels={RANGE_LABELS}
+                />
+              </div>
+            }
+          >
             {!energyChartsReady || historyLoading ? (
               <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                 Loading chart…
@@ -1772,29 +1775,13 @@ export function Analytics() {
       {/* ═════ ENVIRONMENT ═════ */}
       {activeTab === "environment" && (
         <section className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Environment Analysis
-              </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
-                Temperature, humidity, and climate comfort analytics
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <ToggleControl
-                pressed={showForecast}
-                onPressedChange={setShowForecast}
-              >
-                Forecast
-              </ToggleControl>
-              <RangeSelect
-                options={RANGE_OPTIONS}
-                value={climateRange}
-                onChange={setClimateRange}
-                labels={RANGE_LABELS}
-              />
-            </div>
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Environment Analysis
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
+              Temperature, humidity, and climate comfort analytics
+            </p>
           </div>
           {showForecast && <ForecastBanner />}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -1837,7 +1824,26 @@ export function Analytics() {
             />
           </div>
           <div className="grid lg:grid-cols-2 gap-4">
-            <ChartCard title="Climate History" chartId="chart-climate-history">
+            <ChartCard
+              title="Climate History"
+              chartId="chart-climate-history"
+              action={
+                <div className="flex items-center gap-2">
+                  <ToggleControl
+                    pressed={showForecast}
+                    onPressedChange={setShowForecast}
+                  >
+                    Forecast
+                  </ToggleControl>
+                  <RangeSelect
+                    options={RANGE_OPTIONS}
+                    value={climateRange}
+                    onChange={setClimateRange}
+                    labels={RANGE_LABELS}
+                  />
+                </div>
+              }
+            >
               {climateLoading ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   Loading...
@@ -2229,27 +2235,19 @@ export function Analytics() {
       {/* ═════ ENERGY FUZZY ═════ */}
       {activeTab === "fuzzy" && (
         <section className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Energy Fuzzy Analysis
-              </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                  Multi-variable fuzzy inference for energy classification
-                </p>
-                <InfoTip
-                  title="IEEE 1159 & PLN Standards"
-                  content="Based on IEEE 1159-2019 and PLN standards requiring power factor ≥ 0.85. Uses Mamdani fuzzy inference with 15 rules across 4 input variables."
-                />
-              </div>
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Energy Fuzzy Analysis
+            </h2>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+                Multi-variable fuzzy inference for energy classification
+              </p>
+              <InfoTip
+                title="IEEE 1159 & PLN Standards"
+                content="Based on IEEE 1159-2019 and PLN standards requiring power factor ≥ 0.85. Uses Mamdani fuzzy inference with 15 rules across 4 input variables."
+              />
             </div>
-            <RangeSelect
-              options={RANGE_OPTIONS}
-              value={energyRange}
-              onChange={setEnergyRange}
-              labels={RANGE_LABELS}
-            />
           </div>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
@@ -2287,6 +2285,14 @@ export function Analytics() {
             <ChartCard
               title="Energy Category Distribution"
               chartId="chart-fuzzy-pie"
+              action={
+                <RangeSelect
+                  options={RANGE_OPTIONS}
+                  value={energyRange}
+                  onChange={setEnergyRange}
+                  labels={RANGE_LABELS}
+                />
+              }
             >
               {fuzzyLoading ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -2602,27 +2608,19 @@ export function Analytics() {
       {/* ═════ CLIMATE FUZZY ═════ */}
       {activeTab === "climate-fuzzy" && (
         <section className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                Climate Fuzzy Analysis
-              </h2>
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                  Fuzzy inference for thermal comfort classification
-                </p>
-                <InfoTip
-                  title="ASHRAE 55 & SNI 03-6572"
-                  content="Based on ASHRAE 55-2020 and SNI 03-6572-2001. Adapted for naturally ventilated buildings in tropical climates. 14 rules across 2 input variables."
-                />
-              </div>
+          <div>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              Climate Fuzzy Analysis
+            </h2>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+                Fuzzy inference for thermal comfort classification
+              </p>
+              <InfoTip
+                title="ASHRAE 55 & SNI 03-6572"
+                content="Based on ASHRAE 55-2020 and SNI 03-6572-2001. Adapted for naturally ventilated buildings in tropical climates. 14 rules across 2 input variables."
+              />
             </div>
-            <RangeSelect
-              options={RANGE_OPTIONS}
-              value={climateFuzzyRange}
-              onChange={setClimateFuzzyRange}
-              labels={RANGE_LABELS}
-            />
           </div>
           <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
             <StatCard
@@ -2686,6 +2684,14 @@ export function Analytics() {
             <ChartCard
               title="Climate Category Distribution"
               chartId="chart-climate-fuzzy-pie"
+              action={
+                <RangeSelect
+                  options={RANGE_OPTIONS}
+                  value={climateFuzzyRange}
+                  onChange={setClimateFuzzyRange}
+                  labels={RANGE_LABELS}
+                />
+              }
             >
               {climateFuzzyLoading ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
