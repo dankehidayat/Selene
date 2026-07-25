@@ -22,9 +22,9 @@ const firmwareStore = new Map<string, PendingFirmware>();
 
 /** Keep binaries available long enough for slow Wi‑Fi OTA + retries */
 const FIRMWARE_TTL_MS = 15 * 60 * 1000;
-/** Re-publish MQTT ota command while binary is still pending */
-const OTA_REPUBLISH_MS = 12_000;
-const OTA_REPUBLISH_MAX = 25; // ~5 minutes of retries
+/** Re-publish MQTT ota command while binary is still pending (not a firehose) */
+const OTA_REPUBLISH_MS = 30_000;
+const OTA_REPUBLISH_MAX = 10; // ~5 minutes of spaced retries
 
 // Clean up expired firmware every minute
 setInterval(() => {
