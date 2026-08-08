@@ -27,7 +27,13 @@ app.get("/health", async () => ({
 
 // Manual proxy handler using native fetch
 app.setNotFoundHandler(async (request, reply) => {
-  const url = request.url || "";
+  // Clean up URL to remove any leading slashes
+  let url = request.url || "";
+  
+  // Normalize multiple leading slashes
+  while (url.startsWith("//")) {
+    url = url.substring(1);
+  }
   
   // Forward /api/v1/auth/* routes
   if (url.startsWith("/api/v1/auth/")) {
@@ -35,7 +41,7 @@ app.setNotFoundHandler(async (request, reply) => {
     const backendPath = url.replace(/^\/api\/v1\//, "/api/");
     
     try {
-      console.log(`Proxying ${request.method} ${backendPath} to ${MONOLITH_URL}${backendPath}`);
+      console.log(`Proxy ${request.method} ${url} → ${MONOLITH_URL}${backendPath}`);
       
       const response = await fetch(`${MONOLITH_URL}${backendPath}`, {
         method: request.method,
