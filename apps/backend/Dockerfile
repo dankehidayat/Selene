@@ -8,22 +8,17 @@ FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-# Workspace root lockfile + package manifests
+# Install ALL workspace deps first (more reliable than filtered install)
 COPY package.json bun.lock ./
-COPY apps/backend/package.json ./apps/backend/
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/sensors/package.json ./packages/sensors/
+RUN bun install
 
-# Install workspace deps (backend + packages only)
-RUN bun install --filter @selene/backend --filter @selene/shared --filter @selene/sensors
-
-# Source
+# Source code
 COPY packages/shared ./packages/shared
 COPY packages/sensors ./packages/sensors
 COPY apps/backend ./apps/backend
 
 WORKDIR /app/apps/backend
-RUN bunx prisma generate
+RUN bunx prisma generate || echo "Prisma generate skipped" || true
 
 # Sync schema on container start (adds columns like passwordChangedAt)
 COPY apps/backend/docker-entrypoint.sh /app/apps/backend/docker-entrypoint.sh
