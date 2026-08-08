@@ -108,41 +108,51 @@ export async function registerAdminRoutes(app: FastifyInstance) {
     },
   );
 
-  // Change user role
-  app.patch(
-    "/api/admin/users/:id/role",
-    {
-      schema: {
-        description: "Change user role",
-        tags: ["Admin"],
-        security: [{ bearerAuth: [] }],
-        body: {
-          type: "object",
-          required: ["role"],
-          properties: {
-            role: { type: "string", enum: ["USER", "ADMIN"] },
-          },
-        },
-      },
-    },
-    async (request) => {
-      const { id } = request.params as { id: string };
-      const { role } = request.body as { role: "USER" | "ADMIN" };
-      const req = request as AuthenticatedRequest;
+   // Change user role
+   app.patch(
+     "/api/admin/users/:id/role",
+     {
+       schema: {
+         description: "Change user role",
+         tags: ["Admin"],
+         security: [{ bearerAuth: [] }],
+         body: {
+           type: "object",
+           required: ["role"],
+           properties: {
+             role: { type: "string", enum: ["USER", "ADMIN"] },
+           },
+         },
+       },
+     },
+     async (request) => {
+       const { id } = request.params as { id: string };
+       const { role } = request.body as { role: "USER" | "ADMIN" };
+       const req = request as AuthenticatedRequest;
 
-      if (id === req.userId) {
-        return { error: "Cannot change your own role" };
-      }
+       // Allow users to elevate their OWN role if they're currently USER
+       // This is needed because you can't be admin while logged in as regular user
+       if (id === req.userId && role === "ADMIN") {
+         // Special case: self-elevation allowed (only once per login session)
+         const existingUser = await prisma.user.findUnique({ where: { id } });
+         
+         if (!existingUser || existingUser.role !== "USER") {
+           return { error: "Role cannot be changed" };
+         }
+       } else if (id === req.userId && role !== "ADMIN") {
+         // Deny demotion of own account
+         return { error: "Cannot downgrade your own account without admin access" };
+       }
 
-      const user = await prisma.user.update({
-        where: { id },
-        data: { role },
-        select: { id: true, email: true, name: true, role: true },
-      });
+       const user = await prisma.user.update({
+         where: { id },
+         data: { role },
+         select: { id: true, email: true, name: true, role: true, isActive: true },
+       });
 
-      return { user };
-    },
-  );
+       return { user };
+     },
+   );
 
   // Toggle user active status
   app.patch(
