@@ -85,6 +85,7 @@
       "name": "@selene/shared",
       "version": "0.1.0",
       "dependencies": {
+        "jose": "^6.2.8",
         "jsonwebtoken": "^9.0.2",
         "mqtt": "^5.10.1",
         "pg": "^8.13.0",
@@ -99,10 +100,18 @@
       "name": "@selene/auth",
       "version": "0.1.0",
       "dependencies": {
+        "@prisma/client": "^6.19.3",
         "@selene/shared": "workspace:*",
+        "bcryptjs": "^2.4.3",
         "fastify": "^4.28.0",
+        "jose": "^6.2.8",
+        "otplib": "^13.4.1",
+        "resend": "^6.18.0",
       },
       "devDependencies": {
+        "@types/bcryptjs": "^2.4.6",
+        "@types/node": "^20.14.0",
+        "prisma": "^6.19.3",
         "typescript": "^5.5.4",
       },
     },
@@ -864,6 +873,8 @@
     "jackspeak": ["jackspeak@3.4.3", "", { "dependencies": { "@isaacs/cliui": "^8.0.2" }, "optionalDependencies": { "@pkgjs/parseargs": "^0.11.0" } }, "sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw=="],
 
     "jiti": ["jiti@1.21.7", "", { "bin": { "jiti": "bin/jiti.js" } }, "sha512-/imKNG4EbWNrVjoNC/1H5/9GFy+tqjGBHCaSsN+P2RnPqjsLmv6UD3Ej+Kj8nBWaRAwyk7kK5ZUc+OEatnTR3A=="],
+
+    "jose": ["jose@6.2.8", "", {}, "sha512-Bsdjwm3Qsd/P0jR+BHDe3LytDfY7WBq2HmCCLIwuVRHMuEC9ae7/R474GIUdF1NgCyZjzVo/A9DOiOBtXq8ZoQ=="],
 
     "js-sdsl": ["js-sdsl@4.3.0", "", {}, "sha512-mifzlm2+5nZ+lEcLJMoBK0/IH/bDg8XnJfd/Wq6IP+xoCjLZsTOnV2QpxlVbX9bMnkl5PdEjNtBJ9Cj1NjifhQ=="],
 

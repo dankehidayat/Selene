@@ -1,6 +1,8 @@
-# Administrator Role Elevation — Security Protocol (Proposed Design)
+# Administrator Role Elevation — Security Protocol
 
-> **Status:** Proposed / not yet implemented
+> **Status:** Implemented in `services/auth` (Phase B3 of
+> `feat/api-v1-microservices`). Email-confirmation layer is opt-in via
+> `ELEVATION_CONFIRMATION=true`.
 > **Version:** 0.1.0
 > **Last updated:** 2026-08-09
 >
@@ -34,8 +36,8 @@ the endpoint is considered production-safe.
 - Blocks immediate post-registration escalation.
 - Checks `User.createdAt` freshness before any elevation attempt.
 
-- **Status: Designed** — requires a schema field only if computed client-side
-  is sufficient (recommended: derive from existing `createdAt`; no migration).
+- **Status: Implemented** — `services/auth` enforces `MIN_ACCOUNT_AGE_MS`
+  (24 h) before self-elevation to ADMIN.
 
 ### 2. Rate limiting (target: 5 attempts / hour / user)
 
@@ -43,9 +45,9 @@ the endpoint is considered production-safe.
 - Exponential back-off after repeated failures.
 - Database-tracked counter with TTL (see § Prisma models below).
 
-- **Status: Proposed** — a `RateLimitState` model exists in an unmerged draft
-  (`schema.prisma` does **not** yet contain it). The v1 auth service will add
-  rate limiting as part of its auth hardening milestone.
+- **Status: Implemented** — `services/auth/prisma/schema.prisma` adds
+  `RateLimitState` (with `unique([userId, action])` and `lastAttempt`);
+  `PATCH /admin/users/:id/role` enforces 5 attempts / hour.
 
 ### 3. Two-factor authentication (TOTP)
 
@@ -53,27 +55,29 @@ the endpoint is considered production-safe.
 - Backup codes accepted as fallback.
 - Encrypted secret storage; SHA-based verification.
 
-- **Status: Partially designed** — the monolith already ships TOTP enable /
-  disable / login-2FA / backup codes (`/api/auth/2fa/*`, verified in
-  `apps/backend/src/routes/auth.ts`). Elevation *requiring* a TOTP re-verify is
-  **not** implemented.
+- **Status: Implemented** — the auth service re-implements the monolith's
+  `/api/auth/2fa/*` (enable / disable / login-2FA / backup codes,
+  `services/auth/src/totp.ts`), and self-elevation re-verifies the admin's TOTP
+  or backup code before granting ADMIN.
 
 ### 4. Email confirmation
 
 - One-time confirmation code sent via Resend.
 - SHA-256 hashed tokens; 10-minute validity; single-use with consumption flag.
 
-- **Design notes:** reuse the existing mail pipeline in `apps/backend/src/mail.ts`
-  (already wired for password reset). Needs a `ConfirmationCode` persistence
-  model; not yet implemented.
+- **Design notes:** reuse the existing mail pipeline in `services/auth/src/mail.ts`
+  (`sendElevationCode`). **Status: Implemented (opt-in)** — `ConfirmationCode`
+  persistence exists and the flow runs when `ELEVATION_CONFIRMATION=true`
+  (off by default to match the v1 contract's `{ role, totpCode }` body).
 
 ### 5. Comprehensive audit logging
 
 - Records: IP, user-agent, actor/target, timestamps, method.
 - Intended to satisfy GDPR / SOC2 / ISO 27001 review expectations.
 
-- **Status: Proposed** — no `RoleChangeAudit` model exists in
-  `apps/backend/prisma/schema.prisma` today.
+- **Status: Implemented** — `services/auth/prisma/schema.prisma` adds
+  `RoleChangeAudit` (with `actorId`, `actorRole`, `method`, IP, UA); both the
+  elevation and admin-manages-user paths write an audit row.
 
 ### 6. Session invalidation
 
@@ -81,7 +85,9 @@ the endpoint is considered production-safe.
 - Login-history purge + JWT blacklist.
 - Automatic session restoration on next login.
 
-- **Status: Proposed.**
+- **Status: Implemented** — elevation revokes all `RefreshSession` families for
+  the user (so every issued refresh token is rejected) and bumps
+  `passwordChangedAt` to invalidate outstanding access tokens at verify time.
 
 ## Error handling (target contract)
 
@@ -95,17 +101,23 @@ All elevation errors follow the unified API envelope:
 | 409 | Account already has admin privileges |
 | 429 | Too many attempts — please wait (`Retry-After` header) |
 
-## Required Prisma models (draft — NOT in schema)
+## Required Prisma models (shipped in `services/auth/prisma/schema.prisma`)
+
+Shipped with the auth-service schema (mirrored table shapes so the service can
+share the monolith's Postgres during migration):
 
 ```prisma
 model RoleChangeAudit {
     id        String   @id @default(cuid())
     userId    String
+    actorId   String
+    actorRole UserRole?
     targetEmail String
     oldRole   UserRole?
     newRole   UserRole
     ipAddress String?
     userAgent String?
+    method    String   @default("api")
     createdAt DateTime @default(now())
 }
 
@@ -115,6 +127,7 @@ model RateLimitState {
     action    String
     attempts  Int      @default(0)
     expiresAt DateTime
+    lastAttempt DateTime @default(now())
     @@unique([userId, action])
 }
 
@@ -128,18 +141,19 @@ model ConfirmationCode {
 }
 ```
 
-> **Warning:** adding these models is a **breaking schema change**. It must be
-> shipped as a Prisma migration (`bunx prisma migrate add --name admin_elevation`)
-> — never `db push` in production without a plan.
+> **Warning:** applying these models to the monolith's schema is a **breaking
+> schema change** in production. Ship as a Prisma migration
+> (`bunx prisma migrate add --name admin_elevation`) — never `db push` in
+> production without a plan.
 
 ## Testing checklist (when implemented)
 
-- [ ] TOTP verification works correctly
-- [ ] Email confirmation codes are sent and expire correctly
+- [x] TOTP verification works correctly
+- [ ] Email confirmation codes are sent and expire correctly (opt-in, `ELEVATION_CONFIRMATION=true`)
 - [ ] Rate limiting blocks after 5 failed attempts
-- [ ] Accounts < 24 h old cannot be elevated
-- [ ] Audit logs record all attempts
-- [ ] Sessions are invalidated after a successful elevation
+- [x] Accounts < 24 h old cannot be elevated
+- [x] Audit logs record all attempts
+- [x] Sessions are invalidated after a successful elevation
 
 ## Migration / rollout note
 

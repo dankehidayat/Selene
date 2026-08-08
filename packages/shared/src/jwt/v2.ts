@@ -126,7 +126,7 @@ export async function usePrivateKeyPem(pem: string): Promise<void> {
 
 export interface SignAccessOptions {
   /** Unique id for the session (also embedded in refresh tokens). */
-  sessionId: string;
+  sessionId?: string;
   /** Manual issued-at override (tests). */
   iat?: number;
 }
