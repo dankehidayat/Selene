@@ -6,7 +6,11 @@ import Fastify from "fastify";
 import { SERVICE_PORTS } from "@selene/shared";
 
 const port = Number(process.env.AUTH_PORT || SERVICE_PORTS.auth);
-const MONOLITH_URL = process.env.MONOLITH_URL || `http://localhost:${process.env.BACKEND_PORT || '8787'}`;
+
+// Use container name for inter-service communication within Docker network
+const MONOLITH_HOST = process.env.MONOLITH_HOST || "monolith";
+const MONOLITH_PORT = process.env.MONOLITH_PORT || "8787";
+const MONOLITH_URL = process.env.MONOLITH_URL || `http://${MONOLITH_HOST}:${MONOLITH_PORT}`;
 
 const app = Fastify({ logger: true });
 
@@ -31,6 +35,8 @@ app.setNotFoundHandler(async (request, reply) => {
     const backendPath = url.replace(/^\/api\/v1\//, "/api/");
     
     try {
+      console.log(`Proxying ${request.method} ${backendPath} to ${MONOLITH_URL}${backendPath}`);
+      
       const response = await fetch(`${MONOLITH_URL}${backendPath}`, {
         method: request.method,
         headers: {
@@ -47,7 +53,9 @@ app.setNotFoundHandler(async (request, reply) => {
       console.error(`Proxy error for ${request.url}:`, error.message);
       return reply.code(502).send({ 
         error: "Backend unavailable", 
-        path: `${MONOLITH_URL}${backendPath}` 
+        path: `${MONOLITH_URL}${backendPath}`,
+        host: MONOLITH_HOST,
+        port: MONOLITH_PORT 
       });
     }
   }
@@ -83,4 +91,5 @@ app.setNotFoundHandler(async (request, reply) => {
 await app.listen({ port, host: "0.0.0.0" });
 console.log(`[auth] SELNE v1 API listening on :${port}`);
 console.log(`  - Health: http://localhost:${port}/health`);
-console.log(`  - Monolith Backend: ${MONOLITH_URL}`);
+console.log(`  - Monolith Backend URL: ${MONOLITH_URL}`);
+console.log(`  - Host: ${MONOLITH_HOST}, Port: ${MONOLITH_PORT}`);

@@ -70,11 +70,13 @@ services:
     ports:
       - "3009:3009"
     environment:
-      AUTH_PORT: 3009
+      AUTH_PORT: ${AUTH_PORT}
       DATABASE_URL: postgresql://selene_admin:${POSTGRES_PASSWORD}@postgres:5432/selene
       JWT_SECRET: ${JWT_SECRET}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      MONOLITH_HOST: monolith
+      MONOLITH_PORT: ${MONOLITH_PORT:-8787}
     depends_on:
       postgres:
         condition: service_healthy
