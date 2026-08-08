@@ -17,10 +17,7 @@ COPY packages/shared ./packages/shared
 COPY packages/sensors ./packages/sensors
 COPY apps/backend ./apps/backend
 
-WORKDIR /app/apps/backend
-RUN bunx prisma generate || echo "Prisma generate skipped" || true
-
-# Sync schema on container start (adds columns like passwordChangedAt)
+# Sync schema on container start (adds columns like passwordChangedAt, runs prisma generate)
 COPY apps/backend/docker-entrypoint.sh /app/apps/backend/docker-entrypoint.sh
 RUN chmod +x /app/apps/backend/docker-entrypoint.sh
 
