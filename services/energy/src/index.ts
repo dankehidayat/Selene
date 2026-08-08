@@ -1,26 +1,51 @@
 /**
- * Selene energy service (port 3002)
- * Scaffold — Phase 2 of modular microservices migration.
- * Full domain logic still lives in apps/backend until Phase 4.
+ * Selene Energy Microservice
+ * Port 3002
  */
 import Fastify from "fastify";
 import { SERVICE_PORTS } from "@selene/shared";
 
 const port = Number(process.env.ENERGY_PORT ?? SERVICE_PORTS.energy);
+
 const app = Fastify({ logger: true });
 
+// Health endpoint
 app.get("/health", async () => ({
   status: "ok",
-  service: "energy",
+  service: "selene-energy",
+  version: "1.0.0",
   port,
-  note: "Scaffold: extract domain routes from apps/backend in later phases.",
 }));
 
-app.get("/api/energy/status", async () => ({
-  service: "energy",
-  ready: false,
-  migration: "Phase 2 scaffold",
-}));
+// Get latest energy readings
+app.get("/api/energy/latest", async (request, reply) => {
+  // TODO: Query TimescaleDB for actual energy readings
+  return {
+    message: "Energy endpoint - data will appear after ingestion starts",
+    lastUpdated: new Date().toISOString(),
+    sampleData: {
+      voltage: 208.1,
+      current: 0.247,
+      power: 51.5,
+      pf: 0.95,
+      frequency: 60.0,
+      energyKwh: 123.456,
+      apparentPower: 54.2,
+      reactivePower: 15.3,
+    },
+  };
+});
+
+// Health check compatibility
+app.get("/", async () => {
+  return {
+    service: "selene-energy",
+    status: "running",
+    uptime: process.uptime(),
+  };
+});
 
 await app.listen({ port, host: "0.0.0.0" });
-console.log(`[energy] scaffold listening on :${port}`);
+console.log(`[energy] SELNE v1 API listening on :${port}`);
+console.log(`  - Health: http://localhost:${port}/health`);
+console.log(`  - Latest: http://localhost:${port}/api/energy/latest`);
