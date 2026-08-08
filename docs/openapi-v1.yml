@@ -509,6 +509,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClimateFuzzyDistribution"
+  /analytics/membership:
+    get:
+      operationId: getMembershipData
+      tags: [analytics]
+      summary: Fuzzy membership function data
+      security: []
+      responses:
+        "200":
+          description: Membership functions for voltage and power.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembershipData"
+  /analytics/decision-surface:
+    get:
+      operationId: getDecisionSurface
+      tags: [analytics]
+      summary: Fuzzy decision surface grid data
+      security: []
+      responses:
+        "200":
+          description: Decision surface points for power vs PF grid.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DecisionSurfacePoint"
+  /analytics/box-plot:
+    get:
+      operationId: getBoxPlot
+      tags: [analytics]
+      summary: Box plot data for energy category distribution
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RangeParam"
+      responses:
+        "200":
+          description: Box plot statistics by category.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BoxPlot"
+  /analytics/bland-altman:
+    get:
+      operationId: getBlandAltman
+      tags: [analytics]
+      summary: Bland-Altman agreement analysis
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RangeParam"
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Bland-Altman limits of agreement data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlandAltmanResult"
   /admin/users:
     get:
 
@@ -582,6 +643,42 @@ paths:
                 $ref: "#/components/schemas/UserProfile"
         "403": { $ref: "#/components/responses/Forbidden" }
         "429": { $ref: "#/components/responses/RateLimited" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /admin/stats:
+    get:
+      operationId: adminStats
+      tags: [admin]
+      summary: Admin statistics dashboard
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Aggregated admin stats.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/users/{id}/toggle-active:
+    patch:
+      operationId: adminToggleUserActive
+      tags: [admin]
+      summary: Toggle a user's active status (admin only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User id.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated user with toggled active status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
   /notifications:
     get:
@@ -1053,6 +1150,78 @@ components:
               temperature: { type: number, format: float }
               humidity: { type: number, format: float }
               category: { type: string }
+    AdminStats:
+      type: object
+      additionalProperties: false
+      required: [totalUsers, activeUsers, adminUsers, totalLogins]
+      properties:
+        totalUsers:
+          type: integer
+        activeUsers:
+          type: integer
+        adminUsers:
+          type: integer
+        totalLogins:
+          type: integer
+    MembershipData:
+      type: object
+      additionalProperties: false
+      properties:
+        voltageMembership:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              x: { type: number }
+              low: { type: number }
+              normal: { type: number }
+              high: { type: number }
+        powerMembership:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              x: { type: number }
+              economical: { type: number }
+              normal: { type: number }
+              wasteful: { type: number }
+    DecisionSurfacePoint:
+      type: object
+      additionalProperties: false
+      properties:
+        power: { type: number }
+        pf: { type: number }
+        category: { type: string }
+    BoxPlot:
+      type: object
+      additionalProperties: false
+      required: [category, min, q1, median, q3, max, count]
+      properties:
+        category: { type: string }
+        min: { type: number }
+        q1: { type: number }
+        median: { type: number }
+        q3: { type: number }
+        max: { type: number }
+        count: { type: integer }
+    BlandAltmanResult:
+      type: object
+      additionalProperties: false
+      required: [data, meanDiff, upperLoA, lowerLoA]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              mean: { type: number }
+              difference: { type: number }
+        meanDiff: { type: number }
+        upperLoA: { type: number }
+        lowerLoA: { type: number }
     NotificationsResponse:
       type: object
       additionalProperties: false

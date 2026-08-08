@@ -331,6 +331,72 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   );
 }
 
+// ── Admin Stats ───────────────────────────────────────────────
+export async function registerAdminStats(app: FastifyInstance) {
+  app.get(
+    "/admin/stats",
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const [totalUsers, activeUsers, adminUsers, totalLogins] = await Promise.all([
+        prisma.user.count(),
+        prisma.user.count({ where: { isActive: true } }),
+        prisma.user.count({ where: { role: "ADMIN" } }),
+        prisma.loginHistory.count(),
+      ]);
+
+      return {
+        totalUsers,
+        activeUsers,
+        adminUsers,
+        totalLogins,
+      };
+    },
+  );
+}
+
+// ── Toggle User Active ───────────────────────────────────────
+export async function registerToggleActive(app: FastifyInstance) {
+  app.patch(
+    "/admin/users/:id/toggle-active",
+    { preHandler: [authenticate, requireAdmin] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      const user = await prisma.user.findUnique({ where: { id } });
+      if (!user) return notFound(reply, "User not found");
+      if (user.id === request.userId!) {
+        return badRequest(reply, "Cannot toggle your own active status");
+      }
+
+      const updated = await prisma.user.update({
+        where: { id },
+        data: { isActive: !user.isActive },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          totpEnabled: true,
+        },
+      });
+
+      return {
+        user: {
+          id: updated.id,
+          email: updated.email,
+          name: updated.name,
+          role: updated.role,
+          isActive: updated.isActive,
+          createdAt: updated.createdAt.toISOString(),
+          twoFactorEnabled: updated.totpEnabled,
+        },
+      };
+    },
+  );
+}
+
 async function verifyTotp(
   actorId: string,
   code: string | undefined,

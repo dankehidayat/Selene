@@ -15,6 +15,13 @@ import {
   classifyEnergyDistribution,
   classifyClimateDistribution,
 } from "@selene/shared/analytics/classify-batch";
+import {
+  generateMembershipData,
+  generateDecisionSurface,
+  generateBoxPlotData,
+  generateBlandAltmanData,
+  classifyEnergyFuzzy,
+} from "@selene/shared/analytics/fuzzy";
 import { badRequest } from "./envelope";
 
 export async function registerAnalyticsRoutes(app: FastifyInstance) {
@@ -240,5 +247,56 @@ export async function registerAnalyticsRoutes(app: FastifyInstance) {
         : await getAllReadingsForAnalytics(from.toISOString(), to.toISOString(), range);
     if (!data.length) return badRequest(reply, "No data in range");
     return classifyClimateDistribution(data);
+  });
+
+  // ── Fuzzy membership functions ─────────────────────────────
+  app.get("/analytics/membership", async () => {
+    return generateMembershipData();
+  });
+
+  // ── Decision surface grid ──────────────────────────────────
+  app.get("/analytics/decision-surface", async () => {
+    return generateDecisionSurface();
+  });
+
+  // ── Box plot data ──────────────────────────────────────────
+  app.get("/analytics/box-plot", async (request, reply) => {
+    const query = request.query as { range?: string };
+    const range = query.range ?? "7d";
+    const { from, to } = getRangeConfig(range);
+    const data =
+      range === "all"
+        ? await getExportData()
+        : await getAllReadingsForAnalytics(from.toISOString(), to.toISOString(), range);
+    if (!data.length) return [];
+    const categorized = data.map((r: any) => ({
+      power: r.acPower,
+      category: classifyEnergyFuzzy(
+        r.acVoltage,
+        r.acPower,
+        r.cosPhi,
+        r.reactivePower,
+      ).category,
+    }));
+    return generateBoxPlotData(categorized);
+  });
+
+  // ── Bland-Altman analysis ──────────────────────────────────
+  app.get("/analytics/bland-altman", async (request, reply) => {
+    const query = request.query as { range?: string };
+    const range = query.range ?? "7d";
+    const { from, to } = getRangeConfig(range);
+    const data =
+      range === "all"
+        ? await getExportData()
+        : await getAllReadingsForAnalytics(from.toISOString(), to.toISOString(), range);
+    if (!data.length) return { error: "No data" };
+    const input = data.map((r: any) => ({
+      voltage: r.acVoltage,
+      power: r.acPower,
+      pf: r.cosPhi,
+      reactive: r.reactivePower,
+    }));
+    return generateBlandAltmanData(input);
   });
 }

@@ -46,6 +46,13 @@ selene.dankehidayat.my.id {
 		reverse_proxy localhost:3009
 	}
 
+	# Readings (stream, history, logs) → monolith bridge
+	# Rewrites /api/v1/readings/* → /api/readings/* for monolith compatibility
+	handle /api/v1/readings/* {
+		uri rewrite /api${request_uri}
+		reverse_proxy localhost:8787
+	}
+
 	# Analytics service (:3006)
 	handle /api/v1/analytics/* {
 		uri strip_prefix /api/v1

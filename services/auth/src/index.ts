@@ -8,7 +8,7 @@ import { getJwks } from "@selene/shared/jwt/v2";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerMeRoutes } from "./routes/me";
 import { registerTwoFactorRoutes } from "./routes/twoFactor";
-import { registerAdminRoutes } from "./routes/admin";
+import { registerAdminRoutes, registerAdminStats, registerToggleActive } from "./routes/admin";
 import { registerMiscRoutes } from "./routes/misc";
 import { errorEnvelope } from "./envelope";
 import { prisma } from "./db";
@@ -31,6 +31,8 @@ app.register(registerAuthRoutes);
 app.register(registerMeRoutes);
 app.register(registerTwoFactorRoutes);
 app.register(registerAdminRoutes);
+app.register(registerAdminStats);
+app.register(registerToggleActive);
 app.register(registerMiscRoutes);
 
 // Public health check
