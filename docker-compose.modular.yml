@@ -73,12 +73,31 @@ services:
       AUTH_PORT: ${AUTH_PORT}
       DATABASE_URL: postgresql://selene_admin:${POSTGRES_PASSWORD}@postgres:5432/selene
       JWT_SECRET: ${JWT_SECRET}
-      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-      MONOLITH_HOST: monolith
-      MONOLITH_PORT: ${MONOLITH_PORT:-8787}
+      JWT_V2_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: "Selene <onboarding@resend.dev>"
+      APP_PUBLIC_URL: https://selene.dankehidayat.my.id
+      TOTP_ISSUER: Selene
+      ELEVATION_CONFIRMATION: ${ELEVATION_CONFIRMATION:-false}
     depends_on:
       postgres:
+        condition: service_healthy
+    networks:
+      - selene-network
+
+  # Analytics Service (Port 3006)
+  analytics:
+    build:
+      context: .
+      dockerfile: services/analytics/Dockerfile
+    container_name: selene-analytics
+    ports:
+      - "3006:3006"
+    environment:
+      ANALYTICS_PORT: ${ANALYTICS_PORT:-3006}
+      TIMESCALE_URL: postgresql://selene_ts:${TIMESCALE_PASSWORD}@timescaledb:5432/selene_measurements
+    depends_on:
+      timescaledb:
         condition: service_healthy
     networks:
       - selene-network

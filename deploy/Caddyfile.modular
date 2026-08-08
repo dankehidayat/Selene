@@ -10,28 +10,74 @@
 
 selene.dankehidayat.my.id {
 
+	# ── Health / JWKS → auth ─────────────────────────────────
 	handle /health {
 		reverse_proxy localhost:3009
 	}
 
-	handle /api/v1/auth/* {
+	handle /.well-known/jwks.json {
 		reverse_proxy localhost:3009
 	}
 
+	# ── v1 API routes (strip /api/v1 so services see clean paths) ──
+	# Auth service (:3009) — /auth, /me, /admin, /notifications, /glossary
+	handle /api/v1/auth/* {
+		uri strip_prefix /api/v1
+		reverse_proxy localhost:3009
+	}
+
+	handle /api/v1/me* {
+		uri strip_prefix /api/v1
+		reverse_proxy localhost:3009
+	}
+
+	handle /api/v1/admin/* {
+		uri strip_prefix /api/v1
+		reverse_proxy localhost:3009
+	}
+
+	handle /api/v1/notifications* {
+		uri strip_prefix /api/v1
+		reverse_proxy localhost:3009
+	}
+
+	handle /api/v1/glossary {
+		uri strip_prefix /api/v1
+		reverse_proxy localhost:3009
+	}
+
+	# Analytics service (:3006)
+	handle /api/v1/analytics/* {
+		uri strip_prefix /api/v1
+		reverse_proxy localhost:3006
+	}
+
+	# Energy / climate placeholder services (:3002 / :3003). Their v1 contracts
+	# (`/energy/latest`, `/climate/latest`, `/climate/comfort`) land in a later
+	# phase; today `uri strip_prefix` forwards clean /energy|climate paths.
 	handle /api/v1/energy/* {
+		uri strip_prefix /api/v1
 		reverse_proxy localhost:3002
 	}
 
 	handle /api/v1/climate/* {
+		uri strip_prefix /api/v1
 		reverse_proxy localhost:3003
 	}
 
 	handle /api/v1/firmware/* {
+		uri strip_prefix /api/v1
 		reverse_proxy localhost:3004
 	}
 
 	handle /api/v1/ingest/* {
+		uri strip_prefix /api/v1
 		reverse_proxy localhost:3005
+	}
+
+	# Legacy /api/* fallback → monolith bridge until fully migrated
+	handle /api/* {
+		reverse_proxy localhost:8787
 	}
 
 	# Frontend SPA routing - send all other requests to frontend on port 3000
