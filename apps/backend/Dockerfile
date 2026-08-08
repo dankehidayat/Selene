@@ -1,14 +1,10 @@
 # Production backend — monorepo-aware (needs @selene/shared + @selene/sensors).
-# Build from repository root:
-#   docker compose -f docker-compose.production.yml build backend
-#
-# compose build.context must be the monorepo root (see docker-compose.production.yml).
 
 FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-# Install ALL workspace deps first (more reliable than filtered install)
+# Install ALL workspace deps first
 COPY package.json bun.lock ./
 RUN bun install
 
@@ -17,11 +13,10 @@ COPY packages/shared ./packages/shared
 COPY packages/sensors ./packages/sensors
 COPY apps/backend ./apps/backend
 
-# Sync schema on container start (adds columns like passwordChangedAt, runs prisma generate)
-COPY apps/backend/docker-entrypoint.sh /app/apps/backend/docker-entrypoint.sh
-RUN chmod +x /app/apps/backend/docker-entrypoint.sh
+WORKDIR /app/apps/backend
 
-EXPOSE 8787
+# Run prisma db push at build time (one-time schema sync)
+RUN bunx --schema=./prisma/schema.prisma prisma db push || true
 
-# Production loads env from compose/env_file
-ENTRYPOINT ["/app/apps/backend/docker-entrypoint.sh"]
+# Entrypoint just starts the app
+CMD ["bun", "run", "src/index.ts"]
