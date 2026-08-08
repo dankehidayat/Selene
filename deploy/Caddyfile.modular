@@ -46,8 +46,8 @@ selene.dankehidayat.my.id {
 	}
 
 	# Readings → monolith bridge with path rewrite
-	handle /api/v1/readings/* {
-		rewrite /api*/readings* /api${1}
+	handle /api/v1/readings* {
+		uri rewrite /api${path}
 		reverse_proxy localhost:8787
 	}
 
