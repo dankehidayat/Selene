@@ -1,515 +1,260 @@
 # Selene
 
-Smart Energy & Climate Dashboard
+Real-time smart energy & climate monitoring for IoT sensor fleets. ESP32-based sensors stream telemetry over MQTT; Selene ingests, stores, and visualizes time-series data with statistical and fuzzy-logic analytics — served by a Fastify monolith with an optional path toward domain-split microservices.
 
-A real-time monitoring and analytics platform for ESP32-based IoT sensors. Built with React, TypeScript, Fastify, PostgreSQL, and TimescaleDB.
+[![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-black)](https://bun.sh)
 
-## Overview
+## Highlights
 
-Selene provides live dashboards, historical data logging, and advanced analytics for electrical parameters (voltage, current, power, power factor, frequency) and environmental conditions (temperature, humidity). The system implements a 15-rule Mamdani fuzzy inference engine for energy consumption classification and a 14-rule climate fuzzy engine for thermal comfort assessment. Statistical tools include Bland-Altman analysis, box plots, decision surface visualization, membership function charts, and ML-powered time-series forecasting.
+- **Live dashboard** — energy (voltage, current, power, power factor, frequency) and climate (temperature, humidity) with a real-time SSE stream.
+- **TimescaleDB ingestion** — raw SQL ingest + analytic queries against the `sensor_readings` hypertable.
+- **Fuzzy analytics** — 15-rule energy + 14-rule climate Mamdani inference engines, Bland-Altman, box plots, decision surfaces.
+- **Client-side ML forecasting** — linear regression + exponential smoothing + hourly pattern-matching ensemble.
+- **Auth & RBAC** — JWT sessions, roles (User/Admin), 2FA (TOTP), password reset, login history, notifications.
+- **OTA firmware management** — upload and track ESP32 OTA firmware.
+- **Extensible microservices** — parser-registry architecture that lets new sensor domains (soil, lux, …) be added without touching existing services.
 
 ## Architecture
 
 ```
-ESP32 + PZEM-004T + DHT11
-        |
-        v
-  Blynk IoT Server
-        |
-        v
-  Fastify Backend (Bun)
-        |
-        v
-  PostgreSQL (Users/Auth) + TimescaleDB (Sensor Readings)
-        |
-        v
-  React Frontend
+ESP32 (PZEM-004T + DHT11)
+        │  MQTT (EMQX)
+        ▼
+  Ingestor / Monolith MQTT client
+        │  parser registry (energy + climate)
+        ▼
+  TimescaleDB  ──────────▶  PostgreSQL (users / auth / settings)
+        │                        │
+        └─────── Fastify API ─────┘
+                    │
+              React SPA
 ```
 
-## Features
+- The **monolith** (`apps/backend`, port 8787) is the primary production API and MQTT ingestor. The frontend talks to `/api/*` on it.
+- A **microservices variant** (`services/`, via `docker-compose.modular.yml`) splits domains behind a Caddy gateway. Scaffolded and partially implemented (energy + climate now query real TimescaleDB) but **not yet the production deployment**.
+- Postgres is now **deprecated as the storage for telemetry**; all sensor readings live in TimescaleDB.
 
-### Real-Time Dashboard
+---
 
-- AC voltage, current, power, temperature, and humidity readouts
-- Power quality overview with composite score, cos phi, frequency, cost, and consumption
-- Energy usage chart with power and current trends
-- Climate history chart with temperature and humidity
-- ML-powered 24-hour forecast with confidence bands for all metrics
-- Adaptive forecast horizon based on selected range (1h to 1y)
-- "Now" divider line separating actual data from predictions
-- Data refreshes every 3 seconds via Blynk IoT proxy
-- Automatic Blynk-to-TimescaleDB polling every 30 seconds
+## Repository layout
 
-### Data Log
-
-- Paginated table view of historical sensor readings from TimescaleDB
-- Client-side sorting by timestamp (ascending/descending)
-- Export to CSV or TSV format
-- Page jump and page size selection (10, 20, 30, 50, 100 rows)
-
-### Analytics
-
-- **Energy**: Multi-line power chart (Power, Current, Apparent, Reactive), hourly usage pattern, energy consumption (kWh) from the PZEM cumulative counter
-- **Environment**: Climate history with temperature and humidity, comfort distribution
-- **Energy Fuzzy**: Pie charts, scatter plots, membership functions, box plots, Bland-Altman analysis, decision surface
-- **Climate Fuzzy**: ASHRAE 55 & SNI 03-6572 based thermal comfort classification with scatter plots and distribution charts
-- **ML Forecasting**: Linear regression + exponential smoothing + pattern matching ensemble model for all energy and climate charts
-- Key metrics cards with statistical summaries
-
-### Authentication & Authorization
-
-- Email/password registration and login
-- JWT-based authentication with 7-day token expiry
-- Role-based access control (User / Admin)
-- Admin panel for user management (role changes, disable/enable accounts, delete users)
-- Login history tracking with session management
-
-### Settings Overlay
-
-- Modal overlay accessible from anywhere via the sidebar
-- Profile management (name, email, password)
-- Theme switching (light, dark, system) from both sidebar and settings
-- Account deletion with confirmation flow
-- Admin-only Administration tab for user management
-- Logout accessible from settings sidebar
-
-### Additional Features
-
-- Glossary with search, add, and delete functionality
-- Light, dark, and system theme modes with sidebar toggle
-- Chart export to PNG and copy to clipboard
-- Responsive sidebar navigation with mobile full-screen overlay
-- Swagger/OpenAPI documentation at `/docs`
-- Notification system for security events and system alerts
-
-## Technology Stack
-
-### Frontend
-
-- React 18 with TypeScript
-- TanStack Router for type-safe routing
-- TanStack Query for server state management
-- Recharts for interactive charts (ComposedChart, Line, Bar, Area, Pie)
-- Observable Plot for statistical visualizations (scatter, box plot, Bland-Altman, decision surface)
-- Radix UI primitives (Dialog, DropdownMenu, Popover, HoverCard, ScrollArea, Separator)
-- Tailwind CSS with class-based dark mode
-- Lucide React for iconography
-- html2canvas for chart export
-- Custom ML forecasting engine (Linear Regression + EMA + Pattern Matching)
-
-### Backend
-
-- Fastify running on Bun
-- Prisma ORM with PostgreSQL (user accounts, glossary, notifications)
-- TimescaleDB (sensor readings — hypertable with automatic time-based partitioning)
-- @fastify/swagger + @fastify/swagger-ui for API documentation
-- bcryptjs for password hashing (12 rounds)
-- jsonwebtoken for JWT signing and verification
-- Blynk IoT proxy for live sensor data with automatic TimescaleDB ingestion
-
-### Hardware / edge firmware
-
-- ESP32 DevKit V1, **PZEM-004T** (energy) + **DHT11** (environment: temperature/humidity), LCD I2C  
-- **Firmware lives in a separate repository** (not in Selene):  
-  **[dankehidayat/Eco-Office](https://github.com/dankehidayat/Eco-Office)** branch **`feat/selene-mqtt-ota`** → root sketch [`Eco Office.ino`](https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino)  
-- Eco-Office **`main`** keeps the original final-report sketch; **`feat/selene-mqtt-ota`** replaces `Eco Office.ino` with MQTT + OTA (secrets blank in git)
-
-## Modular microservices architecture
-
-Work continues on branch **`feat/modular-microservices`**.
-
-| Layer | Role |
-|-------|------|
-| `@selene/shared` | Types, ports, Timescale helper, MQTT factory, JWT helpers |
-| `@selene/sensors` | **PZEM-004T** + **DHT11** modules + **parser registry** |
-| `services/ingestor` | Standalone MQTT → registry → Timescale (:3005) |
-| `services/{auth,energy,climate,firmware}` | Domain scaffolds (:3001–3004) |
-| `services/{soil,lux,…}` | Extension stubs |
-| `apps/backend` | Transition monolith (full HTTP API :8787) |
-| `apps/frontend` | Dashboard + Admin OTA UI |
-| `deploy/Caddyfile.modular` | API gateway routes (future multi-service) |
-| **Eco-Office** (external) | ESP32 firmware |
-
-Canonical doc: **[docs/MODULAR_MICROSERVICES.md](./docs/MODULAR_MICROSERVICES.md)**  
-Backend notes: **[apps/backend/README.md](./apps/backend/README.md)** · Frontend: **[apps/frontend/README.md](./apps/frontend/README.md)**
-
-```bash
-bun install
-bun run test:sensors
-bun run dev:backend      # monolith + ingest
-bun run dev:frontend
-bun run dev:ingestor     # optional standalone ingestor
-curl -s localhost:8787/api/sensors/catalog
+```
+apps/
+  backend/    Fastify API monolith (auth, analytics, readings, MQTT ingest, OTA)
+  frontend/   React SPA dashboard (Vite + TanStack Router/Query + Tailwind)
+packages/
+  shared/     Shared TypeScript types, Timescale helper, MQTT client, JWT helpers
+  sensors/    PZEM-004T + DHT11 sensor modules + MQTT parser registry
+services/
+  ingestor/   Standalone MQTT → parser-registry → TimescaleDB process
+  auth/       (microservice) users · JWT · roles
+  energy/     (microservice) energy analytics (real TimescaleDB queries)
+  climate/    (microservice) climate analytics (real TimescaleDB queries)
+  firmware/   (microservice) OTA upload + MQTT commands
+  soil/ lux/ gas/ gps/ generic/   extension stubs (scaffolded)
+deploy/
+  Caddyfile.modular             Caddy gateway for the microservices variant
+docker-compose.yml              production VPS stack (postgres + timescale + emqx + backend + frontend)
+docker-compose.local.yml        local-dev infra only (postgres:5434 · timescale:5433 · emqx:1883)
+docker-compose.modular.yml      microservices stack (not for VPS yet)
+scripts/
+  mqtt-tunnel.sh               forward local 1884 → VPS EMQX 1883 (live-dev data)
+docs/                          architecture, deployment, and extension docs
 ```
 
+---
 
-## Getting Started
+## Prerequisites
 
-### Prerequisites
+- [Bun](https://bun.sh/) 1.3+
+- [Docker](https://www.docker.com/) with Compose (PostgreSQL, TimescaleDB, EMQX)
 
-- Bun 1.3 or later
-- Docker Desktop (for PostgreSQL and TimescaleDB)
-- PostgreSQL 16 (via Docker)
-- TimescaleDB (via Docker)
-
-### Local Development
+## Quick start (local development)
 
 ```bash
 git clone https://github.com/dankehidayat/selene.git
 cd selene
 
-# Start databases (PostgreSQL + TimescaleDB + EMQX)
-# Postgres is published on host port 5434 (not 5432) to avoid clashing with
-# Homebrew postgresql@14, which commonly owns localhost:5432 on macOS.
+# 1. Infra: Postgres + TimescaleDB + EMQX
 docker compose -f docker-compose.local.yml up -d
 
-# Backend setup
+# 2. Backend (port 8787)
 cd apps/backend
 cp .env.local.example .env
-# DATABASE_URL must use 127.0.0.1:5434 — see note below
+# DATABASE_URL → 127.0.0.1:5434   TIMESCALE_URL → 127.0.0.1:5433
 bun install
 bun run db:generate
 bun run db:migrate
 bun run dev
 
-# Frontend setup (new terminal)
+# 3. Frontend (new terminal, port 5173)
 cd apps/frontend
 cp .env.local.example .env
 bun install
 bun run dev
 ```
 
-The frontend will be available at `http://localhost:5173`, backend at `http://localhost:8787`, and Swagger UI at `http://localhost:8787/docs`.
+- Backend: <http://localhost:8787> · API docs: <http://localhost:8787/docs> · Frontend: <http://localhost:5173>
 
-**macOS note (Prisma P1010):** If Homebrew PostgreSQL is running, `localhost:5432` is the brew instance (databases like `flowpoint` / `matilda`), not Docker. Prisma then reports `P1010: User was denied access on the database (not available)` even though auth “works” against the wrong server. Use host port **5434** for Selene Postgres (`docker-compose.local.yml`) and point `DATABASE_URL` at `127.0.0.1:5434`.
+**macOS note:** Homebrew PostgreSQL commonly owns `localhost:5432`. This project deliberately publishes its
+
+Postgres on **5434** (see `docker-compose.local.yml`); keep `DATABASE_URL` pointed there to avoid Prisma P1010.
 
 ### Live ESP32 data on Mac (no Arduino changes)
 
-The ESP32 publishes only to the **VPS** broker. To feed the same stream into the local backend:
-
 ```text
-ESP32 → VPS EMQX ←── SSH tunnel ── Mac backend → local Timescale → dashboard
+ESP32 → VPS EMQX ←── SSH tunnel ── local backend → local TimescaleDB → dashboard
 ```
-
-1. Leave firmware as-is (`MQTT_BROKER` = VPS IP, user `selene` / `selene123`).
-2. Open a tunnel (leave this terminal running; enter your SSH key passphrase if prompted):
 
 ```bash
-./scripts/mqtt-tunnel.sh
-# equivalent: ssh -N -L 1884:127.0.0.1:1883 rd
+./scripts/mqtt-tunnel.sh          # forwards 127.0.0.1:1884 → VPS EMQX :1883
 ```
 
-3. Backend `.env` (already documented in `apps/backend/.env.local.example`):
+Then in `apps/backend/.env` set `MQTT_HOST=127.0.0.1`, `MQTT_PORT=1884`. Start the backend; watch `[MQTT] Connected` in logs.
+
+---
+
+## Deployment
+
+Full instructions: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+
+| Target        | Compose               | Command |
+|---------------|-----------------------|---------|
+| VPS (prod)    | `docker-compose.yml`  | `sudo docker compose up -d --build` |
+| Local Mac     | `docker-compose.local.yml` | imperative `docker compose -f docker-compose.local.yml up -d` + Bun apps |
+| Microservices | `docker-compose.modular.yml` | experiment only — **not** for the VPS yet |
+
+Env examples are the source of truth; copy them, never commit real secrets:
 
-```env
-MQTT_HOST=127.0.0.1
-MQTT_PORT=1884
-MQTT_USER=selene
-MQTT_PASSWORD=selene123
-MQTT_TOPIC=selene/+/telemetry
-```
+| Example | Real file | Use |
+|---------|-----------|-----|
+| `.env.example` | `.env` | VPS compose substitution |
+| `apps/backend/.env.example` | `apps/backend/.env` | VPS backend container |
+| `apps/backend/.env.local.example` | `apps/backend/.env` | Mac local backend |
+| `apps/frontend/.env.example` | `apps/frontend/.env` | VPS build arg |
+| `apps/frontend/.env.local.example` | `apps/frontend/.env` | Mac local frontend |
+
+---
+
+## Data flow & database
+
+### Ingestion
+
+- Devices publish MQTT to `selene/{nodeId}/telemetry`.
+- The monolith's MQTT client (or the standalone `services/ingestor`) runs the **parser registry** to match payloads against PZEM-004T (energy) and DHT11 (climate) parsers. One payload may trigger multiple domains.
+- Records merge into a single `FlatSensorReading` and are inserted into the `sensor_readings` hypertable.
 
-4. Start backend (`bun run dev` in `apps/backend`). You should see `[MQTT] Connected` and new rows when the device publishes.
+### Storage
 
-If the tunnel fails, on the VPS check that EMQX is listening on host port 1883 (`ss -lntp | grep 1883`). Adjust `REMOTE_MQTT` if needed: `REMOTE_MQTT=127.0.0.1:1883 ./scripts/mqtt-tunnel.sh`.
+| Data | Engine | Notes |
+|------|--------|-------|
+| Sensor readings | **TimescaleDB** (`selene_measurements.sensor_readings`) | hypertable, 7-day chunks, `time_bucket()` aggregation |
+| Users · auth · settings | PostgreSQL (`selene`), via Prisma | users, login history, notifications, glossary |
+| Notifications | PostgreSQL | per-user, via Fastify |
 
-### Docker: VPS vs local Mac
+Query entry points: `apps/backend/src/timescale.ts` (monolith) and `packages/shared/src/db/timescale.ts` (shared client used by microservices).
 
-Full detail: **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)**
+---
 
-| Where | Compose | Command |
-|-------|---------|---------|
-| **VPS** | `docker-compose.yml` | `sudo docker compose up -d --build` |
-| **Mac** | `docker-compose.local.yml` | `docker compose -f docker-compose.local.yml up -d` then Bun for apps |
+## API
 
-**VPS** (keep existing secrets; plain compose is correct):
+Monolith: `GET /docs` for interactive Swagger. All paths below are served under `/api` from the monolith unless noted.
 
-```bash
-cd ~/Developer/Selene
-sudo docker compose up -d --build
-sudo docker exec selene-backend bunx prisma generate
-```
+### Auth (`/api/auth/*`)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/register` | Create account |
+| POST | `/login`, `/login/2fa` | Sign in (with 2FA step) |
+| GET | `/me` | Current user |
+| PATCH | `/me` | Update profile |
+| POST | `/change-password`, `/change-email` | Credentials |
+| DELETE | `/delete-account` | Delete account |
+| GET | `/2fa/status`, POST `/2fa/enable`, POST `/2fa/disable`, GET `/2fa/backup-codes` | TOTP 2FA |
+| POST | `/forgot-password`, `/reset-password` | Password recovery |
+| GET | `/login-history`, DELETE `/clear-sessions` | Session management |
 
-**Mac local** (infra in Docker, apps in Bun):
+### Admin (`/api/admin/*`) — requires Admin
+| Path | |
+|------|--|
+| GET `/users`, GET `/users/:id` | List / details |
+| PATCH `/users/:id/role` | Change role |
+| PATCH `/users/:id/toggle-active` | Enable / disable |
+| DELETE `/users/:id` | Delete account |
+| GET `/stats` | System statistics |
 
-```bash
-docker compose -f docker-compose.local.yml up -d
-cp apps/backend/.env.local.example apps/backend/.env
-cp apps/frontend/.env.local.example apps/frontend/.env
-bun install && bun run dev:backend   # :8787
-bun run dev:frontend                 # :5173
-```
+### Readings (`/api/readings/*`)
+| Path | Description |
+|------|-------------|
+| GET `/latest` | Latest reading |
+| GET `/history?range=` | Aggregated history (`range=24h\|7d\|…`), optional `type=energy` |
+| GET `/logs?pageSize=` | Paginated recent logs |
+| GET `/export?format=csv\|tsv` | Data export |
+| GET `/stream` | Server-Sent Events live feed |
 
-| Env example | Use |
-|-------------|-----|
-| `.env.example` → `.env` | Production / VPS |
-| `apps/backend/.env.local.example` → `apps/backend/.env` | Mac backend |
-| `apps/frontend/.env.local.example` → `apps/frontend/.env` | Mac frontend (`VITE_API_BASE_URL=/api`) |
-
-Do **not** use `docker-compose.modular.yml` on the VPS (future multi-service only).
+### Analytics (`/api/analytics/*`)
+| Path | Description |
+|------|-------------|
+| GET `/summary?range=` | Power / energy statistics |
+| GET `/climate?range=` | Temperature / humidity statistics |
+| GET `/fuzzy-distribution?range=` | Energy fuzzy classification |
+| GET `/climate-fuzzy-distribution?range=` | Climate fuzzy classification |
+| GET `/membership` | Membership functions |
+| GET `/decision-surface` | Energy decision surface |
+| GET `/box-plot?range=` | Power box plots |
+| GET `/bland-altman?range=` | Bland-Altman analysis |
 
-### Data Import (one-time)
+### MQTT / sensors
+`GET /api/mqtt/status` · `GET /api/mqtt/nodes` (Admin) · `GET /api/sensors/catalog`
 
-If migrating from Google Sheets, export your data as CSV and import into TimescaleDB:
+### Firmware (OTA) (`/api/firmware/*`)
+`GET /history` · `POST /upload` · `GET /pending` · `GET /result`
 
-```bash
-# Copy CSV to container
-docker cp sensor_readings.csv selene-timescaledb:/tmp/
-
-# Import
-docker exec selene-timescaledb psql -U selene_ts -d selene_measurements -c "\COPY sensor_readings FROM '/tmp/sensor_readings.csv' CSV HEADER;"
-
-# Verify
-docker exec selene-timescaledb psql -U selene_ts -d selene_measurements -c "SELECT COUNT(*) FROM sensor_readings;"
-```
-
-### First Admin Setup
-
-New users are created with the `USER` role by default. To grant admin privileges to your account:
-
-**Option 1 — Via CLI (local development):**
-
-```bash
-cd apps/backend
-bun --env-file=.env -e "
-const { PrismaClient } = await import('@prisma/client');
-const prisma = new PrismaClient();
-await prisma.user.update({ where: { email: 'your-email@example.com' }, data: { role: 'ADMIN' } });
-console.log('User promoted to ADMIN');
-await prisma.\$disconnect();
-"
-```
-
-**Option 2 — Via Docker:**
-
-```bash
-docker exec selene-backend bun -e "
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
-prisma.user.update({ where: { email: 'your-email@example.com' }, data: { role: 'ADMIN' } }).then(() => { console.log('Promoted to ADMIN'); prisma.\$disconnect(); });
-"
-```
-
-**Option 3 — Via an existing Admin:**
-An admin can promote other users through **Settings > Administration** in the application UI.
-
-Admin users have access to:
-
-- **User Management**: List, search, and filter all registered users
-- **Role Management**: Promote users to Admin or demote to User
-- **Account Status**: Enable or disable user accounts
-- **User Deletion**: Permanently remove user accounts
-- **System Statistics**: View total users, active users, and admin counts
-
-## Environment Variables
-
-### Root `.env`
-
-| Variable            | Description                   | Example                                                       |
-| ------------------- | ----------------------------- | ------------------------------------------------------------- |
-| `JWT_SECRET`        | Secret key for JWT signing    | `openssl rand -base64 64`                                     |
-| `DATABASE_URL`      | PostgreSQL connection string  | `postgresql://user:pass@postgres:5432/selene`                 |
-| `TIMESCALE_URL`     | TimescaleDB connection string | `postgresql://user:pass@timescaledb:5432/selene_measurements` |
-| `VITE_API_BASE_URL` | Frontend API URL              | `https://selene.dankehidayat.my.id/api`                       |
-| `BLYNK_SERVER_URL`  | Blynk IoT server URL          | `http://iot.serangkota.go.id:8080`                            |
-| `BLYNK_AUTH_TOKEN`  | Blynk authentication token    | `your-blynk-token`                                            |
-
-### Backend `.env`
-
-| Variable           | Description                   | Example                                                              |
-| ------------------ | ----------------------------- | -------------------------------------------------------------------- |
-| `PORT`             | Server port                   | `8787`                                                               |
-| `JWT_SECRET`       | Secret key for JWT signing    | `openssl rand -base64 64`                                            |
-| `DATABASE_URL`     | PostgreSQL connection string  | `postgresql://selene_admin:local_dev_password@127.0.0.1:5434/selene`  |
-| `TIMESCALE_URL`    | TimescaleDB connection string | `postgresql://selene_ts:local_dev_password@127.0.0.1:5433/selene_measurements` |
-| `BLYNK_SERVER_URL` | Blynk IoT server URL          | `http://iot.serangkota.go.id:8080`                                   |
-| `BLYNK_AUTH_TOKEN` | Blynk authentication token    | `your-blynk-token`                                                   |
-
-### Frontend `.env`
-
-| Variable            | Description     | Example                     |
-| ------------------- | --------------- | --------------------------- |
-| `VITE_API_BASE_URL` | Backend API URL | `http://localhost:8787/api` |
-
-## API Endpoints
-
-### Authentication
-
-| Method | Path                        | Description        | Auth |
-| ------ | --------------------------- | ------------------ | ---- |
-| POST   | `/api/auth/register`        | Create account     | No   |
-| POST   | `/api/auth/login`           | Sign in            | No   |
-| GET    | `/api/auth/me`              | Get current user   | Yes  |
-| PATCH  | `/api/auth/me`              | Update profile     | Yes  |
-| POST   | `/api/auth/change-password` | Change password    | Yes  |
-| POST   | `/api/auth/change-email`    | Change email       | Yes  |
-| DELETE | `/api/auth/delete-account`  | Delete account     | Yes  |
-| GET    | `/api/auth/login-history`   | Login history      | Yes  |
-| DELETE | `/api/auth/clear-sessions`  | Clear all sessions | Yes  |
-
-### Admin
-
-| Method | Path                                 | Description         | Auth  |
-| ------ | ------------------------------------ | ------------------- | ----- |
-| GET    | `/api/admin/users`                   | List all users      | Admin |
-| GET    | `/api/admin/users/:id`               | Get user details    | Admin |
-| PATCH  | `/api/admin/users/:id/role`          | Change user role    | Admin |
-| PATCH  | `/api/admin/users/:id/toggle-active` | Enable/disable user | Admin |
-| DELETE | `/api/admin/users/:id`               | Delete user         | Admin |
-| GET    | `/api/admin/stats`                   | System statistics   | Admin |
-
-### Readings
+### Misc
+`GET /api/glossary` · `POST /api/glossary` · `DELETE /api/glossary/:id` · `GET /health`
 
-| Method | Path                                         | Description                | Auth |
-| ------ | -------------------------------------------- | -------------------------- | ---- |
-| GET    | `/api/readings/latest`                       | Latest sensor reading      | No   |
-| GET    | `/api/readings/history?range=24h`            | Aggregated historical data | No   |
-| GET    | `/api/readings/history?range=7d&type=energy` | Energy consumption data    | No   |
-| GET    | `/api/readings/logs?pageSize=20`             | Recent readings            | No   |
-| GET    | `/api/readings/export?format=csv`            | Export data                | No   |
+---
 
-### Analytics
+## Analytics & fuzzy engines
 
-| Method | Path                                                 | Description                  | Auth |
-| ------ | ---------------------------------------------------- | ---------------------------- | ---- |
-| GET    | `/api/analytics/summary?range=7d`                    | Statistical summary          | No   |
-| GET    | `/api/analytics/climate?range=7d`                    | Climate analytics            | No   |
-| GET    | `/api/analytics/fuzzy-distribution?range=7d`         | Energy fuzzy classification  | No   |
-| GET    | `/api/analytics/climate-fuzzy-distribution?range=7d` | Climate fuzzy classification | No   |
-| GET    | `/api/analytics/membership`                          | Membership function data     | No   |
-| GET    | `/api/analytics/decision-surface`                    | Decision surface data        | No   |
-| GET    | `/api/analytics/box-plot?range=7d`                   | Box plot data                | No   |
-| GET    | `/api/analytics/bland-altman?range=7d`               | Bland-Altman data            | No   |
-
-### Blynk Proxy
-
-| Method | Path              | Description             | Auth |
-| ------ | ----------------- | ----------------------- | ---- |
-| GET    | `/api/blynk/:pin` | Proxy Blynk sensor data | No   |
-
-### Notifications
-
-| Method | Path                          | Description              | Auth |
-| ------ | ----------------------------- | ------------------------ | ---- |
-| GET    | `/api/notifications`          | Get user notifications   | Yes  |
-| PATCH  | `/api/notifications/:id/read` | Mark as read             | Yes  |
-| PATCH  | `/api/notifications/read-all` | Mark all as read         | Yes  |
-| DELETE | `/api/notifications`          | Delete all notifications | Yes  |
-
-### Glossary
-
-| Method | Path                | Description    | Auth |
-| ------ | ------------------- | -------------- | ---- |
-| GET    | `/api/glossary`     | List all terms | No   |
-| POST   | `/api/glossary`     | Create term    | No   |
-| DELETE | `/api/glossary/:id` | Delete term    | No   |
-
-### Health
-
-| Method | Path      | Description  | Auth |
-| ------ | --------- | ------------ | ---- |
-| GET    | `/health` | Health check | No   |
-
-## Database Architecture
-
-| Database    | Purpose                                      | Technology                         |
-| ----------- | -------------------------------------------- | ---------------------------------- |
-| PostgreSQL  | User accounts, auth, glossary, notifications | Standard PostgreSQL                |
-| TimescaleDB | Sensor readings (time-series data)           | PostgreSQL + TimescaleDB extension |
-
-Sensor readings are stored in a TimescaleDB hypertable (`sensor_readings`), automatically partitioned into 7-day chunks. Queries use `time_bucket()` for efficient time-based aggregation. Live data from Blynk is automatically polled every 30 seconds and inserted into TimescaleDB.
-
-## ML Forecasting
-
-The dashboard includes a lightweight machine learning forecasting engine that runs entirely in the browser:
-
-- **Linear Regression with Gradient Descent**: Learns trend from recent data
-- **Exponential Moving Average with Trend Detection**: Smooths noise and detects direction
-- **Hourly Pattern Matching**: Extracts average patterns by hour of day from all history
-- **Ensemble Method**: Dynamically weights methods based on horizon length
-
-Forecast horizons adapt to the selected range:
-| Range | Forecast Points | Interval |
-|-------|----------------|----------|
-| 1 Hour | 12 points | 5 minutes |
-| 24 Hours | 24 points | 1 hour |
-| 7 Days | 48 points | 1 hour |
-| 30 Days | 30 points | 1 day |
-| 3 Months | 12 points | 1 week |
-| 6 Months | 12 points | 2 weeks |
-| 1 Year | 12 points | 1 month |
-
-All computation runs client-side in under 10ms with zero additional dependencies.
-
-## Fuzzy Energy Classification
-
-The system uses a 15-rule Mamdani fuzzy inference engine with four input variables:
-
-1. **Voltage** - Low (<210V), Normal (205-235V), High (>230V)
-2. **Power** - Economical (<30W), Normal (25-70W), Wasteful (>60W)
-3. **Power Factor** - Poor (<0.6), Fair (0.55-0.85), Good (>0.8)
-4. **Reactive Power** - Low (<25VAR), Medium (20-55VAR), High (>45VAR)
-
-Output categories: **ECONOMICAL**, **NORMAL**, **WASTEFUL**.
-
-## Climate Fuzzy Classification
-
-Based on ASHRAE Standard 55-2020 and SNI 03-6572-2001, adapted for naturally ventilated buildings in tropical climates. Uses a 14-rule Mamdani fuzzy inference engine with two input variables:
-
-1. **Temperature** - Cold (<22°C), Cool (22-25°C), Comfortable (24-28°C), Warm (27-31°C), Hot (>30°C)
-2. **Humidity** - Dry (<55%), Comfortable (50-72%), Humid (>68%)
-
-Output categories: **COLD**, **COOL**, **COMFORTABLE**, **WARM**, **HOT**.
-
-The fuzzy logic is implemented identically in both the Arduino firmware (C++) and the backend analytics module (TypeScript).
-
-## Project Structure
-
-```
-selene/
-├── apps/
-│   ├── frontend/
-│   │   ├── src/
-│   │   │   ├── components/   # Reusable UI components, overlays
-│   │   │   ├── pages/        # Route-level page components
-│   │   │   ├── services/     # API hooks, auth context
-│   │   │   ├── lib/          # Utility functions, ML forecasting
-│   │   │   └── types/        # TypeScript interfaces
-│   │   ├── Dockerfile
-│   │   ├── serve.ts          # Production server
-│   │   └── package.json
-│   └── backend/
-│       ├── src/
-│       │   ├── routes/       # Auth, admin, glossary, notifications
-│       │   ├── middleware/   # Auth guards (authenticate, requireAdmin)
-│       │   ├── analytics/    # Fuzzy logic, statistics
-│       │   ├── timescale.ts  # TimescaleDB client
-│       │   └── index.ts      # Server entry point
-│       ├── prisma/
-│       │   └── schema.prisma
-│       └── Dockerfile
-├── docker-compose.yml
-├── Caddyfile                 # Reverse proxy config
-└── .env.example
-```
-
-## Author
-
-**Danke Hidayat**
-
-- Email: dnk.hidayat@gmail.com
-- LinkedIn: [linkedin.com/in/dankehidayat](https://www.linkedin.com/in/dankehidayat/)
-- Bluesky: [bsky.app/profile/dankehidayat.my.id](https://bsky.app/profile/dankehidayat.my.id)
-- GitHub: [github.com/dankehidayat/selene](https://github.com/dankehidayat/selene)
-
-Vocational School of IPB University
-
-Technology of Computer Engineering
-
-## License
-
-This project was developed as part of the final assignment (Tugas Akhir) at the Computer Engineering Technology program, College of Vocational Studies, IPB University.
-
-## Acknowledgments
-
-Selene makes use of open-source libraries and tools. A complete list with versions and licenses is available on the Impressum page within the application.
+- **Energy fuzzy**: 15-rule Mamdani — inputs: voltage, power, power factor, reactive power → `ECONOMICAL` / `NORMAL` / `WASTEFUL`.
+- **Climate fuzzy**: 14-rule Mamdani, ASHRAE 55-2020 & SNI 03-6572 — inputs: temperature, humidity → `COLD` / `COOL` / `COMFORTABLE` / `WARM` / `HOT`.
+- **Forecasting** — browser-side linear regression + EWMA + hourly pattern match, horizon-scaled from 1h (12 pts, 5 min) to 1y (12 pts, 1 mo).
+- Reference implementations: `apps/backend/src/analytics/` (TS) mirror the firmware C++.
+
+---
+
+## Microservices (modular variant)
+
+The repository is structured so the monolith can be **replaced gradually**. `packages/shared` and `packages/sensors` move shared code; `services/*` are independent deployables:
+
+| Service | Port | Status |
+|---------|:----:|--------|
+| Auth | 3009 | Scaffold |
+| Energy | 3002 | **Runnable** (real TimescaleDB queries) |
+| Climate | 3003 | **Runnable** (real TimescaleDB queries) |
+| Firmware | 3004 | Scaffold |
+| Ingestor | 3005 | Runnable (MQTT → parser registry → Timescale) |
+| Soil/Lux/Gas/GPS/Generic | — | Stubs |
+
+`docker-compose.modular.yml` and `deploy/Caddyfile.modular` realize this stack: Caddy routes `selene.example/api/v1/energy/*` → energy :3002, `/api/v1/climate/*` → climate :3003, `/api/v1/ingest/*` → ingestor :3005, `/api/v1/auth/*` → auth :3009. **The VPS still runs the monolith stack; changing to modular is a deployment decision — see [docs/MODULAR_MICROSERVICES.md](docs/MODULAR_MICROSERVICES.md).**
+
+---
+
+## Extending with a new sensor
+
+See **[docs/MODULAR_MICROSERVICES.md](docs/MODULAR_MICROSERVICES.md#extensibility-adding-a-new-sensor-module)** for the full playbook. In short:
+
+1. Add a `types` entry in `packages/shared`.
+2. Write a parser in `packages/sensors/src/parsers/<name>.ts` (expose `canParse` / `parse`).
+3. Register it in `packages/sensors/src/parsers/registry.ts`.
+4. Add a hypertable / domain queries.
+5. Add a `services/<name>` + Caddy route.
+6. Mirror the UI in the frontend.
+
+---
+
+## Developed by
+
+**Danke Hidayat** — [dankehidayat](https://github.com/dankehidayat) · [LinkedIn](https://www.linkedin.com/in/dankehidayat/) · [Bluesky](https://bsky.app/profile/dankehidayat.my.id)
+
+Built as part of the final assignment, Computer Engineering Technology, Vocational School / IPB University.
