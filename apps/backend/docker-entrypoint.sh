@@ -1,10 +1,13 @@
 #!/bin/sh
 set -e
-cd /app/apps/backend
 
 echo "[entrypoint] syncing schema with PostgreSQL..."
-# Use bundled Prisma v6 binary (not bunx which resolves to latest)
-./node_modules/.bin/prisma db push --schema=./prisma/schema.prisma
+
+# Navigate to monorepo root where node_modules exists
+cd /app
+
+# Run prisma from parent node_modules
+bunx --cwd apps/backend prisma db push --schema=./apps/backend/prisma/schema.prisma
 
 echo "[entrypoint] starting backend…"
-exec bun run src/index.ts
+exec bun run apps/backend/src/index.ts
