@@ -5,6 +5,7 @@ export const SERVICE_PORTS = {
   climate: 3003,
   firmware: 3004,
   ingestor: 3005,
+  analytics: 3006,
   /** Transition monolith */
   monolith: 8787,
   frontendDev: 5173,

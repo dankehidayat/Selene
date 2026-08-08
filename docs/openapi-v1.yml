@@ -640,6 +640,26 @@ paths:
                     type: string
                   database:
                     type: string
+  /.well-known/jwks.json:
+    get:
+      operationId: getJwks
+      tags: [health]
+      summary: JSON Web Key Set for verifying access token signatures
+      security: []
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Public Ed25519 key for alg EdDSA (kid selene-v2-2026).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
 components:
   securitySchemes:
     bearerAuth:
