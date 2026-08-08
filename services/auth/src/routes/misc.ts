@@ -15,8 +15,7 @@ export async function registerMiscRoutes(app: FastifyInstance) {
       });
       const unread = notifications.filter((n) => !n.read).length;
       return {
-        unread,
-        items: notifications.map((n) => ({
+        notifications: notifications.map((n) => ({
           id: n.id,
           type: n.type,
           title: n.title,
@@ -24,6 +23,7 @@ export async function registerMiscRoutes(app: FastifyInstance) {
           read: n.read,
           createdAt: n.createdAt.toISOString(),
         })),
+        unreadCount: unread,
       };
     },
   );

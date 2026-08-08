@@ -6,6 +6,8 @@ export * from "./types/energy";
 export * from "./types/climate";
 export * from "./types/sensors";
 export * from "./types/auth";
+export * from "./analytics/fuzzy";
+export * from "./analytics/classifyBatch";
 export {
   createTimescaleClient,
   getTimescalePool,

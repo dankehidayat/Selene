@@ -96,6 +96,20 @@
         "typescript": "^5.5.4",
       },
     },
+    "services/analytics": {
+      "name": "@selene/analytics",
+      "version": "0.1.0",
+      "dependencies": {
+        "@selene/shared": "workspace:*",
+        "fastify": "^4.28.0",
+        "pg": "^8.13.0",
+      },
+      "devDependencies": {
+        "@types/node": "^20.14.0",
+        "@types/pg": "^8.11.0",
+        "typescript": "^5.5.4",
+      },
+    },
     "services/auth": {
       "name": "@selene/auth",
       "version": "0.1.0",
@@ -461,6 +475,8 @@
     "@rolldown/pluginutils": ["@rolldown/pluginutils@1.0.0-beta.27", "", {}, "sha512-+d0F4MKMCbeVUJwG96uQ4SgAznZNSq93I3V+9NHA4OpvqG8mRCpGdKmK8l/dl02h2CCDHwW2FqilnTyDcAnqjA=="],
 
     "@scure/base": ["@scure/base@2.2.0", "", {}, "sha512-b8XEupJibegiXV+tDUseI8oLQc8ei3d/4Jkb2RpbHh3MfE054ov3uIz2dhFkB3FI8iwYkEh0gGCApkrYggkPNg=="],
+
+    "@selene/analytics": ["@selene/analytics@workspace:services/analytics"],
 
     "@selene/auth": ["@selene/auth@workspace:services/auth"],
 

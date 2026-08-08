@@ -1,0 +1,21 @@
+{
+  "name": "@selene/analytics",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@selene/shared": "workspace:*",
+    "fastify": "^4.28.0",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.4"
+  }
+}

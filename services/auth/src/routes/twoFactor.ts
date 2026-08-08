@@ -56,29 +56,28 @@ export async function registerTwoFactorRoutes(app: FastifyInstance) {
       }
       const secret = generateTotpSecret();
       const uri = totpUri(user.email, secret);
-      const setupToken = await signSetup2faToken(user.id, secret);
+      const pendingToken = await signSetup2faToken(user.id, secret);
       return {
+        pendingToken,
         secret,
-        otpauthUrl: uri,
-        setupToken,
-        issuer: process.env.TOTP_ISSUER || "Selene",
+        otpauthUri: uri,
       };
     },
   );
 
-  // ── Enable (confirm setup code) ────────────────────────────
+  // ── Enable (confirm code) ────────────────────────────────
   app.post(
     "/auth/2fa/enable",
     { preHandler: [authenticate] },
     async (request, reply) => {
-      const { setupToken, code } = (request.body ?? {}) as {
-        setupToken?: string;
+      const { pendingToken, code } = (request.body ?? {}) as {
+        pendingToken?: string;
         code?: string;
       };
-      if (!setupToken || !code) {
-        return badRequest(reply, "setupToken and code are required");
+      if (!pendingToken || !code) {
+        return badRequest(reply, "pendingToken and code are required");
       }
-      const setup = await resolveSetup2fa(setupToken);
+      const setup = await resolveSetup2fa(pendingToken);
       if (!setup || setup.userId !== request.userId) {
         return badRequest(reply, "Setup expired. Start 2FA setup again.");
       }
