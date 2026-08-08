@@ -3,14 +3,14 @@
 	email admin@labdha.com
 }
 
-# HTTP redirect to HTTPS (if needed)
+# HTTP redirect to HTTPS
 :80 {
 	redir https://{host}{uri} permanent
 }
 
 selene.dankehidayat.my.id {
 
-	# ── Health / JWKS → auth ─────────────────────────────────
+	# Health / JWKS
 	handle /health {
 		reverse_proxy localhost:3009
 	}
@@ -19,8 +19,7 @@ selene.dankehidayat.my.id {
 		reverse_proxy localhost:3009
 	}
 
-	# ── v1 API routes (strip /api/v1 so services see clean paths) ──
-	# Auth service (:3009) — /auth, /me, /admin, /notifications, /glossary
+	# Auth service routes
 	handle /api/v1/auth/* {
 		uri strip_prefix /api/v1
 		reverse_proxy localhost:3009
@@ -46,22 +45,19 @@ selene.dankehidayat.my.id {
 		reverse_proxy localhost:3009
 	}
 
-	# Readings (stream, history, logs) → monolith bridge
-	# Rewrites /api/v1/readings/* → /api/readings/* for monolith compatibility
+	# Readings → monolith bridge with path rewrite
 	handle /api/v1/readings/* {
-		rewrite /api${request_uri}
+		rewrite /api*/readings* /api${1}
 		reverse_proxy localhost:8787
 	}
 
-	# Analytics service (:3006)
+	# Analytics service
 	handle /api/v1/analytics/* {
 		uri strip_prefix /api/v1
 		reverse_proxy localhost:3006
 	}
 
-	# Energy / climate placeholder services (:3002 / :3003). Their v1 contracts
-	# (`/energy/latest`, `/climate/latest`, `/climate/comfort`) land in a later
-	# phase; today `uri strip_prefix` forwards clean /energy|climate paths.
+	# Energy / Climate placeholder services
 	handle /api/v1/energy/* {
 		uri strip_prefix /api/v1
 		reverse_proxy localhost:3002
@@ -82,12 +78,12 @@ selene.dankehidayat.my.id {
 		reverse_proxy localhost:3005
 	}
 
-	# Legacy /api/* fallback → monolith bridge until fully migrated
+	# Legacy /api/* fallback → monolith
 	handle /api/* {
 		reverse_proxy localhost:8787
 	}
 
-	# Frontend SPA routing - send all other requests to frontend on port 3000
+	# Frontend SPA routing
 	rewrite * /{path}
 	handle * {
 		reverse_proxy localhost:3000
