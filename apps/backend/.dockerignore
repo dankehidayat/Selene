@@ -1,6 +1,11 @@
-# apps/backend/.dockerignore
 node_modules
-dist
-.env
-*.log
 .git
+.gitignore
+*.md
+.env
+.env.*
+dist
+build
+next*
+.pnpm-store
+.cache
