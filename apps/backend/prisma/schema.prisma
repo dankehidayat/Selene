@@ -84,3 +84,31 @@ model ApiKey {
   lastUsed  DateTime?
   createdAt DateTime  @default(now())
 }
+
+// IoT Sensor Readings - TimescaleDB Hypertable
+model SensorReading {
+    id            Int            @id @default(autoincrement())
+    nodeId        String         @map("node_id")
+    
+    // Energy metrics (PZEM-004T)
+    voltage       Float?         @map("voltage")
+    current       Float?         @map("current")
+    power         Float?         @map("power")
+    pf            Float?         @map("pf")
+    frequency     Float?         @map("frequency")
+    apparentPower Float?         @map("apparent_power")
+    reactivePower Float?         @map("reactive_power")
+    energyKwh     Float?         @map("energy_kwh")
+    
+    // Climate metrics (DHT11)
+    temperature   Float?         @map("temperature")
+    humidity      Float?         @map("humidity")
+    pressure      Float?         @map("pressure")
+    dewPoint      Float?         @map("dew_point")
+    
+    createdAt     DateTime       @default(now()) @map("timestamp")
+    
+    @@index([nodeId])
+    @@index([createdAt])
+    @@map("sensor_reading")
+}
