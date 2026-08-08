@@ -10,7 +10,7 @@
 
 selene.dankehidayat.my.id {
 
-	# Health / JWKS
+	# Health checks
 	handle /health {
 		reverse_proxy localhost:3009
 	}
@@ -19,73 +19,46 @@ selene.dankehidayat.my.id {
 		reverse_proxy localhost:3009
 	}
 
-	# Auth service routes
-	handle /api/v1/auth/* {
-		uri strip_prefix /api/v1
+	# v1 API routes - AUTH service
+	route /api/v1/auth/* {
+		rewrite * {path}
 		reverse_proxy localhost:3009
 	}
 
-	handle /api/v1/me* {
-		uri strip_prefix /api/v1
+	route /api/v1/me* {
+		rewrite * {path}
 		reverse_proxy localhost:3009
 	}
 
-	handle /api/v1/admin/* {
-		uri strip_prefix /api/v1
+	route /api/v1/admin/* {
+		rewrite * {path}
 		reverse_proxy localhost:3009
 	}
 
-	handle /api/v1/notifications* {
-		uri strip_prefix /api/v1
+	route /api/v1/notifications* {
+		rewrite * {path}
 		reverse_proxy localhost:3009
 	}
 
-	handle /api/v1/glossary {
-		uri strip_prefix /api/v1
+	route /api/v1/glossary {
+		rewrite * {path}
 		reverse_proxy localhost:3009
 	}
 
-	# Readings → monolith bridge with path rewrite
-	handle /api/v1/readings* {
-		uri rewrite /api${path}
-		reverse_proxy localhost:8787
-	}
-
-	# Analytics service
-	handle /api/v1/analytics/* {
-		uri strip_prefix /api/v1
+	# v1 API routes - ANALYTICS service
+	route /api/v1/analytics/* {
+		rewrite * {path}
 		reverse_proxy localhost:3006
 	}
 
-	# Energy / Climate placeholder services
-	handle /api/v1/energy/* {
-		uri strip_prefix /api/v1
-		reverse_proxy localhost:3002
-	}
-
-	handle /api/v1/climate/* {
-		uri strip_prefix /api/v1
-		reverse_proxy localhost:3003
-	}
-
-	handle /api/v1/firmware/* {
-		uri strip_prefix /api/v1
-		reverse_proxy localhost:3004
-	}
-
-	handle /api/v1/ingest/* {
-		uri strip_prefix /api/v1
-		reverse_proxy localhost:3005
-	}
-
-	# Legacy /api/* fallback → monolith
-	handle /api/* {
+	# Legacy /api/* → monolith (includes readings, old endpoints)
+	route /api/* {
 		reverse_proxy localhost:8787
 	}
 
 	# Frontend SPA routing
 	rewrite * /{path}
-	handle * {
+	route * {
 		reverse_proxy localhost:3000
 	}
 
