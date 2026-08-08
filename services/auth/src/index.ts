@@ -1,16 +1,17 @@
 /**
- * Selene auth service (port 3009)
- * Phase 2 microservices scaffold
- * Routes requests to monolith backend until domain logic extraction complete
+ * Selene Auth Microservice (v1 API)
+ * Port 3009 - Handles authentication, user management via proxy to monolith
  */
 import Fastify from "fastify";
 import { SERVICE_PORTS } from "@selene/shared";
 
 const port = Number(process.env.AUTH_PORT ?? SERVICE_PORTS.auth);
-const MONOLITH_PORT = 8787; // Backend monolith port
+const MONOLITH_PORT = 8787;
+const MONOLITH_URL = process.env.MONOLITH_URL || `http://localhost:${MONOLITH_PORT}`;
+
 const app = Fastify({ logger: true });
 
-// Health check (public)
+// Public health check
 app.get("/health", async () => ({
   status: "ok",
   service: "selene-auth",
@@ -21,42 +22,66 @@ app.get("/health", async () => ({
   timestamp: new Date().toISOString(),
 }));
 
-// Service status
-app.get("/api/auth/status", async () => ({
-  service: "selene-auth",
-  ready: true,
-  phase: "Phase 2 - Forwards to monolith backend",
-  migrationNote: "Domain logic extracted in later phases",
-}));
-
-// Catch-all handler for /api/v1/auth/* routes
-// Strips /v1 prefix and forwards to monolith backend
+// Manual proxy handler using native fetch
 app.setNotFoundHandler(async (request, reply) => {
   const url = request.url || "";
   
-  // Match v1 prefixed routes and strip them for backend
+  // Forward /api/v1/auth/* routes
   if (url.startsWith("/api/v1/auth/")) {
-    // Rewrite path from /api/v1/auth/xxx to /api/auth/xxx
-    const newPath = url.replace(/^\/api\/v1\//, "/api/");
+    // Strip /v1 prefix to match backend routes
+    const backendPath = url.replace(/^\/api\/v1\//, "/api/");
     
-    return reply.proxy(`http://localhost:${MONOLITH_PORT}`, {
-      prefix: newPath,
-      upstreamRewrite: (path) => path.replace(/^\/api\/v1\//, "/api/"),
-    });
+    try {
+      const response = await fetch(`${MONOLITH_URL}${backendPath}`, {
+        method: request.method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(request.headers.authorization && { authorization: request.headers.authorization }),
+        },
+        body: ["POST", "PUT", "PATCH"].includes(request.method) 
+          ? JSON.stringify(request.body) 
+          : undefined,
+      });
+      
+      return reply.code(response.status).header("Content-Type", "application/json").send(await response.json());
+    } catch (error) {
+      console.error(`Proxy error for ${request.url}:`, error.message);
+      return reply.code(502).send({ 
+        error: "Backend unavailable", 
+        path: `${MONOLITH_URL}${backendPath}` 
+      });
+    }
   }
   
   // Also handle /api/admin/* routes
   if (url.startsWith("/api/admin/") || url === "/api/admin") {
-    return reply.proxy(`http://localhost:${MONOLITH_PORT}`, {
-      prefix: url,
-    });
+    try {
+      const response = await fetch(`${MONOLITH_URL}${url}`, {
+        method: request.method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(request.headers.authorization && { authorization: request.headers.authorization }),
+        },
+        body: ["POST", "PUT", "PATCH"].includes(request.method) 
+          ? JSON.stringify(request.body) 
+          : undefined,
+      });
+      
+      if (!response.ok) {
+        return reply.code(response.status).send(await response.json());
+      }
+      
+      return reply.send(await response.json());
+    } catch (error) {
+      console.error(`Admin proxy error for ${request.url}:`, error.message);
+      return reply.code(502).send({ error: "Backend unavailable" });
+    }
   }
   
-  // Return 404 for non-auth routes
-  return reply.code(404).send({ error: "Not found" });
+  return reply.code(404).send({ error: "Not found", path: url });
 });
 
 await app.listen({ port, host: "0.0.0.0" });
-console.log(`[auth] SELNE v2 listening on :${port}`);
+console.log(`[auth] SELNE v1 API listening on :${port}`);
 console.log(`  - Health: http://localhost:${port}/health`);
-console.log(`  - Monolith backend forwarded to: localhost:${MONOLITH_PORT}`);
+console.log(`  - Monolith Backend: ${MONOLITH_URL}`);
