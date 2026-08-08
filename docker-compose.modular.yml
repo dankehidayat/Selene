@@ -162,27 +162,29 @@ services:
   # Monolith Backend (Bridge Service for migration)
   # Provides /api/* endpoints while microservices gradually replace it
   monolith:
-    build: ./apps/backend
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
     container_name: selene-monolith
     ports:
-      - "127.0.0.1:8787:8787"
+      - "8787:8787"
     environment:
-      - NODE_ENV=production
-      - PORT=8787
-      - DATABASE_URL=postgresql://selene_admin:${POSTGRES_PASSWORD}@postgres:5432/selene
-      - TIMESCALE_URL=postgresql://selene_ts:${TIMESCALE_PASSWORD}@timescaledb:5432/selene_measurements
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
-      - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
-      - MQTT_HOST=emqx
-      - MQTT_PORT=1883
-      - MQTT_USER=selene
-      - MQTT_PASSWORD=selene123
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - RESEND_FROM="Selene <onboarding@resend.dev>"
-      - APP_PUBLIC_URL=https://selene.dankehidayat.my.id
-      - TOTP_ISSUER=Selene
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      NODE_ENV: production
+      PORT: "8787"
+      DATABASE_URL: postgresql://selene_admin:${POSTGRES_PASSWORD}@postgres:5432/selene
+      TIMESCALE_URL: postgresql://selene_ts:${TIMESCALE_PASSWORD}@timescaledb:5432/selene_measurements
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      MQTT_HOST: emqx
+      MQTT_PORT: "1883"
+      MQTT_USER: selene
+      MQTT_PASSWORD: selene123
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: "Selene <onboarding@resend.dev>"
+      APP_PUBLIC_URL: https://selene.dankehidayat.my.id
+      TOTP_ISSUER: Selene
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
     depends_on:
       postgres:
         condition: service_healthy
