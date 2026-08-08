@@ -125,32 +125,67 @@ export async function registerAdminRoutes(app: FastifyInstance) {
          },
        },
      },
-     async (request) => {
+     async (request, reply) => {
        const { id } = request.params as { id: string };
        const { role } = request.body as { role: "USER" | "ADMIN" };
        const req = request as AuthenticatedRequest;
 
-       // Allow users to elevate their OWN role if they're currently USER
-       // This is needed because you can't be admin while logged in as regular user
-       if (id === req.userId && role === "ADMIN") {
-         // Special case: self-elevation allowed (only once per login session)
-         const existingUser = await prisma.user.findUnique({ where: { id } });
-         
-         if (!existingUser || existingUser.role !== "USER") {
-           return { error: "Role cannot be changed" };
-         }
-       } else if (id === req.userId && role !== "ADMIN") {
-         // Deny demotion of own account
-         return { error: "Cannot downgrade your own account without admin access" };
+       console.log(`Role update attempt: userId=${req.userId}, targetId=${id}, newRole=${role}`);
+
+       // Prevent demotion without admin access
+       if (role !== "ADMIN") {
+         return reply.code(403).send({ error: "Cannot downgrade accounts via API" });
        }
 
-       const user = await prisma.user.update({
+       // Special case: Allow self-elevation from USER to ADMIN only if currently logged in as USER
+       if (id === req.userId && role === "ADMIN") {
+         try {
+           const existingUser = await prisma.user.findUnique({ 
+             where: { id },
+             select: { id: true, email: true, role: true, isActive: true }
+           });
+
+           console.log(`Self-elevation check: user exists=${!!existingUser}, currentRole=${existingUser?.role}`);
+
+           if (!existingUser || existingUser.role !== "USER" || !existingUser.isActive) {
+             return reply.code(403).send({ 
+               error: existingUser?.role === "ADMIN" 
+                 ? "User already has admin access" 
+                 : "Current user not eligible for elevation" 
+             });
+           }
+
+           // Perform self-elevation
+           const updated = await prisma.user.update({
+             where: { id },
+             data: { role: "ADMIN" },
+             select: { id: true, email: true, name: true, role: true, isActive: true }
+           });
+
+           console.log(`✅ Self-elevation successful: ${updated.email} → ADMIN`);
+           return { user: updated };
+         } catch (error) {
+           console.error("Error during self-elevation:", error);
+           return reply.code(500).send({ error: "Failed to elevate account" });
+         }
+       } else if (id === req.userId) {
+         // User trying to change their own role but NOT elevating to ADMIN
+         return reply.code(403).send({ error: "Cannot modify own role without elevation to ADMIN" });
+       }
+
+       // Regular admin-to-other-user role change (requires existing ADMIN token)
+       if (req.userRole !== "ADMIN") {
+         console.warn(`Unauthorized role change attempt: user=${req.userEmail} tries to modify ${id}`);
+         return reply.code(403).send({ error: "Admin access required" });
+       }
+
+       const updated = await prisma.user.update({
          where: { id },
          data: { role },
-         select: { id: true, email: true, name: true, role: true, isActive: true },
+         select: { id: true, email: true, name: true, role: true, isActive: true }
        });
 
-       return { user };
+       return { user: updated };
      },
    );
 
