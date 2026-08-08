@@ -5,9 +5,8 @@
 import Fastify from "fastify";
 import { SERVICE_PORTS } from "@selene/shared";
 
-const port = Number(process.env.AUTH_PORT ?? SERVICE_PORTS.auth);
-const MONOLITH_PORT = 8787;
-const MONOLITH_URL = process.env.MONOLITH_URL || `http://localhost:${MONOLITH_PORT}`;
+const port = Number(process.env.AUTH_PORT || SERVICE_PORTS.auth);
+const MONOLITH_URL = process.env.MONOLITH_URL || `http://localhost:${process.env.BACKEND_PORT || '8787'}`;
 
 const app = Fastify({ logger: true });
 
