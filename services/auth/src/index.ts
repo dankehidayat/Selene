@@ -29,20 +29,26 @@ app.get("/api/auth/status", async () => ({
   migrationNote: "Domain logic extracted in later phases",
 }));
 
-// Catch-all: Forward all other /api/auth/* requests to monolith backend
-// This includes: register, login, profile, sessions, 2fa, etc.
+// Catch-all handler for /api/v1/auth/* routes
+// Strips /v1 prefix and forwards to monolith backend
 app.setNotFoundHandler(async (request, reply) => {
-  const { hostname, url } = request;
+  const url = request.url || "";
   
-  // Only forward auth-related routes to backend
-  if (url?.startsWith("/api/auth/") || 
-      url?.startsWith("/api/v1/auth/") ||
-      url === "/api/admin/" ||
-      url?.startsWith("/api/admin/")) {
+  // Match v1 prefixed routes and strip them for backend
+  if (url.startsWith("/api/v1/auth/")) {
+    // Rewrite path from /api/v1/auth/xxx to /api/auth/xxx
+    const newPath = url.replace(/^\/api\/v1\//, "/api/");
     
     return reply.proxy(`http://localhost:${MONOLITH_PORT}`, {
-      prefix: "/",
-      upstreamRewrite: (path) => path,
+      prefix: newPath,
+      upstreamRewrite: (path) => path.replace(/^\/api\/v1\//, "/api/"),
+    });
+  }
+  
+  // Also handle /api/admin/* routes
+  if (url.startsWith("/api/admin/") || url === "/api/admin") {
+    return reply.proxy(`http://localhost:${MONOLITH_PORT}`, {
+      prefix: url,
     });
   }
   
