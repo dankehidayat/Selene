@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="4" x2="34" y2="38" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3730a3"/>
+      <stop offset="0.5" stop-color="#4f46e5"/>
+      <stop offset="1" stop-color="#312e81"/>
+    </linearGradient>
+    <linearGradient id="moon" x1="14" y1="10" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8fafc"/>
+      <stop offset="0.45" stop-color="#e0e7ff"/>
+      <stop offset="1" stop-color="#c7d2fe"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(22 18) rotate(90) scale(14)">
+      <stop stop-color="#a5b4fc" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#a5b4fc" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="40" height="40" rx="10" fill="url(#bg)"/>
+  <circle cx="22" cy="18" r="12" fill="url(#glow)"/>
+  <circle cx="21" cy="19" r="9" fill="url(#moon)"/>
+  <path d="M24.5 10.4a9 9 0 1 0 0 17.2 7.2 7.2 0 1 1 0-17.2z" fill="#1e1b4b" fill-opacity="0.3"/>
+  <circle cx="17.5" cy="16" r="1.6" fill="#c7d2fe" fill-opacity="0.4"/>
+  <circle cx="22" cy="21.5" r="1.1" fill="#c7d2fe" fill-opacity="0.35"/>
+  <circle cx="18.8" cy="23" r="0.8" fill="#c7d2fe" fill-opacity="0.3"/>
+  <circle cx="9" cy="11" r="0.7" fill="#fff"/>
+  <circle cx="31" cy="13" r="0.5" fill="#fff" fill-opacity="0.9"/>
+  <circle cx="28" cy="29" r="0.55" fill="#fff" fill-opacity="0.85"/>
+</svg>
+

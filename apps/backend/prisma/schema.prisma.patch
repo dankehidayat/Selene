@@ -1,0 +1,55 @@
+// Security Enhancement Prisma Schema Additions
+// DO NOT COMMIT THIS PATCH - Run migrations manually on production
+
+/* ADD THESE MODELS TO schema.prisma (after User model): */
+
+model RoleChangeAudit {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    actorId   String?  // Who performed the action (null if self-elevation)
+    actorRole UserRole? // Actor's role at time of change
+    targetEmail String // Target user's email
+    oldRole   UserRole?
+    newRole   UserRole
+    ipAddress String?
+    userAgent String?
+    method    String? // "api" | "manual" | "database"
+    confirmed Boolean  @default(false) // Requires secondary approval?
+    createdAt DateTime @default(now())
+
+    @@index([userId])
+    @@index([targetEmail])
+    @@index([createdAt])
+}
+
+model RateLimitState {
+    id        String   @id @default(cuid())
+    userId    String
+    action    String   // "role_elevation", "password_reset", etc.
+    attempts  Int      @default(0)
+    lastAttempt DateTime @default(now())
+    expiresAt DateTime
+    
+    unique___userId_action __unique__([userId, action])
+
+    @@index([userId])
+    @@index([expiresAt])
+}
+
+model ConfirmationCode {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    code      String   @unique
+    purpose   String   // "role_elevation", "email_change", etc.
+    consumed  Boolean  @default(false)
+    createdAt DateTime @default(now())
+    expiresAt DateTime
+
+    @@index([userId])
+    @@index([code])
+    @@index([expiresAt])
+}
+
+// END OF PATCH
