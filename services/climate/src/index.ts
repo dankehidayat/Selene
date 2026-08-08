@@ -1,251 +1,192 @@
 /**
  * Selene Climate Microservice
- * Real endpoint querying TimescaleDB for actual sensor data
+ * Queries the real `sensor_readings` hypertable (DHT11 climate metrics).
+ * Only energy + climate sensors exist; no node_id column in the table.
  */
 import Fastify from "fastify";
-import { PrismaClient } from "@prisma/client";
-import { SERVICE_PORTS } from "@selene/shared";
+import { SERVICE_PORTS, createTimescaleClient } from "@selene/shared";
+import type { TempComfort } from "@selene/shared";
 
 const port = Number(process.env.CLIMATE_PORT ?? SERVICE_PORTS.climate);
-const prisma = new PrismaClient({
-  datasourceUrl: process.env.TIMESCALE_URL || 
-    "postgresql://selene_ts:k0iAjJmuzPH3xD8dh25W5Fod7B9PC73rl2qFUdnqrks=@localhost:5433/selene_measurements"
-});
+const db = createTimescaleClient();
 
 const app = Fastify({ logger: true });
 
-// Health check
-app.get("/health", async () => ({
-  status: "ok",
-  service: "selene-climate",
-  version: "1.0.0",
-  database: timescaledbStatus(),
-}));
-
-async function timescaledbStatus(): Promise<string> {
-  try {
-    const count = await prisma.sensorReading.count();
-    return `connected (${count} readings)`;
-  } catch (error) {
-    return "disconnected";
-  }
+function toClimateRow(row: Record<string, unknown>) {
+  return {
+    time: row.time,
+    temperature: row.temperature,
+    humidity: row.humidity,
+    temp_comfort: row.temp_comfort,
+  };
 }
 
-// Get latest climate readings
+function comfortFor(t: number | null, h: number | null): {
+  comfort: TempComfort;
+  humidityClass: string;
+} {
+  let comfort: TempComfort = "COMFORTABLE";
+  if (t != null) {
+    if (t < 18) comfort = "COLD";
+    else if (t < 20) comfort = "COOL";
+    else if (t < 27) comfort = "COMFORTABLE";
+    else if (t < 30) comfort = "WARM";
+    else comfort = "HOT";
+  }
+  let humidityClass = "COMFORTABLE";
+  if (h != null) {
+    if (h < 30) humidityClass = "DRY";
+    else if (h > 70) humidityClass = "HUMID";
+  }
+  return { comfort, humidityClass };
+}
+
+app.get("/health", async () => {
+  let database = "disconnected";
+  try {
+    const res = await db.query(
+      `SELECT COUNT(*)::int AS count FROM sensor_readings`,
+    );
+    database = `connected (${res.rows[0].count} readings)`;
+  } catch (error) {
+    database = `disconnected: ${(error as Error).message}`;
+  }
+  return { status: "ok", service: "selene-climate", database };
+});
+
 app.get("/api/climate/latest", async (request, reply) => {
   try {
-    const latestReadings = await prisma.sensorReading.findMany({
-      orderBy: { timestamp: "desc" },
-      take: 50,
-      select: {
-        nodeId: true,
-        temperature: true,
-        humidity: true,
-        pressure: true,
-        dewPoint: true,
-        timestamp: true,
-      },
-    });
-
-    if (latestReadings.length === 0) {
-      return reply.code(200).send({
+    const res = await db.query(
+      `SELECT * FROM sensor_readings ORDER BY time DESC LIMIT 50`,
+    );
+    const rows = res.rows.map(toClimateRow);
+    if (rows.length === 0) {
+      return {
         message: "No climate readings yet - waiting for device telemetry",
         lastUpdated: null,
         count: 0,
-      });
+      };
     }
-
-    const mostRecent = latestReadings[0];
-    
     return {
       success: true,
-      message: `Latest ${latestReadings.length} climate readings from ${new Set(latestReadings.map(r => r.nodeId)).size} devices`,
+      message: `Latest ${rows.length} climate readings`,
       lastUpdated: new Date().toISOString(),
-      count: latestReadings.length,
-      data: latestReadings,
+      count: rows.length,
+      data: rows,
     };
   } catch (error) {
     console.error("Error fetching climate data:", error);
     return reply.code(500).send({
       error: "Database query failed",
-      details: error.message,
+      details: (error as Error).message,
     });
   }
 });
 
-// Get climate data for specific node
 app.get("/api/climate/node/:nodeId", async (request, reply) => {
   const { nodeId } = request.params as { nodeId: string };
-  
-  try {
-    const readings = await prisma.sensorReading.findMany({
-      where: { nodeId },
-      orderBy: { timestamp: "desc" },
-      take: 100,
-      select: {
-        nodeId: true,
-        temperature: true,
-        humidity: true,
-        pressure: true,
-        dewPoint: true,
-        timestamp: true,
-      },
-    });
-
-    if (readings.length === 0) {
-      return reply.code(404).send({
-        error: "No readings found for this node",
-        nodeId,
-      });
-    }
-
-    return {
-      success: true,
-      nodeId,
-      count: readings.length,
-      data: readings,
-    };
-  } catch (error) {
-    console.error(`Error fetching data for ${nodeId}:`, error);
-    return reply.code(500).send({
-      error: "Database query failed",
-      nodeId,
-      details: error.message,
-    });
-  }
+  return reply.code(404).send({
+    error: "sensor_readings table has no node affinity",
+    nodeId,
+  });
 });
 
-// Get time series stats
 app.get("/api/climate/stats", async (request, reply) => {
-  const query = request.query as {
-    nodeId?: string;
-    hours?: number;
-  };
-
+  const query = request.query as { hours?: number };
   const hours = Number(query.hours) || 24;
-  
+
   try {
-    const where: any = {};
-    if (query.nodeId) {
-      where.nodeId = query.nodeId;
-    }
-    where.timestamp = {
-      gte: new Date(Date.now() - hours * 60 * 60 * 1000),
-    };
-
-    const stats = await prisma.sensorReading.groupBy({
-      by: ["nodeId"],
-      _avg: {
-        temperature: true,
-        humidity: true,
-        pressure: true,
-      },
-      _min: {
-        temperature: true,
-        humidity: true,
-      },
-      _max: {
-        temperature: true,
-        humidity: true,
-      },
-      where,
-    });
-
+    const res = await db.query(
+      `SELECT
+         AVG(temperature) AS avg_temperature,
+         AVG(humidity)    AS avg_humidity,
+         MIN(temperature) AS min_temperature,
+         MAX(temperature) AS max_temperature,
+         MIN(humidity)    AS min_humidity,
+         MAX(humidity)    AS max_humidity,
+         COUNT(*)::int    AS n
+       FROM sensor_readings
+       WHERE time >= NOW() - ($1::int * INTERVAL '1 hour')`,
+      [hours],
+    );
+    const s = res.rows[0];
     return {
       success: true,
       period: `${hours} hours`,
-      devices: stats,
+      byNode: [{ node: "office-main", ...s }],
       metrics: {
-        avgTemperature: stats.reduce((sum, s) => sum + (s._avg.temperature ?? 0), 0) / (stats.length || 1),
-        avgHumidity: stats.reduce((sum, s) => sum + (s._avg.humidity ?? 0), 0) / (stats.length || 1),
+        avgTemperature: s.avg_temperature,
+        avgHumidity: s.avg_humidity,
       },
     };
   } catch (error) {
     console.error("Error getting climate stats:", error);
     return reply.code(500).send({
       error: "Statistics query failed",
-      details: error.message,
+      details: (error as Error).message,
     });
   }
 });
 
-// Comfort analysis
 app.get("/api/climate/comfort", async (request, reply) => {
   try {
-    const latestReadings = await prisma.sensorReading.findMany({
-      where: {
-        temperature: { not: null },
-        humidity: { not: null },
-      },
-      orderBy: { timestamp: "desc" },
-      take: 100,
-      select: {
-        nodeId: true,
-        temperature: true,
-        humidity: true,
-        timestamp: true,
-      },
-    });
-
-    if (latestReadings.length === 0) {
-      return reply.code(200).send({
-        message: "No valid temperature/humidity data available",
-      });
+    const res = await db.query(
+      `SELECT temperature, humidity, temp_comfort, time
+         FROM sensor_readings
+        WHERE temperature IS NOT NULL OR humidity IS NOT NULL
+        ORDER BY time DESC LIMIT 100`,
+    );
+    const rows = res.rows;
+    if (rows.length === 0) {
+      return { message: "No valid temperature/humidity data available" };
     }
 
-    // Analyze comfort levels
-    const analysis = latestReadings.map((r) => {
-      let comfortLevel = "COMFORTABLE";
-      
-      if (r.temperature! < 18) comfortLevel = "COLD";
-      else if (r.temperature! < 20) comfortLevel = "COOL";
-      else if (r.temperature! > 27) comfortLevel = "HOT";
-      else if (r.temperature! > 30) comfortLevel = "VERY_HOT";
-      
-      let humidityLevel = "COMFORTABLE";
-      if (r.humidity! < 30) humidityLevel = "DRY";
-      else if (r.humidity! > 70) humidityLevel = "HUMID";
-      
+    const analysis = rows.map((r) => {
+      const { comfort, humidityClass } = comfortFor(
+        r.temperature,
+        r.humidity,
+      );
       return {
-        nodeId: r.nodeId,
-        temperature: r.temperature!,
-        humidity: r.humidity!,
-        comfortLevel,
-        humidityLevel,
-        timestamp: r.timestamp,
+        temperature: r.temperature,
+        humidity: r.humidity,
+        comfort,
+        humidityClass,
+        timestamp: r.time,
       };
     });
+
+    const temps = analysis
+      .map((a) => a.temperature)
+      .filter((t): t is number => t != null);
+    const hums = analysis
+      .map((a) => a.humidity)
+      .filter((h): h is number => h != null);
 
     return {
       success: true,
       analysis,
       summary: {
-        averageTemp: analysis.reduce((sum, a) => sum + a.temperature, 0) / analysis.length,
-        averageHum: analysis.reduce((sum, a) => sum + a.humidity, 0) / analysis.length,
+        averageTemp: temps.length
+          ? temps.reduce((a, b) => a + b, 0) / temps.length
+          : null,
+        averageHum: hums.length
+          ? hums.reduce((a, b) => a + b, 0) / hums.length
+          : null,
       },
     };
   } catch (error) {
     console.error("Error analyzing comfort:", error);
     return reply.code(500).send({
       error: "Comfort analysis failed",
-      details: error.message,
+      details: (error as Error).message,
     });
   }
 });
 
-// Shutdown handler
 process.on("SIGINT", async () => {
-  await prisma.$disconnect();
+  await db.end();
   process.exit(0);
 });
 
 await app.listen({ port, host: "0.0.0.0" });
-console.log(
-  `[climate] SELNE climate microservice listening on :${port}`
-);
-console.log(`  - Health: http://localhost:${port}/health`);
-console.log(`  - Latest: http://localhost:${port}/api/climate/latest`);
-console.log(`  - Node Data: http://localhost:${port}/api/climate/node/:nodeId`);
-console.log(`  - Stats: http://localhost:${port}/api/climate/stats`);
-console.log(`  - Comfort: http://localhost:${port}/api/climate/comfort`);
-console.log(`  - Database: TimescaleDB`);
+console.log(`[climate] sensor readings microservice listening on :${port}`);

@@ -1,189 +1,122 @@
 /**
  * Selene Energy Microservice
- * Real endpoint querying TimescaleDB for actual sensor data
+ * Queries the real `sensor_readings` hypertable (PZEM-004T energy metrics).
+ * Only energy + climate sensors exist; no node_id column in the table.
  */
 import Fastify from "fastify";
-import { PrismaClient } from "@prisma/client";
-import { SERVICE_PORTS } from "@selene/shared";
+import { SERVICE_PORTS, createTimescaleClient } from "@selene/shared";
 
 const port = Number(process.env.ENERGY_PORT ?? SERVICE_PORTS.energy);
-const prisma = new PrismaClient({
-  datasourceUrl: process.env.TIMESCALE_URL || 
-    "postgresql://selene_ts:k0iAjJmuzPH3xD8dh25W5Fod7B9PC73rl2qFUdnqrks=@localhost:5433/selene_measurements"
-});
+const db = createTimescaleClient();
 
 const app = Fastify({ logger: true });
 
-// Health check
-app.get("/health", async () => ({
-  status: "ok",
-  service: "selene-energy",
-  version: "1.0.0",
-  database: timescaledbStatus(),
-}));
-
-async function timescaledbStatus(): Promise<string> {
-  try {
-    const count = await prisma.sensorReading.count();
-    return `connected (${count} readings)`;
-  } catch (error) {
-    return "disconnected";
-  }
+function toEnergyRow(row: Record<string, unknown>) {
+  return {
+    time: row.time,
+    voltage: row.ac_voltage,
+    current: row.ac_current,
+    power: row.ac_power,
+    pf: row.cos_phi,
+    apparent_power: row.apparent_power,
+    reactive_power: row.reactive_power,
+    total_energy: row.total_energy,
+    frequency: row.frequency,
+    temp_comfort: row.temp_comfort,
+    energy_status: row.energy_status,
+  };
 }
 
-// Get latest energy reading from all nodes
+app.get("/health", async () => {
+  let database = "disconnected";
+  try {
+    const res = await db.query(
+      `SELECT COUNT(*)::int AS count FROM sensor_readings`,
+    );
+    database = `connected (${res.rows[0].count} readings)`;
+  } catch (error) {
+    database = `disconnected: ${(error as Error).message}`;
+  }
+  return { status: "ok", service: "selene-energy", database };
+});
+
 app.get("/api/energy/latest", async (request, reply) => {
   try {
-    // Get most recent reading across all devices
-    const latestReadings = await prisma.sensorReading.findMany({
-      orderBy: { timestamp: "desc" },
-      take: 50,
-      select: {
-        nodeId: true,
-        voltage: true,
-        current: true,
-        power: true,
-        pf: true,
-        frequency: true,
-        apparentPower: true,
-        reactivePower: true,
-        timestamp: true,
-      },
-    });
-
-    if (latestReadings.length === 0) {
-      return reply.code(200).send({
+    const res = await db.query(
+      `SELECT * FROM sensor_readings ORDER BY time DESC LIMIT 50`,
+    );
+    const rows = res.rows.map(toEnergyRow);
+    if (rows.length === 0) {
+      return {
         message: "No energy readings yet - waiting for device telemetry",
         lastUpdated: null,
         count: 0,
-      });
+      };
     }
-
-    const mostRecent = latestReadings[0];
-    
     return {
       success: true,
-      message: `Latest ${latestReadings.length} energy readings from ${new Set(latestReadings.map(r => r.nodeId)).size} devices`,
+      message: `Latest ${rows.length} energy readings`,
       lastUpdated: new Date().toISOString(),
-      count: latestReadings.length,
-      data: latestReadings,
+      count: rows.length,
+      data: rows,
     };
   } catch (error) {
     console.error("Error fetching energy data:", error);
     return reply.code(500).send({
       error: "Database query failed",
-      details: error.message,
+      details: (error as Error).message,
     });
   }
 });
 
-// Get energy data for specific node
 app.get("/api/energy/node/:nodeId", async (request, reply) => {
   const { nodeId } = request.params as { nodeId: string };
-  
-  try {
-    const readings = await prisma.sensorReading.findMany({
-      where: { nodeId },
-      orderBy: { timestamp: "desc" },
-      take: 100,
-      select: {
-        nodeId: true,
-        voltage: true,
-        current: true,
-        power: true,
-        pf: true,
-        frequency: true,
-        apparentPower: true,
-        reactivePower: true,
-        timestamp: true,
-      },
-    });
-
-    if (readings.length === 0) {
-      return reply.code(404).send({
-        error: "No readings found for this node",
-        nodeId,
-      });
-    }
-
-    return {
-      success: true,
-      nodeId,
-      count: readings.length,
-      data: readings,
-    };
-  } catch (error) {
-    console.error(`Error fetching data for ${nodeId}:`, error);
-    return reply.code(500).send({
-      error: "Database query failed",
-      nodeId,
-      details: error.message,
-    });
-  }
+  return reply.code(404).send({
+    error: "sensor_readings table has no node affinity",
+    nodeId,
+  });
 });
 
-// Get time series data with aggregation
 app.get("/api/energy/stats", async (request, reply) => {
-  const query = request.query as {
-    nodeId?: string;
-    hours?: number;
-    interval?: "minute" | "hour" | "day";
-  };
-
+  const query = request.query as { hours?: number };
   const hours = Number(query.hours) || 24;
-  const limit = Math.min(hours * 60, 1440); // Max 24h
-  
+
   try {
-    const where: any = {};
-    if (query.nodeId) {
-      where.nodeId = query.nodeId;
-    }
-    where.timestamp = {
-      gte: new Date(Date.now() - hours * 60 * 60 * 1000),
-    };
-
-    // Get aggregated stats
-    const stats = await prisma.sensorReading.groupBy({
-      by: ["nodeId"],
-      _avg: {
-        voltage: true,
-        current: true,
-        power: true,
-        pf: true,
-      },
-      _sum: {
-        energyKwh: true,
-      },
-      where,
-    });
-
+    const res = await db.query(
+      `SELECT
+         AVG(ac_voltage)      AS avg_voltage,
+         AVG(ac_current)      AS avg_current,
+         AVG(ac_power)        AS avg_power,
+         AVG(cos_phi)         AS avg_pf,
+         AVG(apparent_power)  AS avg_apparent,
+         AVG(reactive_power)  AS avg_reactive,
+         SUM(total_energy)    AS total_energy,
+         MIN(ac_power)        AS min_power,
+         MAX(ac_power)        AS max_power,
+         COUNT(*)::int        AS n
+       FROM sensor_readings
+       WHERE time >= NOW() - ($1::int * INTERVAL '1 hour')`,
+      [hours],
+    );
+    const s = res.rows[0];
     return {
       success: true,
       period: `${hours} hours`,
-      interval: query.interval || "all",
-      devices: stats,
+      byNode: [{ node: "office-main", ...s }],
     };
   } catch (error) {
     console.error("Error getting stats:", error);
     return reply.code(500).send({
       error: "Statistics query failed",
-      details: error.message,
+      details: (error as Error).message,
     });
   }
 });
 
-// Shutdown handler
 process.on("SIGINT", async () => {
-  await prisma.$disconnect();
+  await db.end();
   process.exit(0);
 });
 
 await app.listen({ port, host: "0.0.0.0" });
-console.log(
-  `[energy] SELNE energy microservice listening on :${port}`
-);
-console.log(`  - Health: http://localhost:${port}/health`);
-console.log(`  - Latest: http://localhost:${port}/api/energy/latest`);
-console.log(`  - Node Data: http://localhost:${port}/api/energy/node/:nodeId`);
-console.log(`  - Stats: http://localhost:${port}/api/energy/stats`);
-console.log(`  - Database: TimescaleDB`);
+console.log(`[energy] sensor readings microservice listening on :${port}`);

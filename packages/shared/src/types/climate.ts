@@ -1,6 +1,6 @@
 /** DHT11 / climate domain types */
 
-export type TempComfort = "COLD" | "COOL" | "COMFORTABLE" | "WARM" | "HOT";
+export type { TempComfort } from "../telemetry";
 
 export interface ClimateReading {
   node_id: string;
