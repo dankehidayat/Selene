@@ -49,7 +49,7 @@ selene.dankehidayat.my.id {
 	# Readings (stream, history, logs) → monolith bridge
 	# Rewrites /api/v1/readings/* → /api/readings/* for monolith compatibility
 	handle /api/v1/readings/* {
-		uri rewrite /api${request_uri}
+		rewrite /api${request_uri}
 		reverse_proxy localhost:8787
 	}
 
