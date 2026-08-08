@@ -5,5 +5,5 @@ COPY packages ./packages
 COPY services/auth ./services/auth
 RUN bun install --filter @selene/auth
 WORKDIR /app/services/auth
-EXPOSE 3001
+EXPOSE 3009
 CMD ["bun", "run", "src/index.ts"]

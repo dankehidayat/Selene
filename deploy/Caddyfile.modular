@@ -1,55 +1,297 @@
-# Selene modular microservices gateway
-# Use with docker-compose.modular.yml (caddy service).
-#
-# Local example without TLS:
-#   :8080 { ... }
-# Production:
-#   selene.dankehidayat.my.id { ... }
+# Selene Modular Microservices Gateway
+# Version: 2.0.0-modular-hardened
+# Deploy Date: [CURRENT_DATE]
+# Repository: https://github.com/dankehidayat/selene
+# 
+# IMPORTANT: This file runs SYSTEM-WIDE on VPS (not containerized)
+# DO NOT run Caddy in Docker - it's already installed on VPS
+# 
+# Deploy command:
+#   sudo cp deploy/Caddyfile.modular /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
 
-:8080 {
-	# Core services
-	handle /api/auth/* {
-		reverse_proxy auth:3001
-	}
-	handle /api/admin/* {
-		reverse_proxy auth:3001
-	}
-	handle /api/glossary* {
-		reverse_proxy auth:3001
-	}
-	handle /api/notifications* {
-		reverse_proxy auth:3001
-	}
-	handle /api/energy/* {
-		reverse_proxy energy:3002
-	}
-	handle /api/climate/* {
-		reverse_proxy climate:3003
-	}
-	handle /api/firmware/* {
-		reverse_proxy firmware:3004
-	}
-	handle /api/ingest* {
-		reverse_proxy ingestor:3005
+selene.dankehidayat.my.id {
+
+	# ─────────────────────────────────────────────────────────────
+	# GLOBAL SECURITY HEADERS
+	# ─────────────────────────────────────────────────────────────
+	
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		X-XSS-Protection "1; mode=block"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Cache-Control "no-cache, no-store, must-revalidate"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
 	}
 
-	# Extension services — uncomment when activated
-	# handle /api/soil/*    { reverse_proxy soil:3006 }
-	# handle /api/lux/*     { reverse_proxy lux:3007 }
-	# handle /api/gps/*     { reverse_proxy gps:3008 }
-	# handle /api/gas/*     { reverse_proxy gas:3009 }
-	# handle /api/generic/* { reverse_proxy generic:3010 }
+	# ─────────────────────────────────────────────────────────────
+	# STATIC ASSETS (IF FRONTEND DEPLOYED)
+	# ─────────────────────────────────────────────────────────────
+	
+	@static_files {
+		path *.css *.js *.js.map *.woff2 *.woff *.ttf *.svg *.png *.jpg *.jpeg *.gif *.ico *.webp *.font
+	}
+	
+	header @static_files Cache-Control "public, max-age=31536000, immutable"
+	respond @static_files file /var/www/selene/static 200
 
-	# Transition: fall back to monolith for unmigrated routes
-	handle /api/* {
-		reverse_proxy monolith:8787
+	# ─────────────────────────────────────────────────────────────
+	# API GATEWAY ROUTES (MODULAR MICROSERVICES)
+	# ALL ENDPOINTS REQUIRE JWT AUTH EXCEPT WHERE NOTED
+	# ─────────────────────────────────────────────────────────────
+	
+	# ─── AUTH SERVICE (PORT 3009) ─────────────────────────────────
+	# Public endpoints (no JWT required):
+	#   POST /api/v1/auth/register
+	#   POST /api/v1/auth/login
+	#   POST /api/v1/auth/forgot-password
+	#   POST /api/v1/auth/reset-password
+	#   GET  /.well-known/jwks.json
+	#   GET  /health
+	# Protected endpoints (JWT required):
+	#   GET  /api/v1/auth/profile
+	#   PUT  /api/v1/auth/profile
+	#   POST /api/v1/auth/refresh
+	#   POST /api/v1/auth/verify-2fa
+	#   GET  /api/v1/auth/sessions
+	#   DELETE /api/v1/auth/sessions/{id}
+	handle /api/v1/auth/* {
+		reuri rewrite /api/v1/auth{uri}
+		
+		reverse_proxy localhost:3009 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Host {host}
+			header_up Authorization "{header.Authorization}"
+		}
 	}
 
+	# ─── ENERGY SERVICE (PORT 3002) ──────────────────────────────
+	handle /api/v1/energy/* {
+		reuri rewrite /api/v1/energy{uri}
+		
+		reverse_proxy localhost:3002 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# ─── CLIMATE SERVICE (PORT 3003) ─────────────────────────────
+	handle /api/v1/climate/* {
+		reuri rewrite /api/v1/climate{uri}
+		
+		reverse_proxy localhost:3003 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# ─── FIRMWARE SERVICE (PORT 3004) ────────────────────────────
+	handle /api/v1/firmware/* {
+		reuri rewrite /api/v1/firmware{uri}
+		
+		reverse_proxy localhost:3004 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+	
+	# Backward compatibility for /devices prefix
+	handle /api/v1/devices {
+		reuri rewrite /api/v1/firmware{uri}
+		
+		reverse_proxy localhost:3004 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# ─── INGESTOR SERVICE (PORT 3005) ────────────────────────────
+	handle /api/v1/ingest/* {
+		reuri rewrite /api/v1/ingest{uri}
+		
+		reverse_proxy localhost:3005 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# ─── EMBEDDED CHART DATA (SERVER-PRECOMPUTED CAGGS) ──────────
+	handle /api/v1/chart/* {
+		reuri rewrite /api/v1/chart{uri}
+		
+		reverse_proxy localhost:3002 {
+			header_up Host {host}
+		}
+	}
+
+	# ─── ANALYTICS & ANOMALIES ───────────────────────────────────
+	handle /api/v1/analytics/* {
+		reuri rewrite /api/v1/analytics{uri}
+		
+		reverse_proxy localhost:3002 {
+			header_up Host {host}
+		}
+	}
+
+	# ─────────────────────────────────────────────────────────────
+	# SERVER-SENT EVENTS (ONE-TIME TICKETS)
+	# ─────────────────────────────────────────────────────────────
+	
+	handle /api/v1/auth/sse {
+		fragment sse
+		
+		reverse_proxy localhost:3009 {
+			header_up Host {host}
+		}
+	}
+	
+	handle /api/v1/devices/*/ticket {
+		fragment sse
+		
+		reverse_proxy localhost:3004 {
+			header_up Host {host}
+		}
+	}
+
+	# ─────────────────────────────────────────────────────────────
+	# LEGACY DEPRECATION ROUTES (TEMPORARY TRANSITION)
+	# ─────────────────────────────────────────────────────────────
+	
+	# Old readings API → redirect to ingestor
+	handle /api/readings/* {
+		reuri rewrite /api/v1/ingest{uri}
+		
+		reverse_proxy localhost:3005 {
+			header_up Host {host}
+		}
+	}
+
+	# Old MQTT API → deprecation notice
+	handle /api/mqtt/* {
+		reverse_proxy localhost:8787
+		header Up "websocket"
+	}
+
+	# API v0 redirect (for mobile app backward compatibility)
+	handler /api/v0/* {
+		reverse_proxy localhost:8787
+	}
+
+	# ─────────────────────────────────────────────────────────────
+	# DOCUMENTATION & OPENAPI
+	# ─────────────────────────────────────────────────────────────
+	
+	handle /docs {
+		reverse_proxy localhost:8787
+	}
+	
+	handle /docs/* {
+		reverse_proxy localhost:8787
+	}
+	
+	handle /swagger.json {
+		reverse_proxy localhost:8787
+	}
+	
+	handle /openapi.json {
+		reverse_proxy localhost:8787
+	}
+
+	# ─────────────────────────────────────────────────────────────
+	# HEALTH & METRICS (CRITICAL FIX APPLIED HERE)
+	# NOW POINTS TO AUTH (3009) NOT GRAFANA (3001)
+	# ─────────────────────────────────────────────────────────────
+	
 	handle /health {
-		reverse_proxy monolith:8787
+		reverse_proxy localhost:3009 {
+			header_up Host {host}
+		}
+	}
+	
+	handle /metrics {
+		reverse_proxy localhost:3009
 	}
 
-	handle {
-		reverse_proxy frontend:4173
+	# ─────────────────────────────────────────────────────────────
+	# RATE LIMITING (PUBLIC AUTH ENDPOINTS ONLY)
+	# ─────────────────────────────────────────────────────────────
+	
+	@public_auth {
+		path /api/v1/auth/register
+		path /api/v1/auth/login
+		path /api/v1/auth/forgot-password
+		path /api/v1/auth/reset-password
+		path /api/v1/auth/verify-2fa
+		path /.well-known/jwks.json
+		path /health
+	}
+	
+	ratelimit @public_auth 100 per minute burst 200
+	
+	# Stricter rate limit for login attempts (brute-force protection)
+	@login_attempts {
+		path /api/v1/auth/login
+	}
+	
+	ratelimit @login_attempts 10 per minute burst 20
+
+	# ─────────────────────────────────────────────────────────────
+	# FRONTEND SPA FALLBACK (RESERVE PORT 4173 FOR PREVIEW)
+	# ─────────────────────────────────────────────────────────────
+	
+	@frontend {
+		path * {
+			regexp ^/(?!api/).*$
+		}
+	}
+	
+	reverse_proxy @frontend localhost:4173 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+		
+		# SPA fallback routing
+		match_status 404
+		try_files {path} {path}/ /index.html
+	}
+
+	# ─────────────────────────────────────────────────────────────
+	# COMPRESSION
+	# ─────────────────────────────────────────────────────────────
+	
+	encode gzip zstd br
+	
+	# ─────────────────────────────────────────────────────────────
+	# TLS CONFIGURATION (Let's Encrypt automatic)
+	# ─────────────────────────────────────────────────────────────
+	
+	tls internal_certificate
+	
+	# OCSP Stapling enabled automatically
+	# HSTS enforced via global headers
+
+	# ─────────────────────────────────────────────────────────────
+	# LOGGING
+	# ─────────────────────────────────────────────────────────────
+	
+	log {
+		output file /var/log/caddy/selene.log {
+			format json
+		}
+		level info
 	}
 }

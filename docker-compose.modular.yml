@@ -70,8 +70,10 @@ services:
     build:
       context: .
       dockerfile: services/auth/Dockerfile
+    ports:
+      - "127.0.0.1:3009:3009"
     environment:
-      AUTH_PORT: 3001
+      AUTH_PORT: 3009
       DATABASE_URL: postgresql://selene_admin:local_dev_password@postgres:5432/selene
       JWT_SECRET: local_dev_jwt_secret_change_me
     depends_on:

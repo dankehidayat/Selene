@@ -1,3 +1,3 @@
 # @selene/auth
 
-Port **3001** (core). See `docs/MODULAR_MICROSERVICES.md`.
+Port **3009** (core). See `docs/MODULAR_MICROSERVICES.md`.

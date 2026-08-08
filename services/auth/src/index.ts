@@ -1,5 +1,5 @@
 /**
- * Selene auth service (port 3001)
+ * Selene auth service (port 3009)
  * Scaffold — Phase 2 of modular microservices migration.
  * Full domain logic still lives in apps/backend until Phase 4.
  */
