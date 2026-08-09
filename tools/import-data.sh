@@ -5,6 +5,7 @@
 # Usage:
 #   $0 <csv-file> [--dry-run]                          # import from local CSV
 #   $0 --sheet <url-or-id> [--dry-run]                 # fetch live Google Sheet
+#   $0 --sheet <url-or-id> --truncate                  # wipe sensor_readings first
 #
 # Google Sheets mode downloads the gid=0 tab as CSV via the public export
 # endpoint and keeps only the main device block (columns 1-17). The HTC-1
@@ -24,12 +25,14 @@ DOCKER_CMD="${DOCKER_CMD:-sudo docker}"
 
 # Parse arguments
 DRY_RUN=false
+TRUNCATE=false
 INPUT_FILE=""
 SHEET_ARG=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dry-run) DRY_RUN=true; shift ;;
+    --truncate) TRUNCATE=true; shift ;;
     --sheet) SHEET_ARG="$2"; shift 2 ;;
     *) INPUT_FILE="$1"; shift ;;
   esac
@@ -212,7 +215,16 @@ else
   echo "--- EXECUTING IMPORT ---"
   
   export PGPASSWORD=$(${DOCKER_CMD} exec selene-db-timescale printenv POSTGRES_PASSWORD 2>/dev/null | tr -d '\n')
-  
+
+  if $TRUNCATE; then
+    echo "--- TRUNCATING sensor_readings ---"
+    ${DOCKER_CMD} exec selene-db-timescale psql \
+      -U selene_ts \
+      -d selene_measurements \
+      -c "TRUNCATE sensor_readings;" || { echo "✗ TRUNCATE failed"; exit 1; }
+    echo "Old readings wiped."
+  fi
+
    ${DOCKER_CMD} exec -i selene-db-timescale psql \
     -U selene_ts \
     -d selene_measurements \
