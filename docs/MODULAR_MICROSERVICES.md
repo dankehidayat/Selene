@@ -1,9 +1,8 @@
 # Selene — Modular Microservices Architecture for Extensible IoT Sensor Integration
 
-> **Branch:** `feat/modular-microservices`  
+> **Branch:** `feat/api-v1-microservices` (merged to `master` as v1.0.0)  
 > **Field hardware today:** ESP32 + **PZEM-004T** + **DHT11**  
-> **Edge firmware:** [Eco-Office `feat/selene-mqtt-ota`](https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino) — root `Eco Office.ino` (PZEM energy + DHT11 environment); secrets blank in git  
-> Extension examples (lux, soil, …) are **contracts only** until hardware exists.
+> **Edge firmware:** [Eco-Office `feat/selene-mqtt-ota`](https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino) — root `Eco Office.ino` (PZEM energy + DHT11 environment); secrets blank in git
 
 ---
 
@@ -14,23 +13,21 @@
 3. [Target Microservices Architecture](#target-microservices-architecture)
 4. [Service Definitions](#service-definitions)
 5. [Data Flow: Existing Sensors](#data-flow-existing-sensors)
-6. [Extensibility: Adding a New Sensor Module](#extensibility-adding-a-new-sensor-module)
+6. [Adding a New Sensor Module](#adding-a-new-sensor-module)
 7. [Shared Package Design](#shared-package-design)
 8. [Ingestor Parser Registry Pattern](#ingestor-parser-registry-pattern)
 9. [Database Strategy](#database-strategy)
 10. [API Gateway Routing](#api-gateway-routing)
 11. [Deployment with Docker Compose](#deployment-with-docker-compose)
 12. [Migration Path](#migration-path)
-13. [Example: Adding a Lux Sensor](#example-adding-a-lux-sensor)
-14. [Example: Adding a Soil Sensor (NPK/pH/EC)](#example-adding-a-soil-sensor-npkphec)
-15. [Benefits Summary](#benefits-summary)
-16. [Repository Map (implemented)](#repository-map-implemented)
+13. [Benefits Summary](#benefits-summary)
+14. [Repository Map (implemented)](#repository-map-implemented)
 
 ---
 
 ## Overview
 
-Transition from a monolithic Fastify backend to an extensible microservices architecture. Supports **PZEM-004T (energy)** and **DHT11 (climate)** while leaving structured extension points for soil NPK/pH/EC, lux, GPS, gas, water level, pressure, etc.
+Transition from a monolithic Fastify backend to an extensible microservices architecture. Supports **PZEM-004T (energy)** and **DHT11 (climate)**. Additional sensor domains can be added via the parser registry.
 
 ---
 
@@ -48,8 +45,7 @@ Transition from a monolithic Fastify backend to an extensible microservices arch
 |-------|------------|
 | Device | ESP32 → MQTT `selene/{nodeId}/telemetry` |
 | Broker | EMQX :1883 |
-| Core | Ingestor :3005, Auth :3001, Energy :3002, Climate :3003, Firmware :3004 |
-| Extensions | Soil :3006, Lux :3007, GPS :3008, Gas :3009, Generic :3010 |
+| Core | Ingestor :3005, Auth :3009, Energy :3002, Climate :3003, Firmware :3004, Analytics :3006 |
 | Data | PostgreSQL (users), TimescaleDB (readings) |
 | Gateway | Caddy path routing (`deploy/Caddyfile.modular`) |
 
@@ -61,14 +57,14 @@ Transition from a monolithic Fastify backend to an extensible microservices arch
 
 | Service | Port | Status | Responsibility |
 |---------|------|--------|----------------|
-| Auth | 3001 | Scaffold | Users, JWT, roles, glossary, admin |
-| Energy | 3002 | Scaffold | PZEM analytics / fuzzy energy |
-| Climate | 3003 | Scaffold | DHT11 analytics / climate fuzzy |
+| Auth | 3009 | **Implemented / Runnable** | Users, **JWT v2 (EdDSA)**, roles, 2FA, refresh rotation, admin, notifications, glossary |
+| Analytics | 3006 | **Runnable** | Energy/climate analytics (real TimescaleDB reads) |
+| Energy | 3002 | **Runnable** | PZEM analytics / fuzzy energy (real TimescaleDB reads) |
+| Climate | 3003 | **Runnable** | DHT11 analytics / climate fuzzy (real TimescaleDB reads) |
 | Firmware | 3004 | Scaffold | OTA upload + MQTT command |
 | Ingestor | 3005 | **Runnable** | MQTT + registry + Timescale insert |
-| Soil–Generic | 3006–3010 | Extension stubs | Future domains |
-| Frontend | 5173 / 4173 | Core | Dashboard |
-| Monolith | 8787 | Transition | Full API until Phase 4 |
+| Frontend | 3000 | Core | Dashboard (published via `FRONTEND_PORT`) |
+| Monolith | 8787 | **Transition (prod today)** | Full API until services cut over |
 
 ---
 
@@ -87,13 +83,13 @@ One payload can fire **multiple** parsers.
 
 ---
 
-## Extensibility: Adding a New Sensor Module
+## Adding a New Sensor Module
 
-1. Type in `packages/shared/src/types/sensors.ts`  
-2. Parser in `packages/sensors/src/parsers/<name>.ts` (`canParse` / `parse`)  
-3. Register in `packages/sensors/src/parsers/registry.ts`  
-4. Hypertable migration  
-5. `services/<name>` + Caddy handle  
+1. Type in `packages/shared/src/types/sensors.ts`
+2. Parser in `packages/sensors/src/parsers/<name>.ts` (`canParse` / `parse`)
+3. Register in `packages/sensors/src/parsers/registry.ts`
+4. Hypertable migration
+5. `services/<name>` + Caddy handle
 6. Frontend component  
 
 ---
@@ -150,12 +146,11 @@ See `deploy/Caddyfile.modular` — core prefixes + commented extensions + monoli
 | File | Use |
 |------|-----|
 | `docker-compose.local.yml` | Daily Mac dev (infra + monolith) |
-| `docker-compose.modular.yml` | Infra + service profile `services` |
-| `docker-compose.production.yml` | Production stack |
+| `docker-compose.modular.yml` | **Production / VPS** (all services; monolith bridges `/api/v1/*`) |
+| `docker-compose.yml` | Consolidated alias of the modular stack |
 
 ```bash
-docker compose -f docker-compose.modular.yml up -d
-docker compose -f docker-compose.modular.yml --profile services up -d --build
+docker compose -f docker-compose.modular.yml up -d --build
 ```
 
 ---
@@ -165,26 +160,10 @@ docker compose -f docker-compose.modular.yml --profile services up -d --build
 | Phase | Action | Status |
 |-------|--------|--------|
 | 1. Shared packages | `@selene/shared`, `@selene/sensors` | **Done** |
-| 2. Split by domain | `services/*` scaffolds | **Done (scaffolds)** |
-| 3. Ingestor primary | Standalone ingest process | **Runnable** |
-| 4. Decommission monolith | Caddy → microservices only | Not started |
-
----
-
-## Example: Adding a Lux Sensor
-
-1. `LuxReading` in shared types (already stubbed in `types/sensors.ts`)  
-2. `packages/sensors/src/parsers/lux.ts` with `canParse` / `parse`  
-3. Push onto `parserRegistry`  
-4. `CREATE TABLE lux_readings …` hypertable  
-5. `services/lux` + Caddy `/api/lux/*`  
-6. Frontend `LuxDashboard`  
-
----
-
-## Example: Adding a Soil Sensor (NPK/pH/EC)
-
-Same pattern: detect `nitrogen` / `npk_n` → `soil_readings` → `services/soil` :3006.
+| 2. Split by domain | `services/*` | **Auth (:3009) + analytics (:3006) + energy (:3002) + climate (:3003) implemented**; firmware scaffold |
+| 3. Ingestor primary | Standalone ingest process | **Runnable** (:3005) |
+| 4. Gateway cutover | Enable per-domain Caddy routes above the monolith bridge (auth first) | Next |
+| 5. Decommission monolith | Caddy → microservices only | Not started |
 
 ---
 
@@ -200,8 +179,7 @@ Independent deployability, zero-downtime extensions, fault isolation, parser reg
 packages/shared/          # types, timescale helper, mqtt factory, JWT helpers
 packages/sensors/         # PZEM + DHT11 modules + parser registry
 services/ingestor/        # real MQTT → registry → Timescale
-services/{auth,energy,climate,firmware}/  # Phase 2 scaffolds
-services/{soil,lux,gps,gas,generic}/      # extension stubs
+services/{auth,energy,climate,firmware}/  # auth implemented, others active
 deploy/Caddyfile.modular
 docker-compose.modular.yml
 docker-compose.yml        # VPS / production stack

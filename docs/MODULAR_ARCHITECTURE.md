@@ -10,13 +10,14 @@ It covers service ports, parser registry, database strategy, Caddy routing, Dock
 
 | Piece | Location |
 |-------|----------|
-| Branch | `feat/modular-microservices` |
+| Branch | `feat/api-v1-microservices` (merged to `master` as v1.0.0) |
 | Shared types + DB/MQTT helpers | `packages/shared` |
 | PZEM-004T + DHT11 parsers | `packages/sensors` |
 | Standalone ingestor | `services/ingestor` |
-| Domain scaffolds | `services/{auth,energy,climate,firmware}` |
+| Implemented services | `services/auth` (:3009, full v1) · `services/analytics` (:3006) · `services/energy` (:3002) · `services/climate` (:3003) |
+| Domain scaffolds | `services/firmware` |
 | Extension stubs | `services/{soil,lux,gps,gas,generic}` |
 | Gateway | `deploy/Caddyfile.modular` |
-| Compose | `docker-compose.modular.yml` / `docker-compose.yml` (VPS) |
-| Transition API | `apps/backend` :8787 |
+| Compose | `docker-compose.modular.yml` (VPS) / `docker-compose.yml` (alias) |
+| Transition API | `apps/backend` :8787 (bridges `/api/v1/*` until services cut over) |
 | ESP32 firmware | **[Eco-Office `feat/selene-mqtt-ota`](https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino)** — root `Eco Office.ino` (energy + environment); not stored in Selene |

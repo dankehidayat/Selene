@@ -12,7 +12,7 @@ Real-time smart energy & climate monitoring for IoT sensor fleets. ESP32-based s
 - **Client-side ML forecasting** — linear regression + exponential smoothing + hourly pattern-matching ensemble.
 - **Auth & RBAC** — JWT sessions, roles (User/Admin), 2FA (TOTP), password reset, login history, notifications.
 - **OTA firmware management** — upload and track ESP32 OTA firmware.
-- **Extensible microservices** — parser-registry architecture that lets new sensor domains (soil, lux, …) be added without touching existing services.
+- **Extensible microservices** — parser-registry architecture for adding new sensor domains.
 
 ## Architecture
 
@@ -31,7 +31,7 @@ ESP32 (PZEM-004T + DHT11)
 ```
 
 - The **monolith** (`apps/backend`, port 8787) is the primary production API and MQTT ingestor. The frontend talks to `/api/*` on it.
-- A **microservices variant** (`services/`, via `docker-compose.modular.yml`) splits domains behind a Caddy gateway. Scaffolded and partially implemented (energy + climate now query real TimescaleDB) but **not yet the production deployment**.
+- A **microservices variant** (`services/`, via `docker-compose.modular.yml`) splits domains behind a Caddy gateway. This is what the **VPS deploys today**: Caddy exposes the `/api/v1/*` contract, and until each service is cut over, the monolith serves it as a bridge. `services/auth` (3009) is fully implemented and is the first microservice ready to take over routes.
 - Postgres is now **deprecated as the storage for telemetry**; all sensor readings live in TimescaleDB.
 
 ---
@@ -47,16 +47,16 @@ packages/
   sensors/    PZEM-004T + DHT11 sensor modules + MQTT parser registry
 services/
   ingestor/   Standalone MQTT → parser-registry → TimescaleDB process
-  auth/       (microservice) users · JWT · roles
-  energy/     (microservice) energy analytics (real TimescaleDB queries)
-  climate/    (microservice) climate analytics (real TimescaleDB queries)
-  firmware/   (microservice) OTA upload + MQTT commands
-  soil/ lux/ gas/ gps/ generic/   extension stubs (scaffolded)
+  auth/       (microservice) users · JWT v2 (EdDSA) · roles · 2FA · notifications — implemented (:3009)
+  analytics/  (microservice) energy/climate analytics (real TimescaleDB queries) (:3006)
+  energy/     (microservice) energy analytics (real TimescaleDB queries) (:3002)
+  climate/    (microservice) climate analytics (real TimescaleDB queries) (:3003)
+  firmware/   (microservice) OTA upload + MQTT commands (scaffold)
 deploy/
   Caddyfile.modular             Caddy gateway for the microservices variant
-docker-compose.yml              production VPS stack (postgres + timescale + emqx + backend + frontend)
+docker-compose.yml              consolidated VPS stack (postgres + timescale + emqx + backend + frontend)
 docker-compose.local.yml        local-dev infra only (postgres:5434 · timescale:5433 · emqx:1883)
-docker-compose.modular.yml      microservices stack (not for VPS yet)
+docker-compose.modular.yml      microservices stack — the deployed production variant
 scripts/
   mqtt-tunnel.sh               forward local 1884 → VPS EMQX 1883 (live-dev data)
 docs/                          architecture, deployment, and extension docs
@@ -120,9 +120,9 @@ Full instructions: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
 | Target        | Compose               | Command |
 |---------------|-----------------------|---------|
-| VPS (prod)    | `docker-compose.yml`  | `sudo docker compose up -d --build` |
+| VPS (prod)    | `docker-compose.modular.yml` | `sudo docker compose -f docker-compose.modular.yml up -d --build` |
+| Consolidated  | `docker-compose.yml`  | same services as modular (alias for naming) |
 | Local Mac     | `docker-compose.local.yml` | imperative `docker compose -f docker-compose.local.yml up -d` + Bun apps |
-| Microservices | `docker-compose.modular.yml` | experiment only — **not** for the VPS yet |
 
 Env examples are the source of truth; copy them, never commit real secrets:
 
@@ -229,20 +229,20 @@ The repository is structured so the monolith can be **replaced gradually**. `pac
 
 | Service | Port | Status |
 |---------|:----:|--------|
-| Auth | 3009 | Scaffold |
+| Auth | 3009 | **Implemented / Runnable** (JWT v2 EdDSA, register/login/2FA, refresh rotation, profile, admin, notifications, glossary) |
 | Energy | 3002 | **Runnable** (real TimescaleDB queries) |
 | Climate | 3003 | **Runnable** (real TimescaleDB queries) |
 | Firmware | 3004 | Scaffold |
 | Ingestor | 3005 | Runnable (MQTT → parser registry → Timescale) |
-| Soil/Lux/Gas/GPS/Generic | — | Stubs |
+| Analytics | 3006 | **Runnable** (real TimescaleDB queries) |
 
-`docker-compose.modular.yml` and `deploy/Caddyfile.modular` realize this stack: Caddy routes `selene.example/api/v1/energy/*` → energy :3002, `/api/v1/climate/*` → climate :3003, `/api/v1/ingest/*` → ingestor :3005, `/api/v1/auth/*` → auth :3009. **The VPS still runs the monolith stack; changing to modular is a deployment decision — see [docs/MODULAR_MICROSERVICES.md](docs/MODULAR_MICROSERVICES.md).**
+`docker-compose.modular.yml` and `deploy/Caddyfile.modular` realize this stack on the VPS: Caddy exposes `https://selene.dankehidayat.my.id/api/v1/*`; until a microservice is cut over in the gateway, the **monolith (:8787) serves all `/api/v1/*`** as a bridge (see the "Unreleased → cutover" notes in [CHANGELOG.md](CHANGELOG.md)). `services/auth` is feature-complete and is the first candidate to take over `/api/v1/auth/*`, `/me`, `/admin`, `/notifications`, `/glossary` routes.
 
 ---
 
 ## Extending with a new sensor
 
-See **[docs/MODULAR_MICROSERVICES.md](docs/MODULAR_MICROSERVICES.md#extensibility-adding-a-new-sensor-module)** for the full playbook. In short:
+See **[docs/MODULAR_MICROSERVICES.md](docs/MODULAR_MICROSERVICES.md#adding-a-new-sensor-module)** for the full playbook. In short:
 
 1. Add a `types` entry in `packages/shared`.
 2. Write a parser in `packages/sensors/src/parsers/<name>.ts` (expose `canParse` / `parse`).

@@ -3,7 +3,6 @@
  *
  * Multiple parsers may fire on a single ESP32 payload (energy + climate).
  * For the current schema, partials are merged into one flat Timescale row.
- * Extension parsers (lux, soil, …) will use dedicated hypertables later.
  */
 import type {
   ClimateReading,
@@ -13,7 +12,7 @@ import type {
 import { canParseClimate, parseClimatePayload } from "./climate";
 import { canParseEnergy, parseEnergyPayload } from "./energy";
 
-export type DomainParserId = "energy" | "climate" | "lux" | "soil" | "gps" | "gas" | "generic";
+export type DomainParserId = "energy" | "climate";
 
 export interface DomainParseResult {
   domain: DomainParserId;
@@ -48,9 +47,6 @@ export const parserRegistry: ParserEntry[] = [
       climate: parseClimatePayload(nodeId, payload, ts),
     }),
   },
-  // Extension parsers — register when hardware ships:
-  // { id: "lux", detect: canParseLux, parse: ... },
-  // { id: "soil", detect: canParseSoil, parse: ... },
 ];
 
 export function runParserRegistry(

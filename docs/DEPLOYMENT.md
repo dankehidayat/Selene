@@ -4,11 +4,15 @@
 
 | Machine | Compose file | Command | Env files |
 |---------|--------------|---------|-----------|
-| **VPS (production)** | `docker-compose.yml` | `sudo docker compose up -d --build` | `.env` + `apps/backend/.env` (+ frontend build arg from root `.env`) |
-| **Mac local (dev)** | `docker-compose.local.yml` | `docker compose -f docker-compose.local.yml up -d` | `apps/backend/.env` from `.env.local.example`; infra passwords are in the compose file |
-| **Optional multi-service experiment** | `docker-compose.modular.yml` | **Do not use on VPS yet** | Future microservices only |
+| **VPS (production)** | `docker-compose.modular.yml` | `sudo docker compose -f docker-compose.modular.yml up -d --build` | `.env` + frontend build arg from root `.env` |
+| **Local Mac (dev)** | `docker-compose.local.yml` | `docker compose -f docker-compose.local.yml up -d` | `apps/backend/.env` from `.env.local.example`; infra passwords are in the compose file |
 
-`docker-compose.production.yml` is a **duplicate** of `docker-compose.yml` for explicit naming. On the VPS, plain `docker compose …` is enough.
+`docker-compose.yml` is a **consolidated alias** of the same VPS stack (same services,
+one file). On the VPS the modular variant is canonical because it defines the
+Caddy-routed service ports (`selene-monolith`, `selene-auth`, …).
+
+`docker-compose.production.yml` is an old duplicate of `docker-compose.yml` kept
+for naming compatibility.
 
 ---
 
@@ -18,10 +22,10 @@
 
 | File | Audience |
 |------|----------|
-| **`docker-compose.yml`** | **Production / VPS default** |
-| **`docker-compose.production.yml`** | Same as above (alias) |
+| **`docker-compose.modular.yml`** | **Production / VPS** — postgres, timescale, emqx, emqx-init, auth, analytics, energy, climate, firmware, ingestor, monolith, frontend |
+| **`docker-compose.yml`** | Consolidated alias (same services, fewer explicit ports) |
+| **`docker-compose.production.yml`** | Historical duplicate |
 | **`docker-compose.local.yml`** | **Local Mac** — Postgres on **5434**, Timescale **5433**, EMQX open ports |
-| **`docker-compose.modular.yml`** | Scaffold for future split services (not production) |
 
 ### Env examples → real files
 
@@ -43,7 +47,7 @@ Never commit real `.env` files.
 
 ```bash
 cd ~/Developer/Selene
-git pull   # e.g. feat/modular-microservices
+git pull   # master (v1.0.0) or feat/api-v1-microservices
 
 # Keep existing secrets — only create if missing:
 # cp -n .env.example .env
@@ -58,21 +62,25 @@ git pull   # e.g. feat/modular-microservices
 #   APP_PUBLIC_URL=https://selene.dankehidayat.my.id
 #   TOTP_ISSUER=Selene
 
-sudo docker compose up -d --build
-# same as: sudo docker compose -f docker-compose.yml up -d --build
+sudo docker compose -f docker-compose.modular.yml up -d --build
 
-# Schema sync: new images run `prisma db push` on start (see docker-entrypoint.sh).
-# If login fails with P2022 / missing column, push once immediately:
-sudo docker exec selene-backend bunx prisma db push
-sudo docker restart selene-backend
+# Schema sync: images run `prisma generate` + `prisma db push` at build time
+# (see Dockerfile / docker-entrypoint.sh). If login fails with P2022 / a missing
+# column, push once manually:
+sudo docker exec selene-monolith bunx prisma db push
+sudo docker restart selene-monolith
 
-sudo docker logs -f selene-backend
+sudo docker logs -f selene-monolith
 ```
 
-Caddy on the host still proxies:
+Caddy (`deploy/Caddyfile.modular`) proxies on the host:
 
-- `/api/*`, `/api/v1/*` → `localhost:8787` (monolith serves the full API; `v1` is a prefix bridge until microservices complete)
+- `/api/v1/*` → strips `/v1` → `localhost:8787` (monolith serves the full API as a
+  **v1 bridge** until microservices cut over; `services/auth` :3009 is the first
+  candidate — see CHANGELOG Unreleased)
+- `/api/*`, `/docs*`, `/health` → `localhost:8787`
 - SPA → `localhost:3000`
+- `emqx.dankehidayat.my.id` → dashboard `localhost:18083`
 
 ### Email (Resend) + 2FA env checklist
 
@@ -140,11 +148,13 @@ Or use local EMQX (`MQTT_PORT=1883`) and publish test messages yourself.
 |-------|----------------|
 | **Modular monorepo** | **Yes** — `@selene/shared`, `@selene/sensors`, domain packages |
 | **Parser registry** | **Yes** — energy (PZEM) + climate (DHT11) |
-| **Production deploy** | **Still one monolith** `apps/backend` + frontend image |
-| **Many containers (auth/energy/…)** | **Scaffolded only** — not required for VPS |
-| **Final multi-service stage** | Designed for later; Caddy modular file is future |
+| **Production deploy** | **Modular compose on the VPS** — Caddy → monolith :8787 bridge serves the full API today |
+| **Implemented services** | **Auth :3009** (full v1: JWT v2 EdDSA, 2FA, refresh rotation, admin, notifications, glossary) · Analytics :3006, Energy :3002, Climate :3003 (real TimescaleDB reads) · Ingestor :3005 Runnable |
+| **Scaffolds** | Firmware :3004 |
+| **Gateway cutover** | Pending — enable per-domain routes in `deploy/Caddyfile.modular` above the monolith bridge (auth first) |
 
-So: **microservice-friendly architecture**, **not** fully split in production yet.
+So: **microservice-ready, monolith-bridged**, migrating service-by-service behind
+the Caddy v1 gateway. See [CHANGELOG Unreleased](../CHANGELOG.md) for the cutover plan.
 
 ---
 
