@@ -13,32 +13,23 @@ COMPOSE_FILE="docker-compose.modular.yml"
 LOG_DIR="/var/log/selene"
 LOG_PREFIX="selene-deploy"
 HEALTH_RETRY_INTERVAL=5
-HEALTH_MAX_RETRIES=60  # 5 minutes total
+HEALTH_MAX_RETRIES=60
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Helper functions
 log() {
   local msg="[$(date +'%F %T')] $*"
   echo -e "${BLUE}${msg}${NC}" | tee -a "${LOG_FILE}"
 }
 
-log_success() {
-  log -e "${GREEN}✓ $*${NC}"
-}
-
-log_warning() {
-  log -e "${YELLOW}⚠ $*${NC}"
-}
-
-log_error() {
-  log -e "${RED}✗ $*${NC}" >&2
-}
+log_success() { log -e "${GREEN}✓ $*${NC}"; }
+log_warning() { log -e "${YELLOW}⚠ $*${NC}"; }
+log_error() { log -e "${RED}✗ $*${NC}" >&2; }
 
 get_log_file() {
   LOG_DIR=$(mkdir -p "$LOG_DIR")
@@ -49,7 +40,12 @@ check_prerequisites() {
   local missing=""
   
   command -v docker >/dev/null 2>&1 || missing+="Docker "
-  command -v docker-compose >/dev/null 2>&1 || missing+="Compose "
+  
+  # Support both modern Docker Compose and standalone docker-compose
+  if ! docker compose version >/dev/null 2>&1 && ! docker-compose --version >/dev/null 2>&1; then
+    missing+="Compose "
+  fi
+  
   command -v git >/dev/null 2>&1 || missing+="Git "
   
   if [ -n "$missing" ]; then
@@ -95,54 +91,18 @@ check_services_health() {
   
   log "Checking service health..."
   
-  # Check monolith API
-  if ! curl -sf http://localhost:8787/health >/dev/null 2>&1; then
+  curl -sf http://localhost:8787/health >/dev/null 2>&1 || {
     log_error "Monolith (/api) not healthy"
     unhealthy=$((unhealthy + 1))
-  else
-    log_success "Monolith API healthy"
-  fi
+  } || log_success "Monolith API healthy"
   
-  # Check EMQX dashboard
-  if ! curl -sf http://localhost:18083/api/v5/liveness >/dev/null 2>&1; then
-    log_warning "EMQX dashboard check failed (might be slow to start)"
-  else
-    log_success "EMQX broker healthy"
-  fi
+  curl -sf http://localhost:18083/api/v5/liveness >/dev/null 2>&1 || 
+    log_warning "EMQX dashboard check failed" || log_success "EMQX broker healthy"
   
-  # Check frontend
-  if ! curl -sf http://localhost:${FRONTEND_PORT:-3000}/ >/dev/null 2>&1; then
-    log_warning "Frontend not responding yet"
-  else
-    log_success "Frontend responding"
-  fi
+  curl -sf http://localhost:${FRONTEND_PORT:-3000}/ >/dev/null 2>&1 || 
+    log_warning "Frontend not responding yet" || log_success "Frontend responding"
   
   return $unhealthy
-}
-
-wait_for_health() {
-  local service=$1
-  local max_wait=$HEALTH_MAX_RETRIES
-  local count=0
-  
-  log "Waiting for $service to become healthy..."
-  
-  while [ $count -lt $max_wait ]; do
-    if eval "curl -sf http://localhost:$2/health >/dev/null 2>&1"; then
-      log_success "$service is healthy after ${count} attempts"
-      return 0
-    fi
-    
-    sleep $HEALTH_RETRY_INTERVAL
-    count=$((count + 1))
-    
-    if [ $((count % 10)) -eq 0 ]; then
-      log_warning "Still waiting for $service (${count}/${max_wait})..."
-    fi
-  done
-  
-  log_error "$service did not become healthy within ${max_wait} retries"
-  return 1
 }
 
 deploy() {
@@ -150,68 +110,47 @@ deploy() {
   log "Starting production deployment"
   log "=========================================="
   
-  # Pre-flight checks
   check_prerequisites || exit 1
   git_status_check
-  
-  # Backup current state
   backup_compose_config || exit 1
   
-  # Pull latest code
   log "Pulling latest code from origin/master..."
-  git pull origin master || {
-    log_error "Git pull failed. Aborting."
-    exit 1
-  }
+  git pull origin master || { log_error "Git pull failed. Aborting."; exit 1; }
   log_success "Code updated"
   
-  # Stop old containers gracefully
-  log "Stopping existing services (graceful shutdown)..."
+  log "Stopping existing services..."
   docker compose -f "$COMPOSE_FILE" stop -t 30 || true
   
-  # Remove stopped containers
   log "Removing stopped containers..."
   docker compose -f "$COMPOSE_FILE" rm -f --force || true
   
-  # Build new images (Docker will use cache efficiently)
-  log "Building Docker images (this may take a few minutes)..."
-  docker compose -f "$COMPOSE_FILE" build --pull --parallel
-  
-  if [ $? -ne 0 ]; then
+  log "Building Docker images (uses cache)..."
+  docker compose -f "$COMPOSE_FILE" build --pull --parallel || {
     log_error "Build failed! Check logs above."
     exit 1
-  fi
+  }
   log_success "Build complete"
   
-  # Start fresh containers
   log "Starting new containers..."
   docker compose -f "$COMPOSE_FILE" up -d --no-recreate
   
-  # Wait for services to be healthy
-  log "Waiting for services to stabilize..."
-  sleep 15  # Initial wait for startup
+  log "Waiting for services to stabilize (15s)..."
+  sleep 15
   
   if ! check_services_health; then
     log_error "Health check failed! Services are not healthy."
-    log "Consider rolling back or investigating:"
+    log "Check logs: $(ls -t ${LOG_DIR}/${LOG_PREFIX}*.log | head -1)"
     docker compose -f "$COMPOSE_FILE" logs --tail 50
     exit 1
   fi
   
   log_success "All services are healthy!"
-  
-  # Cleanup unused images
-  log "Cleaning up unused Docker images..."
   docker image prune -af --filter="until=24h" >/dev/null 2>&1 || true
   
   log_success "=========================================="
   log_success "Deployment completed successfully!"
-  log_success "Check logs at: $(ls -t ${LOG_DIR}/${LOG_PREFIX}*.log | head -1)"
+  log_success "Logs: $(ls -t ${LOG_DIR}/${LOG_PREFIX}*.log | head -1)"
   log_success "=========================================="
-  
-  # Log summary
-  log "Service Status:"
-  docker compose -f "$COMPOSE_FILE" ps
 }
 
 rollback() {
@@ -221,24 +160,14 @@ rollback() {
   
   check_prerequisites || exit 1
   
-  if [ ! -v COMPOSE_BACKUP ]; then
-    log_error "No backup found. Run 'deploy.sh deploy' first."
+  if [ -z "${COMPOSE_BACKUP:-}" ]; then
+    log_error "No backup found in environment"
     exit 1
   fi
   
   log "Restoring from backup: $COMPOSE_BACKUP"
-  
-  # Stop everything
-  docker compose -f "$COMPOSE_FILE" down
-  
-  # Restore configuration
-  docker stack deploy -c "$COMPOSE_BACKUP" selene || {
-    log_error "Rollback failed!"
-    exit 1
-  }
-  
+  docker stack deploy -c "$COMPOSE_BACKUP" selene || { log_error "Rollback failed!"; exit 1; }
   log_success "Rollback completed"
-  log "Monitor services and verify they're running correctly"
 }
 
 health_check() {
@@ -251,32 +180,19 @@ health_check() {
 status() {
   log "Current service status:"
   docker compose -f "$COMPOSE_FILE" ps --all
-  
   echo ""
-  log "Recent logs (last 10 entries per service):"
+  log "Recent logs:"
   docker compose -f "$COMPOSE_FILE" logs --tail 10
-  
-  echo ""
-  log "Docker disk usage:"
-  docker system df
 }
 
 # Main entry point
 get_log_file
 
 case "${1:-deploy}" in
-  deploy)
-    deploy
-    ;;
-  rollback)
-    rollback
-    ;;
-  health)
-    health_check
-    ;;
-  status)
-    status
-    ;;
+  deploy) deploy ;;
+  rollback) rollback ;;
+  health) health_check ;;
+  status) status ;;
   clean)
     log "Cleaning up unused Docker resources..."
     docker container prune -f
@@ -288,12 +204,5 @@ case "${1:-deploy}" in
     echo "Selene Production Deployment Script"
     echo ""
     echo "Usage: $0 {deploy|rollback|health|status|clean}"
-    echo ""
-    echo "Commands:"
-    echo "  deploy   - Deploy latest version with health checks"
-    echo "  rollback - Rollback to previous configuration"
-    echo "  health   - Quick health check of all services"
-    echo "  status   - Show current service status and recent logs"
-    echo "  clean    - Remove unused Docker resources"
     ;;
 esac
