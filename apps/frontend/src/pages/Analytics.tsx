@@ -1826,7 +1826,7 @@ export function Analytics() {
                 <MetricRow
                   label="Period"
                   value={
-                    summary
+                    summary?.timeSpan
                       ? `${new Date(summary.timeSpan.from).toLocaleDateString()} – ${new Date(summary.timeSpan.to).toLocaleDateString()}`
                       : "..."
                   }

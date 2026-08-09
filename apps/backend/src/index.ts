@@ -540,7 +540,29 @@ app.get(
       to.toISOString(),
       range,
     );
-    if (!data.length) return { error: "No data in range" };
+    if (!data.length) {
+      return {
+        range,
+        source: "series",
+        dataPoints: 0,
+        timeSpan: { from: from.toISOString(), to: to.toISOString() },
+        power: {
+          average: 0,
+          median: 0,
+          stdDeviation: 0,
+          min: 0,
+          max: 0,
+        },
+        voltage: { average: 0 },
+        powerFactor: { average: 0 },
+        reactivePower: { average: 0, ratio: 0 },
+        energy: { totalKwh: 0, estimatedCost: formatEstimatedCost(0) },
+        peakHours: Array.from({ length: 24 }, (_, hour) => ({
+          hour,
+          avgPower: 0,
+        })),
+      };
+    }
 
     const powers = data
       .map((r: any) => r.acPower)
