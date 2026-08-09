@@ -18,6 +18,10 @@ TIMESCALE_PORT="5433"
 TIMESCALE_DB="selene_measurements"
 TIMESCALE_USER="selene_ts"
 
+# Allow overriding the docker invocation (e.g. DOCKER_CMD=docker on hosts
+# where the user is in the docker group without sudo). Default: .
+DOCKER_CMD="${DOCKER_CMD:-sudo docker}"
+
 # Parse arguments
 DRY_RUN=false
 INPUT_FILE=""
@@ -207,9 +211,9 @@ if $DRY_RUN; then
 else
   echo "--- EXECUTING IMPORT ---"
   
-  export PGPASSWORD=$(sudo docker exec selene-db-timescale printenv POSTGRES_PASSWORD 2>/dev/null | tr -d '\n')
+  export PGPASSWORD=$(${DOCKER_CMD} exec selene-db-timescale printenv POSTGRES_PASSWORD 2>/dev/null | tr -d '\n')
   
-  sudo docker exec -i selene-db-timescale psql \
+   ${DOCKER_CMD} exec -i selene-db-timescale psql \
     -U selene_ts \
     -d selene_measurements \
     < "$SQL_FILE"
@@ -219,10 +223,31 @@ else
   if [ $RESULT -eq 0 ]; then
     echo "Data imported successfully!"
     
-    COUNT=$(sudo docker exec selene-db-timescale psql -U selene_ts -d selene_measurements \
+    COUNT=$(${DOCKER_CMD} exec selene-db-timescale psql -U selene_ts -d selene_measurements \
       -t -c "SELECT count(*) FROM sensor_readings;" 2>/dev/null | tr -d ' ')
     
     echo "Imported $COUNT energy readings into TimescaleDB"
+
+    # ── Auto-refresh continuous aggregates ──────────────────────────────
+    # Analytics reads the sensor_readings_1h/5m materialized views, which
+    # only refresh their trailing 30d/2d window by policy. After a bulk
+    # restore these must be re-materialized or the dashboard shows stale
+    # figures. refresh_continuous_aggregate() cannot run inside a
+    # transaction block, so each call is its own psql invocation.
+    echo "Refreshing continuous aggregates (sensor_readings_1h / 5m)..."
+    for CAGG in sensor_readings_1h sensor_readings_5m; do
+      EXISTS=$(${DOCKER_CMD} exec selene-db-timescale psql -U selene_ts -d selene_measurements \
+        -t -A -c "SELECT to_regclass('$CAGG') IS NOT NULL;" 2>/dev/null | tr -d ' ')
+      if [ "$EXISTS" = "t" ]; then
+        REFRESH_OUT=$(${DOCKER_CMD} exec selene-db-timescale psql -U selene_ts -d selene_measurements \
+          -c "CALL refresh_continuous_aggregate('$CAGG', NULL, NULL);" 2>&1)
+        BUCKETS=$(${DOCKER_CMD} exec selene-db-timescale psql -U selene_ts -d selene_measurements \
+          -t -A -c "SELECT count(*) FROM $CAGG;" 2>/dev/null | tr -d ' ')
+        echo "  $CAGG refreshed: $BUCKETS buckets ($REFRESH_OUT)"
+      else
+        echo "  $CAGG does not exist yet (monolith will create it at first boot) — skipping"
+      fi
+    done
   else
     echo "Import failed with code $RESULT"
   fi
