@@ -61,6 +61,17 @@ if [ -n "$SHEET_ARG" ]; then
     }
     NF < 17 { next }
     {
+      # Skip annotation rows (e.g. sheet notes) where a numeric-expected
+      # field holds non-numeric text — they are not sensor readings.
+      bad = 0
+      for (i = 2; i <= 11; i++) {
+        if ($i != "" && $i !~ /^[0-9.+-]+$/) { bad = 1; break }
+      }
+      if (!bad && $14 != "" && $14 !~ /^[0-9.+-]+$/) bad = 1
+      if (!bad && $15 != "" && $15 !~ /^[0-9.+-]+$/) bad = 1
+      if (!bad && $17 != "" && $17 !~ /^[0-9.+-]+$/) bad = 1
+      if (bad) next
+
       # convert M/D/YYYY h:mm:ss -> YYYY-MM-DD hh:mm:ss
       n = split($1, d, /[\/ :]+/)
       # d[1]=month d[2]=day d[3]=year d[4]=h d[5]=m d[6]=s
@@ -157,22 +168,22 @@ INSERT INTO sensor_readings (
   current_per_kw, power_quality_score, energy_cost, voltage_stability
 ) VALUES (
   '$ts',
-  COALESCE(NULLIF('$AC_VOLTAGE',''), 0)::numeric,
-  COALESCE(NULLIF('$AC_CURRENT',''), 0)::numeric,
-  COALESCE(NULLIF('$AC_POWER',''), 0)::numeric,
-  COALESCE(NULLIF('$COS_PHI',''), 0)::numeric,
-  COALESCE(NULLIF('$APPARENT_POWER',''), 0)::numeric,
-  COALESCE(NULLIF('$TOTAL_ENERGY',''), 0)::numeric,
-  COALESCE(NULLIF('$FREQUENCY',''), 50)::numeric,
-  COALESCE(NULLIF('$REACTIVE_POWER',''), 0)::numeric,
-  COALESCE(NULLIF('$TEMPERATURE',''), 25)::numeric,
-  COALESCE(NULLIF('$HUMIDITY',''), 60)::numeric,
+  COALESCE(NULLIF('$AC_VOLTAGE','')::numeric, 0),
+  COALESCE(NULLIF('$AC_CURRENT','')::numeric, 0),
+  COALESCE(NULLIF('$AC_POWER','')::numeric, 0),
+  COALESCE(NULLIF('$COS_PHI','')::numeric, 0),
+  COALESCE(NULLIF('$APPARENT_POWER','')::numeric, 0),
+  COALESCE(NULLIF('$TOTAL_ENERGY','')::numeric, 0),
+  COALESCE(NULLIF('$FREQUENCY','')::numeric, 50),
+  COALESCE(NULLIF('$REACTIVE_POWER','')::numeric, 0),
+  COALESCE(NULLIF('$TEMPERATURE','')::numeric, 25),
+  COALESCE(NULLIF('$HUMIDITY','')::numeric, 60),
   '$TEMP_COMFORT',
   '$ENERGY_STATUS',
-  COALESCE(NULLIF('$CURRENT_PER_KW',''), 0)::numeric,
-  COALESCE(NULLIF('$POWER_QUALITY_SCORE',''), 40)::numeric,
+  COALESCE(NULLIF('$CURRENT_PER_KW','')::numeric, 0),
+  COALESCE(NULLIF('$POWER_QUALITY_SCORE','')::numeric, 40),
   '$ENERGY_COST',
-  COALESCE(NULLIF('$VOLTAGE_STABILITY',''), 100)::numeric
+  COALESCE(NULLIF('$VOLTAGE_STABILITY','')::numeric, 100)
 );
 INSERT
 
@@ -192,7 +203,7 @@ echo "SQL file generated: $SQL_FILE ($(wc -l < "$SQL_FILE") statements)"
 
 if $DRY_RUN; then
   echo "--- DRY RUN MODE ---"
-  grep -A 19 "^INSERT INTO sensor_readings" "$SQL_FILE" | head -60
+  grep -A 19 "^INSERT INTO sensor_readings" "$SQL_FILE" | head -60 || true
 else
   echo "--- EXECUTING IMPORT ---"
   
