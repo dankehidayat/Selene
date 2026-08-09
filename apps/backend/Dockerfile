@@ -1,35 +1,27 @@
 # Production backend — monorepo-aware (needs @selene/shared + @selene/sensors).
-# Build from repository root:
-#   docker compose -f docker-compose.production.yml build backend
-#
-# compose build.context must be the monorepo root (see docker-compose.production.yml).
 
 FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-# Workspace root lockfile + package manifests
+# Copy manifests first (layer cache) — root + workspace package.json so
+# bun resolves @selene/shared, @selene/sensors, prisma from the lockfile
 COPY package.json bun.lock ./
 COPY apps/backend/package.json ./apps/backend/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/sensors/package.json ./packages/sensors/
 
-# Install workspace deps (backend + packages only)
 RUN bun install --filter @selene/backend --filter @selene/shared --filter @selene/sensors
 
-# Source
+# Source code
 COPY packages/shared ./packages/shared
 COPY packages/sensors ./packages/sensors
 COPY apps/backend ./apps/backend
 
 WORKDIR /app/apps/backend
-RUN bunx prisma generate
 
-# Sync schema on container start (adds columns like passwordChangedAt)
-COPY apps/backend/docker-entrypoint.sh /app/apps/backend/docker-entrypoint.sh
-RUN chmod +x /app/apps/backend/docker-entrypoint.sh
+# Generate Prisma client at build time (no DB needed — guarantees client exists)
+RUN bunx prisma generate --schema=./prisma/schema.prisma
 
-EXPOSE 8787
-
-# Production loads env from compose/env_file
-ENTRYPOINT ["/app/apps/backend/docker-entrypoint.sh"]
+# Schema sync happens at runtime where DATABASE_URL exists; then start the app
+CMD ["sh", "-c", "bunx prisma db push --schema=./prisma/schema.prisma --skip-generate || true; exec bun run src/index.ts"]

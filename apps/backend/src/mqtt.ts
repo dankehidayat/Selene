@@ -10,7 +10,7 @@ import {
   runParserRegistry,
 } from "@selene/sensors";
 import { insertReading } from "./timescale";
-import { classifyEnergyFuzzy, classifyClimateFuzzy } from "./analytics/fuzzy";
+import { classifyEnergyFuzzy, classifyClimateFuzzy } from "@selene/shared/analytics/fuzzy";
 import { emitNewReading } from "./events";
 import { evaluateSensorAlerts } from "./alerts";
 

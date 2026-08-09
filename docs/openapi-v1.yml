@@ -1,0 +1,1253 @@
+openapi: 3.0.3
+info:
+  title: Selene API — v1
+  description: >
+    Public REST contract for the Selene smart energy & climate platform.
+    Served by the Caddy gateway under the `/api/v1` prefix; each path below is
+    routed to a dedicated microservice (services/auth, services/energy,
+    services/climate, services/analytics, services/firmware).
+
+    Versioning lives at the gateway: `handle_path /api/v1/*` strips the prefix
+    before proxying, so services define version-agnostic paths (`/energy/latest`)
+    and a future `/api/v2` needs no service changes.
+
+    Auth: short-lived EdDSA (Ed25519) access tokens with rotating refresh
+    tokens (one-time use, reuse detection). JWKS at `/.well-known/jwks.json`.
+  version: 1.0.0
+  contact:
+    name: Selene
+  license:
+    name: Proprietary
+    url: https://github.com/dankehidayat/selene
+servers:
+  - url: https://selene.dankehidayat.my.id/api/v1
+    description: Production
+  - url: http://localhost:3009/api/v1
+    description: Local (gateway / auth)
+tags:
+  - name: auth
+    description: Identity — register, login (incl. 2FA), password recovery, sessions
+  - name: me
+    description: Current user profile
+  - name: admin
+    description: Admin only — user management
+  - name: energy
+    description: PZEM-004T energy readings and history
+  - name: climate
+    description: DHT11 climate readings and comfort
+  - name: analytics
+    description: Statistical and fuzzy-analytics endpoints
+  - name: firmware
+    description: OTA firmware management
+  - name: notifications
+    description: Per-user notifications
+  - name: glossary
+    description: Public glossary of terms
+paths:
+  /auth/register:
+    post:
+
+      operationId: registerUser
+      tags: [auth]
+      summary: Create an account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created; access + refresh tokens issued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /auth/login:
+    post:
+
+      operationId: login
+      tags: [auth]
+      summary: Sign in (may require a 2FA step)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed in, or 2FA required in `requires2fa` mode.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/login/2fa:
+    post:
+
+      operationId: loginTwoFactor
+      tags: [auth]
+      summary: Complete login with TOTP or backup code
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TwoFactorLoginRequest"
+      responses:
+        "200":
+          description: Authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/refresh:
+    post:
+
+      operationId: refreshTokens
+      tags: [auth]
+      summary: Rotate an access token using a refresh token (one-time use)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: New token pair; the previous refresh token is invalidated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshResponse"
+        "401":
+          description: Invalid or reused refresh token (reuses force logout).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /auth/logout:
+    post:
+
+      operationId: logout
+      tags: [auth]
+      summary: Revoke the current session
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Revoked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me:
+    get:
+
+      operationId: getProfile
+      tags: [me]
+      summary: Current user profile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [me]
+      summary: Update profile (name, etc.)
+      operationId: updateProfile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Profile updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me/password:
+    post:
+
+      operationId: changePassword
+      tags: [me]
+      summary: Change password (invalidates other sessions)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password changed.
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/forgot-password:
+    post:
+
+      operationId: forgotPassword
+      tags: [auth]
+      summary: Request a password reset (always generic response)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+      responses:
+        "200":
+          description: Always returns the generic success message.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  message:
+                    type: string
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /auth/reset-password:
+    post:
+
+      operationId: resetPassword
+      tags: [auth]
+      summary: Complete a password reset with the emailed token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "204":
+          description: Password reset.
+        "400":
+          description: Invalid or expired token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /auth/2fa/status:
+    get:
+
+      operationId: getTwoFactorStatus
+      tags: [auth]
+      summary: Whether the current user has 2FA enabled
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: 2FA enablement status.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  enabled:
+                    type: boolean
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/2fa/setup:
+    post:
+
+      operationId: setupTwoFactor
+      tags: [auth]
+      summary: Generate a TOTP setup (returns provisioning secret + otpauth URI)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Pending setup token carries the secret for the verify step.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TwoFactorSetup"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/2fa/enable:
+    post:
+
+      operationId: enableTwoFactor
+      tags: [auth]
+      summary: Confirm a TOTP secret by code and enable 2FA
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TwoFactorSetupVerifyRequest"
+      responses:
+        "200":
+          description: 2FA enabled with fresh backup codes.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  enabled:
+                    type: boolean
+                  backupCodes:
+                    type: array
+                    items:
+                      type: string
+        "400":
+          description: Wrong code or missing setup token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /auth/2fa/disable:
+    post:
+
+      operationId: disableTwoFactor
+      tags: [auth]
+      summary: Disable 2FA (requires password + current TOTP/backup code)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TwoFactorVerifyRequest"
+      responses:
+        "200":
+          description: 2FA disabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  enabled:
+                    type: boolean
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /auth/2fa/backup-codes:
+    post:
+
+      operationId: regenerateBackupCodes
+      tags: [auth]
+      summary: Regenerate backup codes (requires password + current TOTP code)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TwoFactorVerifyRequest"
+      responses:
+        "200":
+          description: Fresh backup codes (show once).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  backupCodes:
+                    type: array
+                    items:
+                      type: string
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /energy/latest:
+    get:
+
+      operationId: getLatestEnergy
+      tags: [energy]
+      summary: Latest energy reading(s) from the sensor_readings hypertable
+      security: []
+      responses:
+        "200":
+          description: Latest measurement snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnergyReading"
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /energy/export:
+    get:
+
+      operationId: exportReadings
+      tags: [energy]
+      summary: Stream all readings as CSV/TSV
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: Text stream (text/csv or text/tab-separated-values).
+          content:
+            text/csv:
+              schema:
+                type: string
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /climate/latest:
+    get:
+
+      operationId: getLatestClimate
+      tags: [climate]
+      summary: Latest climate reading(s)
+      security: []
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Latest climate measurement snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClimateReading"
+  /climate/comfort:
+    get:
+
+      operationId: getClimateComfort
+      tags: [climate]
+      summary: Latest thermal-comfort classification
+      security: []
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Classification for the most recent climate sample.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    $ref: "#/components/schemas/TempComfort"
+                  temperature:
+                    type: number
+                    format: float
+                  humidity:
+                    type: number
+                    format: float
+  /analytics/summary:
+    get:
+
+      operationId: getSummary
+      tags: [analytics]
+      summary: Statistical summary for a time range
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RangeParam"
+      responses:
+        "200":
+          description: Statistical summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalyticsSummary"
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /analytics/fuzzy-distribution:
+    get:
+
+      operationId: getFuzzyDistribution
+      tags: [analytics]
+      summary: Energy fuzzy classification distribution
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RangeParam"
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Energy fuzzy distribution + scatter samples.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FuzzyDistribution"
+  /analytics/climate:
+    get:
+
+      operationId: getClimateAnalytics
+      tags: [analytics]
+      summary: Climate analytics (temperature/humidity + comfort)
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RangeParam"
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Climate statistical summary.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClimateAnalytics"
+  /analytics/climate-fuzzy-distribution:
+    get:
+
+      operationId: getClimateFuzzyDistribution
+      tags: [analytics]
+      summary: Climate fuzzy classification distribution
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RangeParam"
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Climate fuzzy distribution + scatter samples.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClimateFuzzyDistribution"
+  /analytics/membership:
+    get:
+      operationId: getMembershipData
+      tags: [analytics]
+      summary: Fuzzy membership function data
+      security: []
+      responses:
+        "200":
+          description: Membership functions for voltage and power.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembershipData"
+  /analytics/decision-surface:
+    get:
+      operationId: getDecisionSurface
+      tags: [analytics]
+      summary: Fuzzy decision surface grid data
+      security: []
+      responses:
+        "200":
+          description: Decision surface points for power vs PF grid.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DecisionSurfacePoint"
+  /analytics/box-plot:
+    get:
+      operationId: getBoxPlot
+      tags: [analytics]
+      summary: Box plot data for energy category distribution
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RangeParam"
+      responses:
+        "200":
+          description: Box plot statistics by category.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BoxPlot"
+  /analytics/bland-altman:
+    get:
+      operationId: getBlandAltman
+      tags: [analytics]
+      summary: Bland-Altman agreement analysis
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RangeParam"
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Bland-Altman limits of agreement data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlandAltmanResult"
+  /admin/users:
+    get:
+
+      operationId: adminListUsers
+      tags: [admin]
+      summary: List users (admin only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: role
+          in: query
+          schema: { type: string, enum: [USER, ADMIN] }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Paginated list of users.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UserProfile"
+                  total:
+                    type: integer
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/users/{id}/role:
+    patch:
+
+      operationId: adminChangeUserRole
+      tags: [admin]
+      summary: Change a user's role (admin only; requires 2FA when elevation)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User id.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [USER, ADMIN]
+                totpCode:
+                  type: string
+                  description: Required when elevating to ADMIN (security spec).
+      responses:
+        "200":
+          description: Updated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /admin/stats:
+    get:
+      operationId: adminStats
+      tags: [admin]
+      summary: Admin statistics dashboard
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Aggregated admin stats.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/users/{id}/toggle-active:
+    patch:
+      operationId: adminToggleUserActive
+      tags: [admin]
+      summary: Toggle a user's active status (admin only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User id.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Updated user with toggled active status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /notifications:
+    get:
+
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List current user's notifications
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Notifications for the current user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationsResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /notifications/{id}/read:
+    patch:
+
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark a notification as read
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Notification id.
+          schema: { type: string }
+      responses:
+        "204":
+          description: Marked as read.
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /glossary:
+    get:
+
+      operationId: listGlossary
+      tags: [glossary]
+      summary: List glossary terms
+      security: []
+      responses:
+        "200":
+          description: Public glossary.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GlossaryItem"
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /health:
+    get:
+
+      operationId: health
+      tags: [health]
+      summary: Liveness + DB connectivity
+      security: []
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Service health.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                  database:
+                    type: string
+  /.well-known/jwks.json:
+    get:
+      operationId: getJwks
+      tags: [health]
+      summary: JSON Web Key Set for verifying access token signatures
+      security: []
+      responses:
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "200":
+          description: Public Ed25519 key for alg EdDSA (kid selene-v2-2026).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived EdDSA (Ed25519) access token; refresh via POST /auth/refresh. Verify against /.well-known/jwks.json.
+  parameters:
+    RangeParam:
+      name: range
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [1h, 24h, 7d, 30d, 3m, 6m, 1y]
+        default: 24h
+    FormatParam:
+      name: format
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [csv, tsv]
+        default: csv
+  responses:
+    BadRequest:
+      description: Invalid payload.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Missing, invalid, or expired token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Forbidden:
+      description: Valid token but insufficient permissions.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Conflict:
+      description: Already exists (e.g. email).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    RateLimited:
+      description: Too many requests; honor the Retry-After header.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [UNAUTHORIZED, FORBIDDEN, RATE_LIMITED, VALIDATION_ERROR, NOT_FOUND, CONFLICT, INTERNAL_ERROR, TOKEN_REUSE_DETECTED]
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+            timestamp:
+              type: string
+              format: date-time
+            request_id:
+              type: string
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 6
+        name:
+          type: string
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    TwoFactorLoginRequest:
+      type: object
+      additionalProperties: false
+      required: [pendingToken, code]
+      properties:
+        pendingToken:
+          type: string
+        code:
+          type: string
+          description: TOTP or backup code.
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    RefreshResponse:
+      type: object
+      additionalProperties: false
+      required: [accessToken, refreshToken, expiresIn]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Access-token lifetime in seconds (e.g. 900).
+    LoginResponse:
+      oneOf:
+        - $ref: "#/components/schemas/AuthResponse"
+        - $ref: "#/components/schemas/TwoFactorChallenge"
+    AuthResponse:
+      type: object
+      additionalProperties: false
+      required: [accessToken, refreshToken, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+        user:
+          $ref: "#/components/schemas/UserPublic"
+    TwoFactorChallenge:
+      type: object
+      additionalProperties: false
+      required: [requires2fa, pendingToken]
+      properties:
+        requires2fa:
+          type: boolean
+        pendingToken:
+          type: string
+        message:
+          type: string
+    TwoFactorVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [code, password]
+      properties:
+        code:
+          type: string
+          description: TOTP or backup code for confirmation/disable.
+        password:
+          type: string
+          format: password
+          description: Account password (reconfirmation before disable/regeneration).
+    TwoFactorSetupVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [pendingToken, code]
+      properties:
+        pendingToken:
+          type: string
+          description: Token returned by 2FA setup.
+        code:
+          type: string
+          description: Current TOTP code proving access to the secret.
+    TwoFactorSetup:
+      type: object
+      additionalProperties: false
+      properties:
+        pendingToken:
+          type: string
+        secret:
+          type: string
+        otpauthUri:
+          type: string
+    UserPublic:
+      type: object
+      additionalProperties: false
+      required: [id, email, role]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        name: { type: string, nullable: true }
+        role:
+          type: string
+          enum: [USER, ADMIN]
+        totpEnabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    UserProfile:
+      type: object
+      additionalProperties: false
+      required: [id, email, role]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string, nullable: true }
+        role: { type: string, enum: [USER, ADMIN] }
+        totpEnabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    UpdateProfileRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: string }
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password }
+        newPassword:
+          type: string
+          format: password
+          minLength: 6
+    ForgotPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    ResetPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, format: password, minLength: 6 }
+    EnergyReading:
+      type: object
+      additionalProperties: false
+      properties:
+        time: { type: string, format: date-time }
+        voltage: { type: number, format: float }
+        current: { type: number, format: float }
+        power: { type: number, format: float }
+        pf: { type: number, format: float }
+        apparentPower: { type: number, format: float }
+        reactivePower: { type: number, format: float }
+        totalEnergy: { type: number, format: float }
+        frequency: { type: number, format: float }
+        tempComfort: { $ref: "#/components/schemas/TempComfort" }
+        energyStatus: { $ref: "#/components/schemas/EnergyStatus" }
+    ClimateReading:
+      type: object
+      additionalProperties: false
+      properties:
+        time: { type: string, format: date-time }
+        temperature: { type: number, format: float }
+        humidity: { type: number, format: float }
+        tempComfort: { $ref: "#/components/schemas/TempComfort" }
+    TempComfort:
+      type: string
+      enum: [COLD, COOL, COMFORTABLE, WARM, HOT]
+    EnergyStatus:
+      type: string
+      enum: ["1", "2", "3"]
+      description: 1 = ECONOMICAL, 2 = NORMAL, 3 = WASTEFUL.
+    AnalyticsSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        range: { type: string }
+        dataPoints: { type: integer }
+        timeSpan:
+          type: object
+          additionalProperties: false
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+        power:
+          type: object
+          additionalProperties: false
+          properties:
+            average: { type: number, format: float }
+            median: { type: number, format: float }
+            stdDeviation: { type: number, format: float }
+            min: { type: number, format: float }
+            max: { type: number, format: float }
+        energy:
+          type: object
+          additionalProperties: false
+          properties:
+            totalKwh: { type: number, format: float }
+            estimatedCost: { type: string }
+    FuzzyDistribution:
+      type: object
+      additionalProperties: false
+      properties:
+        distribution:
+          type: object
+          additionalProperties: true
+        total:
+          type: integer
+        scatterData:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              power: { type: number }
+              powerFactor: { type: number }
+              category: { type: string }
+    ClimateAnalytics:
+      type: object
+      additionalProperties: false
+      properties:
+        range: { type: string }
+        dataPoints: { type: integer }
+        temperature:
+          type: object
+          additionalProperties: false
+          properties:
+            average: { type: number, format: float }
+            median: { type: number, format: float }
+            min: { type: number, format: float }
+            max: { type: number, format: float }
+            degreeHours: { type: number, format: float }
+        humidity:
+          type: object
+          additionalProperties: false
+          properties:
+            average: { type: number, format: float }
+            median: { type: number, format: float }
+            min: { type: number, format: float }
+            max: { type: number, format: float }
+        comfortDistribution:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              status: { $ref: "#/components/schemas/TempComfort" }
+              count: { type: integer }
+              percentage: { type: number, format: float }
+    ClimateFuzzyDistribution:
+      type: object
+      additionalProperties: false
+      properties:
+        distribution:
+          type: object
+          additionalProperties: true
+        total:
+          type: integer
+        scatterData:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              temperature: { type: number, format: float }
+              humidity: { type: number, format: float }
+              category: { type: string }
+    AdminStats:
+      type: object
+      additionalProperties: false
+      required: [totalUsers, activeUsers, adminUsers, totalLogins]
+      properties:
+        totalUsers:
+          type: integer
+        activeUsers:
+          type: integer
+        adminUsers:
+          type: integer
+        totalLogins:
+          type: integer
+    MembershipData:
+      type: object
+      additionalProperties: false
+      properties:
+        voltageMembership:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              x: { type: number }
+              low: { type: number }
+              normal: { type: number }
+              high: { type: number }
+        powerMembership:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              x: { type: number }
+              economical: { type: number }
+              normal: { type: number }
+              wasteful: { type: number }
+    DecisionSurfacePoint:
+      type: object
+      additionalProperties: false
+      properties:
+        power: { type: number }
+        pf: { type: number }
+        category: { type: string }
+    BoxPlot:
+      type: object
+      additionalProperties: false
+      required: [category, min, q1, median, q3, max, count]
+      properties:
+        category: { type: string }
+        min: { type: number }
+        q1: { type: number }
+        median: { type: number }
+        q3: { type: number }
+        max: { type: number }
+        count: { type: integer }
+    BlandAltmanResult:
+      type: object
+      additionalProperties: false
+      required: [data, meanDiff, upperLoA, lowerLoA]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              mean: { type: number }
+              difference: { type: number }
+        meanDiff: { type: number }
+        upperLoA: { type: number }
+        lowerLoA: { type: number }
+    NotificationsResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        notifications:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+        unreadCount:
+          type: integer
+    Notification:
+      type: object
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        type: { type: string }
+        title: { type: string }
+        message: { type: string }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    GlossaryItem:
+      type: object
+      additionalProperties: false
+      required: [term, definition]
+      properties:
+        id: { type: string }
+        term: { type: string }
+        definition: { type: string }
+        category: { type: string }

@@ -55,11 +55,54 @@ services:
       EMQX_AUTHENTICATION__1__BACKEND: built_in_database
       EMQX_AUTHENTICATION__1__USER_ID_TYPE: username
       EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__NAME: sha256
+      EMQX_API_KEY__BOOTSTRAP_FILE: /opt/emqx/etc/default_api_key.conf
+    volumes:
+      - ./deploy/emqx-api-key.conf:/opt/emqx/etc/default_api_key.conf:ro
     ports:
       - "1883:1883"     # MQTT
       - "18083:18083"   # Dashboard
     networks:
       - selene-network
+
+  # One-shot: provision MQTT user (selene/selene123) into EMQX built-in DB.
+  # Wait for EMQX API, resolve the built_in_database authenticator, add user.
+  emqx-init:
+    image: curlimages/curl:latest
+    container_name: selene-emqx-init
+    restart: "no"
+    depends_on:
+      emqx:
+        condition: service_started
+    environment:
+      EMQX_API: http://emqx:18083/api/v5
+      EMQX_API_KEY: selene-bootstrap
+      EMQX_API_SECRET: ${EMQX_BOOTSTRAP_SECRET}
+      MQTT_USER: ${MQTT_USER:-selene}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+    networks:
+      - selene-network
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        echo "[emqx-init] waiting for EMQX API..."
+        until curl -fsS -u "$${EMQX_API_KEY}:$${EMQX_API_SECRET}" "$${EMQX_API}/authentication" >/dev/null 2>&1; do
+          sleep 2
+        done
+        AUTH_ID=$$(curl -fsS -u "$${EMQX_API_KEY}:$${EMQX_API_SECRET}" "$${EMQX_API}/authentication" \
+          | sed -n 's/.*"id":"\([^"]*\)".*"backend":"built_in_database".*/\1/p; s/.*"backend":"built_in_database".*"id":"\([^"]*\)".*/\1/p' \
+          | head -n1)
+        if [ -z "$$AUTH_ID" ]; then
+          echo "[emqx-init] ERROR: no built_in_database authenticator found"
+          exit 1
+        fi
+        echo "[emqx-init] provisioning user on auth chain $$AUTH_ID"
+        curl -fsS -u "$${EMQX_API_KEY}:$${EMQX_API_SECRET}" \
+          -X POST "$${EMQX_API}/authentication/$${AUTH_ID}/users" \
+          -H 'content-type: application/json' \
+          -d "{\"user_id\":\"$${MQTT_USER}\",\"password\":\"$${MQTT_PASSWORD}\"}" || echo "[emqx-init] user may already exist (ok)"
+        echo "[emqx-init] done"
 
   # Auth Service (Port 3009)
   auth:
@@ -73,12 +116,31 @@ services:
       AUTH_PORT: ${AUTH_PORT}
       DATABASE_URL: postgresql://selene_admin:${POSTGRES_PASSWORD}@postgres:5432/selene
       JWT_SECRET: ${JWT_SECRET}
-      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-      MONOLITH_HOST: monolith
-      MONOLITH_PORT: ${MONOLITH_PORT:-8787}
+      JWT_V2_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: "Selene <onboarding@resend.dev>"
+      APP_PUBLIC_URL: https://selene.dankehidayat.my.id
+      TOTP_ISSUER: Selene
+      ELEVATION_CONFIRMATION: ${ELEVATION_CONFIRMATION:-false}
     depends_on:
       postgres:
+        condition: service_healthy
+    networks:
+      - selene-network
+
+  # Analytics Service (Port 3006)
+  analytics:
+    build:
+      context: .
+      dockerfile: services/analytics/Dockerfile
+    container_name: selene-analytics
+    ports:
+      - "3006:3006"
+    environment:
+      ANALYTICS_PORT: ${ANALYTICS_PORT:-3006}
+      TIMESCALE_URL: postgresql://selene_ts:${TIMESCALE_PASSWORD}@timescaledb:5432/selene_measurements
+    depends_on:
+      timescaledb:
         condition: service_healthy
     networks:
       - selene-network
@@ -134,6 +196,8 @@ services:
     depends_on:
       emqx:
         condition: service_started
+      emqx-init:
+        condition: service_completed_successfully
     networks:
       - selene-network
 
@@ -154,10 +218,12 @@ services:
       MQTT_PASSWORD: selene123
       MQTT_TOPIC: selene/+/telemetry
     depends_on:
-      timescaledb:
-        condition: service_healthy
       emqx:
         condition: service_started
+      emqx-init:
+        condition: service_completed_successfully
+      timescaledb:
+        condition: service_healthy
     networks:
       - selene-network
 
@@ -194,6 +260,8 @@ services:
         condition: service_healthy
       emqx:
         condition: service_started
+      emqx-init:
+        condition: service_completed_successfully
     networks:
       - selene-network
 

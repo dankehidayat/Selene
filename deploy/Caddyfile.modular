@@ -3,40 +3,39 @@
 	email admin@labdha.com
 }
 
-# HTTP redirect to HTTPS (if needed)
+# HTTP redirect to HTTPS
 :80 {
 	redir https://{host}{uri} permanent
 }
 
 selene.dankehidayat.my.id {
 
+	# Health check
 	handle /health {
 		reverse_proxy localhost:3009
 	}
 
-	handle /api/v1/auth/* {
-		reverse_proxy localhost:3009
+	# API → monolith (full auth/admin/2fa/notifications/readings/analytics/firmware/mqtt/glossary).
+	# Frontend contract is /api/v1/* (per openapi-v1.yml). Monolith registers at /api/*,
+	# so rewrite the /v1 segment away → /api/* → 8787. Once a microservice takes over a
+	# v1 route (services/auth etc.), give its prefix its own route ABOVE this one.
+	route /api/v1/* {
+		uri path_regexp ^/api/v1/(.*)$ /api/$1
+		reverse_proxy localhost:8787
 	}
 
-	handle /api/v1/energy/* {
-		reverse_proxy localhost:3002
+	route /api/* {
+		reverse_proxy localhost:8787
 	}
 
-	handle /api/v1/climate/* {
-		reverse_proxy localhost:3003
+	# Swagger UI (Fastify swaggerUi routePrefix: /docs) served by the monolith
+	route /docs* {
+		reverse_proxy localhost:8787
 	}
 
-	handle /api/v1/firmware/* {
-		reverse_proxy localhost:3004
-	}
-
-	handle /api/v1/ingest/* {
-		reverse_proxy localhost:3005
-	}
-
-	# Frontend SPA routing - send all other requests to frontend on port 3000
-	rewrite * /{path}
-	handle * {
+	# Frontend SPA routing
+	# NOTE: FRONTEND_PORT in .env controls the published host port (default 3000)
+	route * {
 		reverse_proxy localhost:3000
 	}
 
@@ -47,7 +46,7 @@ selene.dankehidayat.my.id {
 }
 
 emqx.dankehidayat.my.id {
-	rewrite * /dashboard/login
+	# EMQX redirects / → /dashboard/ itself; do NOT rewrite (breaks static assets)
 	reverse_proxy localhost:18083
 	encode gzip zstd
 }

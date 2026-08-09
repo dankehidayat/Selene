@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+/// Owned by the auth service. Mirrors the monolith's `User` so both can share
+/// the same Postgres during migration.
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  password      String
+  name          String?
+  role          UserRole       @default(USER)
+  isActive      Boolean        @default(true)
+  passwordChangedAt DateTime?
+  totpEnabled   Boolean        @default(false)
+  totpSecretEnc String?
+  totpBackupHashes String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  loginHistory  LoginHistory[]
+  apiKeys       ApiKey[]
+  passwordResetTokens PasswordResetToken[]
+  refreshSessions RefreshSession[]
+  roleChangeAudits RoleChangeAudit[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tokenHash])
+  @@index([userId])
+}
+
+model LoginHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+/// Refresh-token rotation store (one row per refresh-token family).
+/// Each family is bounded by `familyId` (fid); each issued token carries a
+/// fresh `jti`. A presented jti older than `currentJti` => reuse detected.
+model RefreshSession {
+  id          String   @id @default(cuid())
+  familyId    String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentJti  String
+  createdAt   DateTime @default(now())
+  lastUsedAt  DateTime @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model GlossaryTerm {
+  id         String   @id @default(cuid())
+  term       String
+  definition String
+  category   String   @default("General")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  key       String    @unique
+  name      String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastUsed  DateTime?
+  createdAt DateTime  @default(now())
+}
+
+/// Admin role-elevation audit trail (spec: docs/security/Admin-Role-Elevation-Security.md)
+model RoleChangeAudit {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actorId     String
+  actorRole   UserRole?
+  targetEmail String
+  oldRole     UserRole?
+  newRole     UserRole
+  ipAddress   String?
+  userAgent   String?
+  method      String   @default("api")
+  createdAt   DateTime @default(now())
+}
+
+/// Per-user, per-action attempt counter for elevation rate limiting.
+model RateLimitState {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  attempts    Int      @default(0)
+  expiresAt   DateTime
+  lastAttempt DateTime  @default(now())
+  @@unique([userId, action])
+}
+
+/// Email confirmation code used during role elevation (code stored hashed).
+model ConfirmationCode {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String   @unique
+  purpose   String
+  consumed  Boolean  @default(false)
+  expiresAt DateTime
+  @@index([userId])
+}

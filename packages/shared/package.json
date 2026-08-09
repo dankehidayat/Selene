@@ -10,9 +10,13 @@
     "./capabilities": "./src/capabilities.ts",
     "./db/timescale": "./src/db/timescale.ts",
     "./mqtt-client": "./src/mqtt-client.ts",
-    "./middleware/auth": "./src/middleware/auth.ts"
+    "./middleware/auth": "./src/middleware/auth.ts",
+    "./jwt/v2": "./src/jwt/v2.ts",
+    "./analytics/fuzzy": "./src/analytics/fuzzy.ts",
+    "./analytics/classify-batch": "./src/analytics/classifyBatch.ts"
   },
   "dependencies": {
+    "jose": "^6.2.8",
     "jsonwebtoken": "^9.0.2",
     "mqtt": "^5.10.1",
     "pg": "^8.13.0"

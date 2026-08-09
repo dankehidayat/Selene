@@ -14,11 +14,11 @@ import {
   generateDecisionSurface,
   generateBoxPlotData,
   generateBlandAltmanData,
-} from "./analytics/fuzzy";
+} from "@selene/shared/analytics/fuzzy";
 import {
   classifyEnergyDistribution,
   classifyClimateDistribution,
-} from "./analytics/classifyBatch";
+} from "@selene/shared/analytics/classify-batch";
 import {
   initTimescaleDB,
   getLatestReading,

@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { EnergyReading } from "@/types/energy";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 // ── SSE Live Data ─────────────────────────────────────────
 export function useLiveReading() {
