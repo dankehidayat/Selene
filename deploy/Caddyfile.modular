@@ -57,9 +57,9 @@ selene.dankehidayat.my.id {
 	}
 
 	# Frontend SPA routing
-	rewrite * /{path}
+	# NOTE: FRONTEND_PORT in .env controls the published host port (default 4173)
 	route * {
-		reverse_proxy localhost:3000
+		reverse_proxy localhost:4173
 	}
 
 	encode gzip zstd
@@ -69,7 +69,7 @@ selene.dankehidayat.my.id {
 }
 
 emqx.dankehidayat.my.id {
-	rewrite * /dashboard/login
+	# EMQX redirects / → /dashboard/ itself; do NOT rewrite (breaks static assets)
 	reverse_proxy localhost:18083
 	encode gzip zstd
 }
