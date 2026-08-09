@@ -28,6 +28,11 @@ selene.dankehidayat.my.id {
 		reverse_proxy localhost:8787
 	}
 
+	# Swagger UI (Fastify swaggerUi routePrefix: /docs) served by the monolith
+	route /docs* {
+		reverse_proxy localhost:8787
+	}
+
 	# Frontend SPA routing
 	# NOTE: FRONTEND_PORT in .env controls the published host port (default 3000)
 	route * {
