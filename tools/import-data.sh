@@ -1,6 +1,14 @@
 #!/bin/bash
 # =============================================================================
 # TimescaleDB Data Import Script
+#
+# Usage:
+#   $0 <csv-file> [--dry-run]                          # import from local CSV
+#   $0 --sheet <url-or-id> [--dry-run]                 # fetch live Google Sheet
+#
+# Google Sheets mode downloads the gid=0 tab as CSV via the public export
+# endpoint and keeps only the main device block (columns 1-17). The HTC-1
+# climate block (columns 19-21) is intentionally skipped.
 # =============================================================================
 
 set -euo pipefail
@@ -13,16 +21,66 @@ TIMESCALE_USER="selene_ts"
 # Parse arguments
 DRY_RUN=false
 INPUT_FILE=""
+SHEET_ARG=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --dry-run) DRY_RUN=true; shift ;;
+    --sheet) SHEET_ARG="$2"; shift 2 ;;
     *) INPUT_FILE="$1"; shift ;;
   esac
 done
 
+if [ -n "$SHEET_ARG" ]; then
+  # --- Google Sheets mode --------------------------------------------------
+  SHEET_ID="$SHEET_ARG"
+  if [[ "$SHEET_ARG" =~ /d/([^/]+) ]]; then
+    SHEET_ID="${BASH_REMATCH[1]}"
+  fi
+  SHEET_URL="https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0"
+  echo "Fetching sheet CSV export:"
+  echo "  $SHEET_URL"
+
+  SHEET_CSV="/tmp/selene-sheet-$(date +%s).csv"
+  if ! curl -sSL --max-time 60 "$SHEET_URL" -o "$SHEET_CSV"; then
+    echo "✗ Failed to download Google Sheet (is it public / link-shared?)"
+    exit 1
+  fi
+
+  TOTAL_LINES=$(wc -l < "$SHEET_CSV")
+  echo "Downloaded $TOTAL_LINES lines."
+
+  # Normalize: keep only columns 1-17 (drop blank col 18 + HTC-1 block).
+  # Also convert dates here to stay portable (Linux/macOS).
+  NORMALIZED_CSV="/tmp/gselene-sheet-normalized-$(date +%s).csv"
+  awk -F',' '
+    NR == 1 {
+      # header row passed through untouched
+      print
+      next
+    }
+    NF < 17 { next }
+    {
+      # convert M/D/YYYY h:mm:ss -> YYYY-MM-DD hh:mm:ss
+      n = split($1, d, /[\/ :]+/)
+      # d[1]=month d[2]=day d[3]=year d[4]=h d[5]=m d[6]=s
+      hh = (n >= 4) ? d[4] : 0
+      mm = (n >= 5) ? d[5] : 0
+      ss = (n >= 6) ? d[6] : 0
+      ts = sprintf("%04d-%02d-%02d %02d:%02d:%02d", d[3], d[1], d[2], hh, mm, ss)
+      row = ts
+      for (i = 2; i <= 17; i++) row = row "," $i
+      print row
+    }' "$SHEET_CSV" > "$NORMALIZED_CSV"
+
+  rm -f "$SHEET_CSV"
+  INPUT_FILE="$NORMALIZED_CSV"
+  echo "Normalized to main block (cleaned $NORMALIZED_CSV)."
+fi
+
 if [ -z "$INPUT_FILE" ]; then
   echo "Usage: $0 <csv-file> [--dry-run]"
+  echo "   or: $0 --sheet <google-sheets-url-or-id> [--dry-run]"
   echo ""
   echo "CSV must have these columns:"
   echo "  Timestamp,AC Voltage,V0,AC Current,V1,AC Power,V2,Cos Phi,V3,"
@@ -57,9 +115,6 @@ tail -n +2 "$INPUT_FILE" | while IFS=',' read -r ts v0 v1 v2 v3 v4 v5 v6 v7 v8 v
   
   LINE_NUM=$((LINE_NUM + 1))
   
-  # Convert date format: 2/26/2026 6:41:06 -> 2026-02-26 06:41:06
-  converted_ts=$(date -d "$ts" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "2026-01-01 00:00:00")
-  
   # Handle numeric values safely
   AC_VOLTAGE=${v0:-0}
   AC_CURRENT=${v1:-0}
@@ -88,6 +143,12 @@ tail -n +2 "$INPUT_FILE" | while IFS=',' read -r ts v0 v1 v2 v3 v4 v5 v6 v7 v8 v
   ENERGY_COST=${ENERGY_COST:-0}
   VOLTAGE_STABILITY=${v15:-100}
   
+  # Skip rows that failed date normalization (left as unparsable)
+  if [[ "$ts" != [0-9][0-9][0-9][0-9]-* ]]; then
+    echo "WARN: skipping row $LINE_NUM with unconverted timestamp: $ts"
+    continue
+  fi
+  
   cat >> "$SQL_FILE" << INSERT
 INSERT INTO sensor_readings (
   time, node_id, ac_voltage, ac_current, ac_power, cos_phi, 
@@ -95,7 +156,7 @@ INSERT INTO sensor_readings (
   temperature, humidity, temp_comfort, energy_status,
   current_per_kw, power_quality_score, energy_cost, voltage_stability
 ) VALUES (
-  '$converted_ts', 'office-main',
+  '$ts', 'office-main',
   COALESCE(NULLIF('$AC_VOLTAGE',''), 0)::numeric,
   COALESCE(NULLIF('$AC_CURRENT',''), 0)::numeric,
   COALESCE(NULLIF('$AC_POWER',''), 0)::numeric,
@@ -138,21 +199,21 @@ else
   export PGPASSWORD=$(sudo docker exec selene-db-timescale printenv POSTGRES_PASSWORD 2>/dev/null | tr -d '\n')
   
   sudo docker exec -i selene-db-timescale psql \
-    -U timescaledb \
+    -U selene_ts \
     -d selene_measurements \
-    -f "$SQL_FILE"
+    < "$SQL_FILE"
   
   RESULT=$?
   
   if [ $RESULT -eq 0 ]; then
-    echo "✓ Data imported successfully!"
+    echo "Data imported successfully!"
     
-    COUNT=$(sudo docker exec selene-db-timescale psql -U timescaledb -d selene_measurements \
+    COUNT=$(sudo docker exec selene-db-timescale psql -U selene_ts -d selene_measurements \
       -t -c "SELECT count(*) FROM sensor_readings WHERE node_id = 'office-main';" 2>/dev/null | tr -d ' ')
     
-    echo "✓ Imported $COUNT energy readings into TimescaleDB"
+    echo "Imported $COUNT energy readings into TimescaleDB"
   else
-    echo "✗ Import failed with code $RESULT"
+    echo "Import failed with code $RESULT"
   fi
 fi
 
