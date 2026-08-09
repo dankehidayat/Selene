@@ -57,9 +57,9 @@ selene.dankehidayat.my.id {
 	}
 
 	# Frontend SPA routing
-	# NOTE: FRONTEND_PORT in .env controls the published host port (default 4173)
+	# NOTE: FRONTEND_PORT in .env controls the published host port (default 3000)
 	route * {
-		reverse_proxy localhost:4173
+		reverse_proxy localhost:3000
 	}
 
 	encode gzip zstd

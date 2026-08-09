@@ -72,7 +72,7 @@ sudo docker logs -f selene-backend
 Caddy on the host still proxies:
 
 - `/api/*`, `/docs*`, `/health` → `localhost:8787`
-- SPA → `localhost:4173`
+- SPA → `localhost:3000`
 
 ### Email (Resend) + 2FA env checklist
 
