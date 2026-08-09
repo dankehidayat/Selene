@@ -18,5 +18,5 @@ COPY services/auth ./services/auth
 
 WORKDIR /app/services/auth
 
-# Generate Prisma client at runtime (not build time)
-CMD ["sh", "-c", "bunx prisma generate && bun run index.mjs"]
+# Generate Prisma client + push auth schema (own tables: RefreshSession, etc.)
+CMD ["sh", "-c", "bunx prisma generate --schema=./prisma/schema.prisma && bunx prisma db push --schema=./prisma/schema.prisma --skip-generate || true; exec bun run src/index.ts"]

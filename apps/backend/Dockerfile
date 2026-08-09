@@ -4,9 +4,14 @@ FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-# Install ALL workspace deps first
+# Copy manifests first (layer cache) — root + workspace package.json so
+# bun resolves @selene/shared, @selene/sensors, prisma from the lockfile
 COPY package.json bun.lock ./
-RUN bun install
+COPY apps/backend/package.json ./apps/backend/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/sensors/package.json ./packages/sensors/
+
+RUN bun install --filter @selene/backend --filter @selene/shared --filter @selene/sensors
 
 # Source code
 COPY packages/shared ./packages/shared
@@ -15,8 +20,8 @@ COPY apps/backend ./apps/backend
 
 WORKDIR /app/apps/backend
 
-# Run prisma db push at build time (one-time schema sync)
-RUN bunx --schema=./prisma/schema.prisma prisma db push || true
+# Generate Prisma client at build time (no DB needed — guarantees client exists)
+RUN bunx prisma generate --schema=./prisma/schema.prisma
 
-# Entrypoint just starts the app
-CMD ["bun", "run", "src/index.ts"]
+# Schema sync happens at runtime where DATABASE_URL exists; then start the app
+CMD ["sh", "-c", "bunx prisma db push --schema=./prisma/schema.prisma --skip-generate || true; exec bun run src/index.ts"]

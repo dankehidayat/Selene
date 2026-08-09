@@ -12,8 +12,9 @@
  *  - Public JWKS published at /.well-known/jwks.json
  *
  * Key sourcing (first match wins):
- *   1. `JWT_V2_PRIVATE_KEY` env — PKCS#8 PEM of the Ed25519 private key
- *   2. `JWT_V2_KEY_FILE` env — path to a PKCS#8 PEM file
+ *   1. `JWT_V2_PRIVATE_KEY` env — PKCS#8 PEM, or base64url/base64 DER
+ *      (single-line) which is normalized to PEM
+ *   2. `JWT_V2_KEY_FILE` env — path to a PKCS#8 PEM file (or DER)
  *   3. Auto-generate (development only) and cache in memory. Persist the
  *      printed PKCS#8 to a file before long-lived services.
  */
@@ -62,11 +63,20 @@ export interface JwtV2KeyPair {
 let cachedKeyPair: JwtV2KeyPair | null = null;
 let keyLoadError: string | null = null;
 
+function normalizePrivateKeyPem(raw: string): string {
+  const value = raw.trim();
+  if (value.includes("-----BEGIN")) return value;
+  // Accept base64url / base64 DER (single-line) and wrap it as PKCS#8 PEM.
+  const der = Buffer.from(value, "base64url");
+  const b64 = der.toString("base64").match(/.{1,64}/g)?.join("\n") ?? der.toString("base64");
+  return `-----BEGIN PRIVATE KEY-----\n${b64}\n-----END PRIVATE KEY-----\n`;
+}
+
 function readPrivateKeyPem(): string | null {
   const fromEnv = process.env.JWT_V2_PRIVATE_KEY;
-  if (fromEnv?.trim()) return fromEnv.trim();
+  if (fromEnv?.trim()) return normalizePrivateKeyPem(fromEnv);
   const fromFile = process.env.JWT_V2_KEY_FILE;
-  if (fromFile) return readFileSync(fromFile, "utf8").trim();
+  if (fromFile) return normalizePrivateKeyPem(readFileSync(fromFile, "utf8"));
   return null;
 }
 
