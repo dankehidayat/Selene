@@ -151,12 +151,12 @@ tail -n +2 "$INPUT_FILE" | while IFS=',' read -r ts v0 v1 v2 v3 v4 v5 v6 v7 v8 v
   
   cat >> "$SQL_FILE" << INSERT
 INSERT INTO sensor_readings (
-  time, node_id, ac_voltage, ac_current, ac_power, cos_phi, 
+  time, ac_voltage, ac_current, ac_power, cos_phi, 
   apparent_power, total_energy, frequency, reactive_power,
   temperature, humidity, temp_comfort, energy_status,
   current_per_kw, power_quality_score, energy_cost, voltage_stability
 ) VALUES (
-  '$ts', 'office-main',
+  '$ts',
   COALESCE(NULLIF('$AC_VOLTAGE',''), 0)::numeric,
   COALESCE(NULLIF('$AC_CURRENT',''), 0)::numeric,
   COALESCE(NULLIF('$AC_POWER',''), 0)::numeric,
@@ -171,7 +171,7 @@ INSERT INTO sensor_readings (
   '$ENERGY_STATUS',
   COALESCE(NULLIF('$CURRENT_PER_KW',''), 0)::numeric,
   COALESCE(NULLIF('$POWER_QUALITY_SCORE',''), 40)::numeric,
-  COALESCE(NULLIF('$ENERGY_COST',''), 0)::numeric,
+  '$ENERGY_COST',
   COALESCE(NULLIF('$VOLTAGE_STABILITY',''), 100)::numeric
 );
 INSERT
@@ -185,7 +185,7 @@ cat >> "$SQL_FILE" << 'FOOTER'
 
 COMMIT;
 
-SELECT count(*) FROM sensor_readings WHERE node_id = 'office-main';
+SELECT count(*) FROM sensor_readings;
 FOOTER
 
 echo "SQL file generated: $SQL_FILE ($(wc -l < "$SQL_FILE") statements)"
@@ -209,7 +209,7 @@ else
     echo "Data imported successfully!"
     
     COUNT=$(sudo docker exec selene-db-timescale psql -U selene_ts -d selene_measurements \
-      -t -c "SELECT count(*) FROM sensor_readings WHERE node_id = 'office-main';" 2>/dev/null | tr -d ' ')
+      -t -c "SELECT count(*) FROM sensor_readings;" 2>/dev/null | tr -d ' ')
     
     echo "Imported $COUNT energy readings into TimescaleDB"
   else
