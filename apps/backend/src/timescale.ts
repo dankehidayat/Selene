@@ -666,6 +666,10 @@ export async function getAllReadingsForAnalytics(
  *
  * Handles meter resets: when the counter drops, treat it as a reset to 0 and
  * continue summing positive increments.
+ *
+ * Placeholder rows (every field = 0, i.e. the device was offline) are excluded
+ * from the counter stream — otherwise a 0-blip between real readings (…63.967 →
+ * 0 → 0 → 64.002…) is counted as +64 kWh per gap.
  * Returns null when there is no usable cumulative data (caller may fall back).
  */
 export async function getCumulativeEnergyKwh(
@@ -680,6 +684,7 @@ export async function getCumulativeEnergyKwh(
        FROM sensor_readings
        WHERE time >= $1 AND time <= $2
          AND total_energy IS NOT NULL
+         AND NOT (total_energy = 0 AND ac_power = 0 AND ac_current = 0 AND ac_voltage = 0)
      ),
      deltas AS (
        SELECT
@@ -918,6 +923,8 @@ export async function getEnergyInRange(
   // Prefer cumulative PZEM counter per outer bucket (`total_energy` is already
   // kWh from firmware). Global LAG keeps continuity across bucket edges; delta
   // is attributed to the later sample's bucket. Fall back to power when empty.
+  // Placeholder rows (all fields 0 = device offline) are excluded so a 0-blip
+  // between real readings is not counted as a full counter jump.
   const result = await pool.query(
     `WITH samples AS (
        SELECT
@@ -927,6 +934,7 @@ export async function getEnergyInRange(
          ac_power
        FROM sensor_readings
        WHERE time >= $1 AND time <= $2
+         AND NOT (total_energy = 0 AND ac_power = 0 AND ac_current = 0 AND ac_voltage = 0)
      ),
      energy_deltas AS (
        SELECT
