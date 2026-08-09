@@ -71,7 +71,7 @@ sudo docker logs -f selene-backend
 
 Caddy on the host still proxies:
 
-- `/api/*`, `/docs*`, `/health` → `localhost:8787`
+- `/api/*`, `/api/v1/*` → `localhost:8787` (monolith serves the full API; `v1` is a prefix bridge until microservices complete)
 - SPA → `localhost:3000`
 
 ### Email (Resend) + 2FA env checklist
