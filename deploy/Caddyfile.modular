@@ -10,48 +10,19 @@
 
 selene.dankehidayat.my.id {
 
-	# Health checks
+	# Health check
 	handle /health {
 		reverse_proxy localhost:3009
 	}
 
-	handle /.well-known/jwks.json {
-		reverse_proxy localhost:3009
+	# API → monolith (full auth/admin/2fa/notifications/readings/analytics/firmware/mqtt/glossary).
+	# Monolith routes are registered at /api/* (not /api/v1), so rewrite the /v1 segment away.
+	# Handles both old build (base /api/v1) and new build (base /api).
+	route /api/v1/* {
+		uri path_regexp ^/api/v1/(.*)$ /api/$1
+		reverse_proxy localhost:8787
 	}
 
-	# v1 API routes - AUTH service
-	route /api/v1/auth/* {
-		rewrite * {path}
-		reverse_proxy localhost:3009
-	}
-
-	route /api/v1/me* {
-		rewrite * {path}
-		reverse_proxy localhost:3009
-	}
-
-	route /api/v1/admin/* {
-		rewrite * {path}
-		reverse_proxy localhost:3009
-	}
-
-	route /api/v1/notifications* {
-		rewrite * {path}
-		reverse_proxy localhost:3009
-	}
-
-	route /api/v1/glossary {
-		rewrite * {path}
-		reverse_proxy localhost:3009
-	}
-
-	# v1 API routes - ANALYTICS service
-	route /api/v1/analytics/* {
-		rewrite * {path}
-		reverse_proxy localhost:3006
-	}
-
-	# Legacy /api/* → monolith (includes readings, old endpoints)
 	route /api/* {
 		reverse_proxy localhost:8787
 	}
