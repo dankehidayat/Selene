@@ -3,23 +3,6 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import * as Plot from "@observablehq/plot";
 
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  Cell,
-  PieChart,
-  Pie,
-  Area,
-  ComposedChart,
-  Line,
-  ReferenceLine,
-} from "recharts";
-import { StableResponsiveContainer as ResponsiveContainer } from "@/components/StableResponsiveContainer";
-import {
   Zap,
   Activity,
   DollarSign,
@@ -59,6 +42,9 @@ import {
 } from "@/services/api";
 import { ensembleForecast, confidenceBands } from "@/lib/forecast";
 import { cn } from "@/lib/utils";
+import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
+import { NivoBarChart } from "@/components/charts/NivoBarChart";
+import { NivoPieChart } from "@/components/charts/NivoPieChart";
 
 const FUZZY_COLORS: Record<string, string> = {
   ECONOMICAL: "#2ecc71",
@@ -80,13 +66,6 @@ const CLIMATE_FUZZY_COLORS: Record<string, string> = {
   HOT: "#EF4444",
 };
 
-const CHART_FONT = {
-  fontSize: 11,
-  fontFamily: "Inter, sans-serif",
-  fill: "#9CA3AF",
-};
-const TOOLTIP_CLASS =
-  "bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg px-3.5 py-2.5 text-xs font-sans";
 const PLOT_STYLE = {
   fontFamily: "Inter, sans-serif",
   fontSize: "11px",
@@ -166,283 +145,6 @@ function getSpanHours(from: string | null, to: string | null): number {
     return (new Date(to).getTime() - new Date(from).getTime()) / 3600000;
   }
   return 24;
-}
-
-/**
- * Area+Line share a dataKey; Recharts puts both in the tooltip payload.
- * Keep only the labeled Line (name ≠ dataKey) so we don't show raw "power: …".
- */
-function uniqueTooltipRows(payload?: any[]): any[] {
-  if (!payload?.length) return [];
-  const byKey = new Map<string, any>();
-  for (const e of payload) {
-    if (e == null || e.value == null || e.hide) continue;
-    const dataKey = String(e.dataKey ?? e.name ?? "");
-    const name = String(e.name ?? dataKey);
-    const isRawKeyLabel = name === dataKey || name === dataKey.toLowerCase();
-    const isFillOnly =
-      (e.stroke === "none" || e.stroke === undefined) &&
-      e.fill &&
-      e.fill !== "none";
-    if (isFillOnly && isRawKeyLabel) continue;
-    if (isRawKeyLabel && !e.stroke) continue;
-
-    const key = dataKey || name;
-    const prev = byKey.get(key);
-    if (!prev) {
-      byKey.set(key, e);
-      continue;
-    }
-    const prevRaw =
-      String(prev.name) === String(prev.dataKey) ||
-      String(prev.name) === String(prev.dataKey).toLowerCase();
-    if (!isRawKeyLabel && prevRaw) byKey.set(key, e);
-  }
-  return Array.from(byKey.values()).filter(
-    (e) =>
-      typeof e.name === "string" &&
-      e.name.length > 0 &&
-      e.name !== String(e.dataKey),
-  );
-}
-
-/** Unit suffix only when the series name doesn't already include one. */
-function seriesUnit(name: string): string {
-  if (/\([^)]+\)/.test(name)) return "";
-  if (/forecast/i.test(name) && /temp/i.test(name)) return "°C";
-  if (/forecast/i.test(name) && /humid/i.test(name)) return "%";
-  if (/current/i.test(name)) return "A";
-  if (/temp/i.test(name)) return "°C";
-  if (/humid/i.test(name)) return "%";
-  if (/energy/i.test(name)) return "kWh";
-  if (/apparent/i.test(name)) return "VA";
-  if (/reactive/i.test(name)) return "VAR";
-  if (/power/i.test(name)) return "W";
-  return "";
-}
-
-function PowerTooltip({
-  active,
-  payload,
-  label,
-  spanHours,
-}: {
-  active?: boolean;
-  payload?: any[];
-  label?: string;
-  spanHours: number;
-}) {
-  const rows = uniqueTooltipRows(payload);
-  if (!active || !rows.length || !label) return null;
-  return (
-    <div className={TOOLTIP_CLASS}>
-      <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, spanHours)}
-      </p>
-      {rows.map((e: any) => {
-        const unit = seriesUnit(String(e.name));
-        const color = e.color || e.stroke || "#6B7280";
-        return (
-          <p
-            key={e.name}
-            className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
-          >
-            <span
-              className="inline-block w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: color }}
-            />
-            {e.name}:{" "}
-            <span className="text-gray-900 dark:text-white font-semibold">
-              {e.value}
-              {unit ? ` ${unit}` : ""}
-            </span>
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-function EnergyTooltip({
-  active,
-  payload,
-  label,
-  spanHours,
-}: {
-  active?: boolean;
-  payload?: any[];
-  label?: string;
-  spanHours: number;
-}) {
-  const rows = uniqueTooltipRows(payload);
-  const row =
-    rows.find((e) => /energy/i.test(String(e.name))) ?? rows[0] ?? payload?.[0];
-  if (!active || !row || !label) return null;
-  const color = row.color || row.stroke || "#10B981";
-  return (
-    <div className={TOOLTIP_CLASS}>
-      <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, spanHours)}
-      </p>
-      <p className="text-gray-400 dark:text-gray-400 flex items-center gap-2">
-        <span
-          className="inline-block w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: color }}
-        />
-        {row.name && row.name !== row.dataKey ? row.name : "Energy (kWh)"}:{" "}
-        <span className="text-gray-900 dark:text-white font-semibold">
-          {row.value}
-          {/\([^)]+\)/.test(String(row.name)) ? "" : " kWh"}
-        </span>
-      </p>
-    </div>
-  );
-}
-function EnvTooltip({
-  active,
-  payload,
-  label,
-  spanHours,
-}: {
-  active?: boolean;
-  payload?: any[];
-  label?: string;
-  spanHours: number;
-}) {
-  const rows = uniqueTooltipRows(payload);
-  if (!active || !rows.length || !label) return null;
-  return (
-    <div className={TOOLTIP_CLASS}>
-      <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, spanHours)}
-      </p>
-      {rows.map((e: any) => {
-        const unit = seriesUnit(String(e.name));
-        const color = e.color || e.stroke || "#6B7280";
-        return (
-          <p
-            key={e.name}
-            className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
-          >
-            <span
-              className="inline-block w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: color }}
-            />
-            {e.name}:{" "}
-            <span className="text-gray-900 dark:text-white font-semibold">
-              {e.value}
-              {unit ? ` ${unit}` : ""}
-            </span>
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-function PeakTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: any[];
-  label?: string;
-}) {
-  if (!active || !payload?.length || !label) return null;
-  return (
-    <div className={TOOLTIP_CLASS}>
-      <p className="text-gray-400 dark:text-gray-400 mb-1">
-        Hour:{" "}
-        <span className="text-gray-700 dark:text-gray-200 font-medium">
-          {label}
-        </span>
-      </p>
-      <p className="text-gray-400 dark:text-gray-400">
-        Avg Power:{" "}
-        <span className="text-gray-900 dark:text-white font-semibold">
-          {payload[0]?.value ?? 0} W
-        </span>
-      </p>
-    </div>
-  );
-}
-function ComfortTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: any[];
-  label?: string;
-}) {
-  if (!active || !payload?.length || !label) return null;
-  return (
-    <div className={TOOLTIP_CLASS}>
-      <p className="text-gray-400 dark:text-gray-400 mb-1">
-        Status:{" "}
-        <span className="text-gray-700 dark:text-gray-200 font-medium">
-          {label}
-        </span>
-      </p>
-      <p className="text-gray-400 dark:text-gray-400">
-        Percentage:{" "}
-        <span className="text-gray-900 dark:text-white font-semibold">
-          {payload[0]?.value ?? 0}%
-        </span>
-      </p>
-    </div>
-  );
-}
-function PieTooltip({
-  active,
-  payload,
-  total,
-}: {
-  active?: boolean;
-  payload?: any[];
-  total: number;
-}) {
-  if (!active || !payload?.length) return null;
-  const val = payload[0]?.value ?? 0;
-  const pct = total > 0 ? ((val / total) * 100).toFixed(1) : "0";
-  return (
-    <div className={TOOLTIP_CLASS}>
-      <p className="text-gray-400 dark:text-gray-400">
-        {payload[0]?.name ?? "—"}:{" "}
-        <span className="text-gray-900 dark:text-white font-semibold">
-          {val} ({pct}%)
-        </span>
-      </p>
-    </div>
-  );
-}
-function MembershipTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: any[];
-  label?: string;
-}) {
-  if (!active || !payload?.length || !label) return null;
-  return (
-    <div className={TOOLTIP_CLASS}>
-      <p className="text-gray-400 dark:text-gray-400 mb-1">
-        Value:{" "}
-        <span className="text-gray-700 dark:text-gray-200 font-medium">
-          {label}
-        </span>
-      </p>
-      {payload.map((e: any) => (
-        <p key={e.name} className="text-gray-400 dark:text-gray-400">
-          {e.name}:{" "}
-          <span className="text-gray-900 dark:text-white font-semibold">
-            {typeof e.value === "number" ? e.value.toFixed(3) : e.value}
-          </span>
-        </p>
-      ))}
-    </div>
-  );
 }
 
 /** Soft overlapping membership curves — always visible, no accordion bury. */
@@ -1262,257 +964,87 @@ export function Analytics() {
                 No data
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <ComposedChart
-                  data={enrichedHistory}
-                  margin={{ top: 12, right: 4, left: 0, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="ePowerGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#3B82F6"
-                        stopOpacity={0.32}
-                      />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient
-                      id="eCurrentGrad"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop
-                        offset="0%"
-                        stopColor="#F59E0B"
-                        stopOpacity={0.32}
-                      />
-                      <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient
-                      id="eApparentGrad"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.1} />
-                      <stop offset="100%" stopColor="#8B5CF6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient
-                      id="eReactiveGrad"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="0%" stopColor="#EF4444" stopOpacity={0.1} />
-                      <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="epfb" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#3B82F6"
-                        stopOpacity={0.06}
-                      />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    vertical={false}
-                    stroke="#E5E7EB"
-                    strokeOpacity={0.3}
-                  />
-                  <XAxis
-                    dataKey="timestamp"
-                    tick={CHART_FONT}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v: string) => formatTick(v, energySpanHours)}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    yAxisId="left"
-                    tick={CHART_FONT}
-                    axisLine={false}
-                    tickLine={false}
-                    width={50}
-                    domain={energyPowerDomain}
-                    allowDataOverflow={false}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={CHART_FONT}
-                    axisLine={false}
-                    tickLine={false}
-                    width={45}
-                    domain={energyCurrentDomain}
-                    allowDataOverflow={false}
-                  />
-                  <Tooltip content={<PowerTooltip spanHours={energySpanHours} />} />
-                  <Legend
-                    wrapperStyle={{
-                      fontSize: 11,
-                      fontFamily: "Inter, sans-serif",
-                    }}
-                    payload={[
-                      {
-                        value: "Power (W)",
-                        type: "line" as const,
-                        color: "#3B82F6",
-                        id: "power",
-                      },
-                      {
-                        value: "Current (A)",
-                        type: "line" as const,
-                        color: "#F59E0B",
-                        id: "current",
-                      },
-                      {
-                        value: "Apparent (VA)",
-                        type: "line" as const,
-                        color: "#8B5CF6",
-                        id: "apparentPower",
-                      },
-                      {
-                        value: "Reactive (VAR)",
-                        type: "line" as const,
-                        color: "#EF4444",
-                        id: "reactivePower",
-                      },
-                      ...(pf.forecast.length
-                        ? [
-                            {
-                              value: "Power Forecast",
-                              type: "line" as const,
-                              color: "#3B82F6",
-                              id: "pf",
-                            },
-                          ]
-                        : []),
-                    ]}
-                  />
-                  {pf.forecast.length > 0 && (
-                    <ReferenceLine
-                      x={now}
-                      yAxisId="left"
-                      stroke="#9CA3AF"
-                      strokeWidth={1}
-                      strokeDasharray="4,4"
-                      label={{
-                        value: "Now",
-                        position: "top",
-                        fill: "#9CA3AF",
-                        fontSize: 10,
-                      }}
-                    />
-                  )}
-                  <Area
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="power"
-                    fill="url(#ePowerGrad)"
-                    stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="power"
-                    stroke="#3B82F6"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#3B82F6" }}
-                    name="Power (W)"
-                  />
-                  <Area
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="current"
-                    fill="url(#eCurrentGrad)"
-                    stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="current"
-                    stroke="#F59E0B"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#F59E0B" }}
-                    name="Current (A)"
-                  />
-                  <Area
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="apparentPower"
-                    fill="url(#eApparentGrad)"
-                    stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="apparentPower"
-                    stroke="#8B5CF6"
-                    strokeWidth={1.5}
-                    dot={false}
-                    strokeDasharray="4,3"
-                    name="Apparent (VA)"
-                  />
-                  <Area
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="reactivePower"
-                    fill="url(#eReactiveGrad)"
-                    stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="reactivePower"
-                    stroke="#EF4444"
-                    strokeWidth={1.5}
-                    dot={false}
-                    strokeDasharray="4,3"
-                    name="Reactive (VAR)"
-                  />
-                  {pb.upper.length > 0 && (
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      data={pb.upper}
-                      dataKey="value"
-                      stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                      fill="url(#epfb)"
-                    />
-                  )}
-                  {pf.forecast.length > 0 && (
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      data={pf.forecast}
-                      dataKey="value"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      strokeDasharray="6,4"
-                      dot={false}
-                      name="Power Forecast"
-                      connectNulls
-                    />
-                  )}
-                </ComposedChart>
-              </ResponsiveContainer>
+              <TimeSeriesChart
+                height={300}
+                spanHours={energySpanHours}
+                xTickFormat={(d: Date) => formatTick(d.toISOString(), energySpanHours)}
+                tooltipDateFormat={(d: Date) => formatDateForTooltip(d.toISOString(), energySpanHours)}
+                leftTickFormat={(v: number) => String(v)}
+                rightTickFormat={(v: number) => String(v)}
+                leftDomain={energyPowerDomain}
+                rightDomain="auto"
+                nowMarker={pf.forecast.length ? now : null}
+                series={[
+                  {
+                    id: "power",
+                    label: "Power (W)",
+                    color: "#3B82F6",
+                    axis: "left",
+                    data: enrichedHistory.map((h: any) => ({ x: h.timestamp, y: h.power })),
+                    area: true,
+                    unit: "W",
+                  },
+                  {
+                    id: "current",
+                    label: "Current (A)",
+                    color: "#F59E0B",
+                    axis: "right",
+                    data: enrichedHistory.map((h: any) => ({ x: h.timestamp, y: h.current })),
+                    area: true,
+                    unit: "A",
+                  },
+                  {
+                    id: "apparent",
+                    label: "Apparent (VA)",
+                    color: "#8B5CF6",
+                    axis: "right",
+                    data: enrichedHistory.map((h: any) => ({ x: h.timestamp, y: h.apparentPower })),
+                    unit: "VA",
+                  },
+                  {
+                    id: "reactive",
+                    label: "Reactive (VAR)",
+                    color: "#EF4444",
+                    axis: "right",
+                    data: enrichedHistory.map((h: any) => ({ x: h.timestamp, y: h.reactivePower })),
+                    unit: "VAR",
+                  },
+                  ...(pf.forecast.length
+                    ? [
+                        {
+                          id: "pf",
+                          label: "Power Forecast",
+                          color: "#3B82F6",
+                          axis: "left" as const,
+                          data: pf.forecast.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                          dashed: true,
+                          unit: "W" as const,
+                        },
+                      ]
+                    : []),
+                ]}
+                bands={
+                  pb.upper.length
+                    ? [
+                        {
+                          axis: "left" as const,
+                          upper: pb.upper.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                          lower: pb.lower.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                          color: "#3B82F6",
+                        },
+                      ]
+                    : []
+                }
+                legend={[
+                  { label: "Power (W)", color: "#3B82F6" },
+                  { label: "Current (A)", color: "#F59E0B" },
+                  { label: "Apparent (VA)", color: "#8B5CF6" },
+                  { label: "Reactive (VAR)", color: "#EF4444" },
+                  ...(pf.forecast.length
+                    ? [{ label: "Power Forecast", color: "#3B82F6", dashed: true }]
+                    : []),
+                ]}
+              />
             )}
           </ChartCard>
 
@@ -1523,44 +1055,15 @@ export function Analytics() {
                   No data
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart
-                    data={allPeakHours}
-                    layout="vertical"
-                    margin={{ left: 10, right: 10 }}
-                  >
-                    <CartesianGrid
-                      horizontal={false}
-                      stroke="#E5E7EB"
-                      strokeOpacity={0.3}
-                    />
-                    <XAxis
-                      type="number"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      width={45}
-                    />
-                    <Tooltip
-                      content={<PeakTooltip />}
-                      cursor={{ fill: "rgba(0,0,0,0.04)" }}
-                    />
-                    <Bar
-                      dataKey="power"
-                      radius={[0, 6, 6, 0]}
-                      fill="#F59E0B"
-                      activeBar={{ fill: "#D97706" }}
-                      name="Avg Power (W)"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                <NivoBarChart
+                  data={allPeakHours}
+                  indexBy="name"
+                  keys={["power"]}
+                  colors={["#3B82F6"]}
+                  height={260}
+                  axisBottomFormat={(v: string) => v}
+                  axisLeftFormat={(v: number) => String(v)}
+                />
               )}
             </ChartCard>
 
@@ -1577,151 +1080,57 @@ export function Analytics() {
                   No data
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={300}>
-                  <ComposedChart data={energyHistory}>
-                    <defs>
-                      <linearGradient
-                        id="energyGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#10B981"
-                          stopOpacity={0.35}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#10B981"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                      <linearGradient id="efbGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop
-                          offset="0%"
-                          stopColor="#10B981"
-                          stopOpacity={0.06}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#10B981"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      vertical={false}
-                      stroke="#E5E7EB"
-                      strokeOpacity={0.3}
-                    />
-                    <XAxis
-                      dataKey="timestamp"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: string) => formatTick(v, energySpanHours)}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      width={50}
-                      domain={energyKwhDomain}
-                      allowDataOverflow={false}
-                      label={{
-                        value: "Wh",
-                        position: "insideTopLeft",
-                        offset: -5,
-                        style: CHART_FONT,
-                      }}
-                    />
-                    <Tooltip content={<EnergyTooltip spanHours={energySpanHours} />} />
-                    <Legend
-                      wrapperStyle={{
-                        fontSize: 11,
-                        fontFamily: "Inter, sans-serif",
-                      }}
-                      payload={[
-                        {
-                          value: "Energy (kWh)",
-                          type: "line" as const,
-                          color: "#10B981",
-                          id: "energy_kwh",
-                        },
-                        ...(efc.forecast.length
-                          ? [
-                              {
-                                value: "Energy Forecast",
-                                type: "line" as const,
-                                color: "#10B981",
-                                id: "ef",
-                              },
-                            ]
-                          : []),
-                      ]}
-                    />
-                    {efc.forecast.length > 0 && (
-                      <ReferenceLine
-                        x={now}
-                        stroke="#9CA3AF"
-                        strokeWidth={1}
-                        strokeDasharray="4,4"
-                        label={{
-                          value: "Now",
-                          position: "top",
-                          fill: "#9CA3AF",
-                          fontSize: 10,
-                        }}
-                      />
-                    )}
-                    <Area
-                      type="monotone"
-                      dataKey="energy_kwh"
-                      fill="url(#energyGrad)"
-                      stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                      isAnimationActive={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="energy_kwh"
-                      stroke="#10B981"
-                      strokeWidth={2.5}
-                      dot={false}
-                      activeDot={{ r: 4, fill: "#10B981" }}
-                      name="Energy (kWh)"
-                      isAnimationActive={false}
-                    />
-                    {efb.upper.length > 0 && (
-                      <Area
-                        type="monotone"
-                        data={efb.upper}
-                        dataKey="value"
-                        stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                        fill="url(#efbGrad)"
-                      />
-                    )}
-                    {efc.forecast.length > 0 && (
-                      <Line
-                        type="monotone"
-                        data={efc.forecast}
-                        dataKey="value"
-                        stroke="#10B981"
-                        strokeWidth={2}
-                        strokeDasharray="6,4"
-                        dot={false}
-                        name="Energy Forecast"
-                        connectNulls
-                      />
-                    )}
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <TimeSeriesChart
+                  height={260}
+                  spanHours={energySpanHours}
+                  xTickFormat={(d: Date) => formatTick(d.toISOString(), energySpanHours)}
+                  tooltipDateFormat={(d: Date) => formatDateForTooltip(d.toISOString(), energySpanHours)}
+                  leftTickFormat={(v: number) => String(v)}
+                  leftDomain={energyKwhDomain}
+                  nowMarker={efc.forecast.length ? now : null}
+                  series={[
+                    {
+                      id: "energy_kwh",
+                      label: "Energy (kWh)",
+                      color: "#10B981",
+                      axis: "left",
+                      data: energyHistory.map((h: any) => ({ x: h.timestamp, y: h.energy_kwh })),
+                      area: true,
+                      unit: "kWh",
+                    },
+                    ...(efc.forecast.length
+                      ? [
+                          {
+                            id: "efc",
+                            label: "Energy Forecast",
+                            color: "#10B981",
+                            axis: "left" as const,
+                            data: efc.forecast.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                            dashed: true,
+                            unit: "kWh" as const,
+                          },
+                        ]
+                      : []),
+                  ]}
+                  bands={
+                    efb.upper.length
+                      ? [
+                          {
+                            axis: "left" as const,
+                            upper: efb.upper.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                            lower: efb.lower.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                            color: "#10B981",
+                          },
+                        ]
+                      : []
+                  }
+                  legend={[
+                    { label: "Energy (kWh)", color: "#10B981" },
+                    ...(efc.forecast.length
+                      ? [{ label: "Energy Forecast", color: "#10B981", dashed: true }]
+                      : []),
+                  ]}
+                />
               )}
             </ChartCard>
           </div>
@@ -1920,239 +1329,95 @@ export function Analytics() {
                   No data
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <ComposedChart data={hourlyClimate}>
-                    <defs>
-                      <linearGradient
-                        id="climTempGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#EF4444"
-                          stopOpacity={0.32}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#EF4444"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                      <linearGradient
-                        id="climHumGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="#3B82F6"
-                          stopOpacity={0.32}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#3B82F6"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                      <linearGradient id="ctfb" x1="0" y1="0" x2="0" y2="1">
-                        <stop
-                          offset="0%"
-                          stopColor="#EF4444"
-                          stopOpacity={0.06}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#EF4444"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                      <linearGradient id="chfb" x1="0" y1="0" x2="0" y2="1">
-                        <stop
-                          offset="0%"
-                          stopColor="#3B82F6"
-                          stopOpacity={0.06}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="#3B82F6"
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      vertical={false}
-                      stroke="#E5E7EB"
-                      strokeOpacity={0.3}
-                    />
-                    <XAxis
-                      dataKey="timestamp"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: string) => {
-                        const d = new Date(v);
-                        return d.toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        });
-                      }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      width={36}
-                      domain={envTempDomain}
-                      allowDataOverflow={false}
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      width={36}
-                      domain={envHumidityDomain}
-                      allowDataOverflow={false}
-                    />
-                    <Tooltip content={<EnvTooltip spanHours={climateSpanHours} />} />
-                    <Legend
-                      wrapperStyle={{
-                        fontSize: 11,
-                        fontFamily: "Inter, sans-serif",
-                      }}
-                      payload={[
-                        {
-                          value: "Temperature (°C)",
-                          type: "line" as const,
-                          color: "#EF4444",
-                          id: "temperature",
-                        },
-                        {
-                          value: "Humidity (%)",
-                          type: "line" as const,
-                          color: "#3B82F6",
-                          id: "humidity",
-                        },
-                        ...(tf.forecast.length
-                          ? [
-                              {
-                                value: "Temp Forecast",
-                                type: "line" as const,
-                                color: "#EF4444",
-                                id: "tfc",
-                              },
-                            ]
-                          : []),
-                        ...(hf.forecast.length
-                          ? [
-                              {
-                                value: "Humid Forecast",
-                                type: "line" as const,
-                                color: "#3B82F6",
-                                id: "hfc",
-                              },
-                            ]
-                          : []),
-                      ]}
-                    />
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="temperature"
-                      fill="url(#climTempGrad)"
-                      stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                    />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="temperature"
-                      stroke="#EF4444"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Temperature (°C)"
-                    />
-                    <Area
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="humidity"
-                      fill="url(#climHumGrad)"
-                      stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="humidity"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Humidity (%)"
-                    />
-                    {tb.upper.length > 0 && (
-                      <Area
-                        yAxisId="left"
-                        type="monotone"
-                        data={tb.upper}
-                        dataKey="value"
-                        stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                        fill="url(#ctfb)"
-                      />
-                    )}
-                    {tf.forecast.length > 0 && (
-                      <Line
-                        yAxisId="left"
-                        type="monotone"
-                        data={tf.forecast}
-                        dataKey="value"
-                        stroke="#EF4444"
-                        strokeWidth={2}
-                        strokeDasharray="6,4"
-                        dot={false}
-                        name="Temp Forecast"
-                        connectNulls
-                      />
-                    )}
-                    {hb.upper.length > 0 && (
-                      <Area
-                        yAxisId="right"
-                        type="monotone"
-                        data={hb.upper}
-                        dataKey="value"
-                        stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                        fill="url(#chfb)"
-                      />
-                    )}
-                    {hf.forecast.length > 0 && (
-                      <Line
-                        yAxisId="right"
-                        type="monotone"
-                        data={hf.forecast}
-                        dataKey="value"
-                        stroke="#3B82F6"
-                        strokeWidth={2}
-                        strokeDasharray="6,4"
-                        dot={false}
-                        name="Humid Forecast"
-                        connectNulls
-                      />
-                    )}
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <TimeSeriesChart
+                  height={280}
+                  spanHours={climateSpanHours}
+                  xTickFormat={(d: Date) => formatTick(d.toISOString(), climateSpanHours)}
+                  tooltipDateFormat={(d: Date) => formatDateForTooltip(d.toISOString(), climateSpanHours)}
+                  leftTickFormat={(v: number) => String(v)}
+                  rightTickFormat={(v: number) => String(v)}
+                  leftDomain={envTempDomain}
+                  rightDomain={envHumidityDomain}
+                  nowMarker={tf.forecast.length || hf.forecast.length ? now : null}
+                  series={[
+                    {
+                      id: "temperature",
+                      label: "Temperature (°C)",
+                      color: "#EF4444",
+                      axis: "left",
+                      data: hourlyClimate.map((h: any) => ({ x: h.timestamp, y: h.temperature })),
+                      area: true,
+                      unit: "°C",
+                    },
+                    {
+                      id: "humidity",
+                      label: "Humidity (%)",
+                      color: "#3B82F6",
+                      axis: "right",
+                      data: hourlyClimate.map((h: any) => ({ x: h.timestamp, y: h.humidity })),
+                      area: true,
+                      unit: "%",
+                    },
+                    ...(tf.forecast.length
+                      ? [
+                          {
+                            id: "tf",
+                            label: "Temp Forecast",
+                            color: "#EF4444",
+                            axis: "left" as const,
+                            data: tf.forecast.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                            dashed: true,
+                            unit: "°C" as const,
+                          },
+                        ]
+                      : []),
+                    ...(hf.forecast.length
+                      ? [
+                          {
+                            id: "hf",
+                            label: "Humid Forecast",
+                            color: "#3B82F6",
+                            axis: "right" as const,
+                            data: hf.forecast.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                            dashed: true,
+                            unit: "%" as const,
+                          },
+                        ]
+                      : []),
+                  ]}
+                  bands={[
+                    ...(tb.upper.length
+                      ? [
+                          {
+                            axis: "left" as const,
+                            upper: tb.upper.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                            lower: tb.lower.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                            color: "#EF4444",
+                          },
+                        ]
+                      : []),
+                    ...(hb.upper.length
+                      ? [
+                          {
+                            axis: "right" as const,
+                            upper: hb.upper.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                            lower: hb.lower.map((f: any) => ({ x: f.timestamp, y: f.value })),
+                            color: "#3B82F6",
+                          },
+                        ]
+                      : []),
+                  ]}
+                  legend={[
+                    { label: "Temperature (°C)", color: "#EF4444" },
+                    { label: "Humidity (%)", color: "#3B82F6" },
+                    ...(tf.forecast.length
+                      ? [{ label: "Temp Forecast", color: "#EF4444", dashed: true }]
+                      : []),
+                    ...(hf.forecast.length
+                      ? [{ label: "Humid Forecast", color: "#3B82F6", dashed: true }]
+                      : []),
+                  ]}
+                />
               )}
             </ChartCard>
             <ChartCard
@@ -2168,39 +1433,13 @@ export function Analytics() {
                   No data
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={comfortData}>
-                    <CartesianGrid
-                      vertical={false}
-                      stroke="#E5E7EB"
-                      strokeOpacity={0.3}
-                    />
-                    <XAxis
-                      dataKey="status"
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={CHART_FONT}
-                      axisLine={false}
-                      tickLine={false}
-                      width={30}
-                    />
-                    <Tooltip
-                      content={<ComfortTooltip />}
-                      cursor={{ fill: "rgba(0,0,0,0.04)" }}
-                    />
-                    <Bar dataKey="percentage" radius={[6, 6, 0, 0]}>
-                      {comfortData.map((entry: any, index: number) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={COMFORT_COLORS[entry.status] || "#6B7280"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <NivoBarChart
+                  data={comfortData}
+                  indexBy="status"
+                  keys={["percentage"]}
+                  colors={comfortData.map((d: any) => COMFORT_COLORS[d.status] || "#6B7280")}
+                  height={280}
+                />
               )}
             </ChartCard>
           </div>
@@ -2369,50 +1608,14 @@ export function Analytics() {
                   No data
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="46%"
-                      innerRadius="42%"
-                      outerRadius="68%"
-                      paddingAngle={3}
-                      dataKey="value"
-                      stroke="none"
-                      label={false}
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={FUZZY_COLORS[entry.name] || "#6366F1"}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      content={<PieTooltip total={fuzzy?.total || 0} />}
-                    />
-                    <Legend
-                      verticalAlign="bottom"
-                      height={36}
-                      wrapperStyle={{
-                        fontSize: 11,
-                        fontFamily: "Inter, sans-serif",
-                        paddingTop: 4,
-                      }}
-                      formatter={(value: string) => {
-                        const row = pieData.find((d) => d.name === value);
-                        const total = pieData.reduce((s, d) => s + d.value, 0) || 1;
-                        const pct = row
-                          ? Math.round((row.value / total) * 100)
-                          : 0;
-                        const label =
-                          value.charAt(0) + value.slice(1).toLowerCase();
-                        return `${label} ${pct}%`;
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <NivoPieChart
+                  data={pieData.map((d) => ({
+                    id: d.name,
+                    value: d.value,
+                    color: FUZZY_COLORS[d.name] || "#6366F1",
+                  }))}
+                  height={280}
+                />
               )}
             </ChartCard>
             <ChartCard
@@ -2500,84 +1703,42 @@ export function Analytics() {
                     Loading…
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <ComposedChart
-                      data={membership.voltageMembership}
-                      margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-                    >
-                      <defs>
-                        <linearGradient id="mfLow" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#EF4444" stopOpacity={0.35} />
-                          <stop offset="100%" stopColor="#EF4444" stopOpacity={0.04} />
-                        </linearGradient>
-                        <linearGradient id="mfVNorm" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10B981" stopOpacity={0.35} />
-                          <stop offset="100%" stopColor="#10B981" stopOpacity={0.04} />
-                        </linearGradient>
-                        <linearGradient id="mfHigh" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.35} />
-                          <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.04} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid vertical={false} stroke="#E5E7EB" strokeOpacity={0.3} />
-                      <XAxis
-                        dataKey="x"
-                        tick={CHART_FONT}
-                        axisLine={false}
-                        tickLine={false}
-                        label={{
-                          value: "V",
-                          position: "insideBottomRight",
-                          offset: -2,
-                          style: CHART_FONT,
-                        }}
-                      />
-                      <YAxis
-                        domain={[0, 1]}
-                        tick={CHART_FONT}
-                        width={28}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <Tooltip content={<MembershipTooltip />} />
-                      <Legend
-                        wrapperStyle={{
-                          fontSize: 11,
-                          fontFamily: "Inter, sans-serif",
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="low"
-                        stroke="#EF4444"
-                        strokeWidth={2}
-                        fill="url(#mfLow)"
-                        dot={false}
-                        isAnimationActive={false}
-                        name="Low"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="normal"
-                        stroke="#10B981"
-                        strokeWidth={2}
-                        fill="url(#mfVNorm)"
-                        dot={false}
-                        isAnimationActive={false}
-                        name="Normal"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="high"
-                        stroke="#3B82F6"
-                        strokeWidth={2}
-                        fill="url(#mfHigh)"
-                        dot={false}
-                        isAnimationActive={false}
-                        name="High"
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                  <TimeSeriesChart
+                    height={260}
+                    spanHours={24}
+                    xTickFormat={(d: Date) => String(d.getTime())}
+                    tooltipDateFormat={(d: Date) => `Value: ${d.getTime()}`}
+                    leftTickFormat={(v: number) => v.toFixed(1)}
+                    leftDomain={[0, 1]}
+                    series={[
+                      {
+                        id: "low",
+                        label: "Low",
+                        color: "#EF4444",
+                        axis: "left",
+                        data: membership.voltageMembership.map((d: any) => ({ x: d.x, y: d.low })),
+                      },
+                      {
+                        id: "normal",
+                        label: "Normal",
+                        color: "#10B981",
+                        axis: "left",
+                        data: membership.voltageMembership.map((d: any) => ({ x: d.x, y: d.normal })),
+                      },
+                      {
+                        id: "high",
+                        label: "High",
+                        color: "#3B82F6",
+                        axis: "left",
+                        data: membership.voltageMembership.map((d: any) => ({ x: d.x, y: d.high })),
+                      },
+                    ]}
+                    legend={[
+                      { label: "Low", color: "#EF4444" },
+                      { label: "Normal", color: "#10B981" },
+                      { label: "High", color: "#3B82F6" },
+                    ]}
+                  />
                 )}
               </ChartCard>
               <ChartCard title="Power" chartId="chart-power-mf">
@@ -2586,84 +1747,42 @@ export function Analytics() {
                     Loading…
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <ComposedChart
-                      data={membership.powerMembership}
-                      margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-                    >
-                      <defs>
-                        <linearGradient id="mfEco" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#2ecc71" stopOpacity={0.35} />
-                          <stop offset="100%" stopColor="#2ecc71" stopOpacity={0.04} />
-                        </linearGradient>
-                        <linearGradient id="mfPNorm" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#3498db" stopOpacity={0.35} />
-                          <stop offset="100%" stopColor="#3498db" stopOpacity={0.04} />
-                        </linearGradient>
-                        <linearGradient id="mfWaste" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#e74c3c" stopOpacity={0.35} />
-                          <stop offset="100%" stopColor="#e74c3c" stopOpacity={0.04} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid vertical={false} stroke="#E5E7EB" strokeOpacity={0.3} />
-                      <XAxis
-                        dataKey="x"
-                        tick={CHART_FONT}
-                        axisLine={false}
-                        tickLine={false}
-                        label={{
-                          value: "W",
-                          position: "insideBottomRight",
-                          offset: -2,
-                          style: CHART_FONT,
-                        }}
-                      />
-                      <YAxis
-                        domain={[0, 1]}
-                        tick={CHART_FONT}
-                        width={28}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <Tooltip content={<MembershipTooltip />} />
-                      <Legend
-                        wrapperStyle={{
-                          fontSize: 11,
-                          fontFamily: "Inter, sans-serif",
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="economical"
-                        stroke="#2ecc71"
-                        strokeWidth={2}
-                        fill="url(#mfEco)"
-                        dot={false}
-                        isAnimationActive={false}
-                        name="Economical"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="normal"
-                        stroke="#3498db"
-                        strokeWidth={2}
-                        fill="url(#mfPNorm)"
-                        dot={false}
-                        isAnimationActive={false}
-                        name="Normal"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="wasteful"
-                        stroke="#e74c3c"
-                        strokeWidth={2}
-                        fill="url(#mfWaste)"
-                        dot={false}
-                        isAnimationActive={false}
-                        name="Wasteful"
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                  <TimeSeriesChart
+                    height={260}
+                    spanHours={24}
+                    xTickFormat={(d: Date) => String(d.getTime())}
+                    tooltipDateFormat={(d: Date) => `Value: ${d.getTime()}`}
+                    leftTickFormat={(v: number) => v.toFixed(1)}
+                    leftDomain={[0, 1]}
+                    series={[
+                      {
+                        id: "economical",
+                        label: "Economical",
+                        color: "#2ecc71",
+                        axis: "left",
+                        data: membership.powerMembership.map((d: any) => ({ x: d.x, y: d.economical })),
+                      },
+                      {
+                        id: "normal",
+                        label: "Normal",
+                        color: "#3498db",
+                        axis: "left",
+                        data: membership.powerMembership.map((d: any) => ({ x: d.x, y: d.normal })),
+                      },
+                      {
+                        id: "wasteful",
+                        label: "Wasteful",
+                        color: "#e74c3c",
+                        axis: "left",
+                        data: membership.powerMembership.map((d: any) => ({ x: d.x, y: d.wasteful })),
+                      },
+                    ]}
+                    legend={[
+                      { label: "Economical", color: "#2ecc71" },
+                      { label: "Normal", color: "#3498db" },
+                      { label: "Wasteful", color: "#e74c3c" },
+                    ]}
+                  />
                 )}
               </ChartCard>
             </div>
@@ -2767,48 +1886,14 @@ export function Analytics() {
                   No data
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                    <Pie
-                      data={climatePieData}
-                      cx="50%"
-                      cy="46%"
-                      innerRadius="42%"
-                      outerRadius="68%"
-                      paddingAngle={3}
-                      dataKey="value"
-                      stroke="none"
-                      label={false}
-                    >
-                      {climatePieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      content={<PieTooltip total={climateFuzzy?.total || 0} />}
-                    />
-                    <Legend
-                      verticalAlign="bottom"
-                      height={40}
-                      wrapperStyle={{
-                        fontSize: 11,
-                        fontFamily: "Inter, sans-serif",
-                        paddingTop: 4,
-                      }}
-                      formatter={(value: string) => {
-                        const row = climatePieData.find((d) => d.name === value);
-                        const total =
-                          climatePieData.reduce((s, d) => s + d.value, 0) || 1;
-                        const pct = row
-                          ? Math.round((row.value / total) * 100)
-                          : 0;
-                        const label =
-                          value.charAt(0) + value.slice(1).toLowerCase();
-                        return `${label} ${pct}%`;
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <NivoPieChart
+                  data={climatePieData.map((d) => ({
+                    id: d.name,
+                    value: d.value,
+                    color: d.color,
+                  }))}
+                  height={280}
+                />
               )}
             </ChartCard>
             <ChartCard

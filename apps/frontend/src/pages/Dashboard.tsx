@@ -1,16 +1,5 @@
 // apps/frontend/src/pages/Dashboard.tsx
 import { useEffect, useMemo, useState } from "react";
-import {
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  Area,
-  ComposedChart,
-  ReferenceLine,
-} from "recharts";
 import { Zap, Activity, Gauge, DollarSign, Clock } from "lucide-react";
 import { StatCard, EST_COST_INFO } from "@/components/StatCard";
 import {
@@ -22,7 +11,6 @@ import {
 import { RangeFilter } from "@/components/RangeFilter";
 import { PowerOverview } from "@/components/PowerOverview";
 import { ClimateOverview } from "@/components/ClimateOverview";
-import { StableResponsiveContainer as ResponsiveContainer } from "@/components/StableResponsiveContainer";
 import {
   useLiveReading,
   useReadingHistory,
@@ -32,6 +20,7 @@ import { useAuth } from "@/services/auth";
 import { ensembleForecast, confidenceBands } from "@/lib/forecast";
 import { computeDomain } from "@/lib/chartDomain";
 import { useChartMaxPoints } from "@/hooks/useChartMaxPoints";
+import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
 
 function formatDateForTooltip(iso: string, spanHours: number): string {
   const d = new Date(iso);
@@ -86,161 +75,6 @@ function formatTick(v: string, spanHours: number): string {
     return d.toLocaleDateString([], { month: "short", day: "numeric" });
   }
   return d.toLocaleDateString([], { month: "short" });
-}
-
-const CF = { fontSize: 11, fontFamily: "Inter, sans-serif", fill: "#9CA3AF" };
-const TC =
-  "bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg px-3.5 py-2.5 text-xs font-sans";
-
-/** Drop Area fill twins (raw dataKey labels) so only Line series show. */
-function uniqueTooltipRows(
-  payload?: Array<{
-    value?: number;
-    name?: string;
-    color?: string;
-    dataKey?: string | number;
-    stroke?: string;
-    fill?: string;
-    hide?: boolean;
-  }>,
-) {
-  if (!payload?.length) return [];
-  const byKey = new Map<string, (typeof payload)[number]>();
-  for (const e of payload) {
-    if (e == null || e.value == null || e.hide) continue;
-    const dataKey = String(e.dataKey ?? e.name ?? "");
-    const name = String(e.name ?? dataKey);
-    const isRaw = name === dataKey || name === dataKey.toLowerCase();
-    const isFillOnly =
-      (e.stroke === "none" || e.stroke === undefined) &&
-      !!e.fill &&
-      e.fill !== "none";
-    if (isFillOnly && isRaw) continue;
-    if (isRaw && !e.stroke) continue;
-    const key = dataKey || name;
-    const prev = byKey.get(key);
-    if (!prev) {
-      byKey.set(key, e);
-      continue;
-    }
-    const prevRaw =
-      String(prev.name) === String(prev.dataKey) ||
-      String(prev.name) === String(prev.dataKey).toLowerCase();
-    if (!isRaw && prevRaw) byKey.set(key, e);
-  }
-  return Array.from(byKey.values()).filter(
-    (e) =>
-      typeof e.name === "string" &&
-      e.name.length > 0 &&
-      e.name !== String(e.dataKey),
-  );
-}
-
-function unitForSeries(name: string): string {
-  if (/\([^)]+\)/.test(name)) return "";
-  if (/current/i.test(name)) return "A";
-  if (/temp/i.test(name)) return "°C";
-  if (/humid/i.test(name)) return "%";
-  if (/power/i.test(name)) return "W";
-  return "";
-}
-
-function UnifiedTooltip({
-  active,
-  payload,
-  label,
-  spanHours,
-}: {
-  active?: boolean;
-  payload?: Array<{
-    value: number;
-    name: string;
-    color: string;
-    dataKey?: string;
-    stroke?: string;
-    fill?: string;
-  }>;
-  label?: string;
-  spanHours: number;
-}) {
-  const rows = uniqueTooltipRows(payload);
-  if (!active || !rows.length || !label) return null;
-  return (
-    <div className={TC}>
-      <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, spanHours)}
-      </p>
-      {rows.map((e) => {
-        const unit = unitForSeries(String(e.name));
-        const color = e.color || e.stroke || "#6B7280";
-        return (
-          <p
-            key={e.name}
-            className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
-          >
-            <span
-              className="inline-block w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: color }}
-            />
-            {e.name}:{" "}
-            <span className="text-gray-900 dark:text-white font-semibold">
-              {e.value}
-              {unit ? ` ${unit}` : ""}
-            </span>
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-
-function ClimateTooltip({
-  active,
-  payload,
-  label,
-  spanHours,
-}: {
-  active?: boolean;
-  payload?: Array<{
-    value: number;
-    name: string;
-    color: string;
-    dataKey?: string;
-    stroke?: string;
-    fill?: string;
-  }>;
-  label?: string;
-  spanHours: number;
-}) {
-  const rows = uniqueTooltipRows(payload);
-  if (!active || !rows.length || !label) return null;
-  return (
-    <div className={TC}>
-      <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, spanHours)}
-      </p>
-      {rows.map((e) => {
-        const unit = unitForSeries(String(e.name));
-        const color = e.color || e.stroke || "#6B7280";
-        return (
-          <p
-            key={e.name}
-            className="text-gray-400 dark:text-gray-400 flex items-center gap-2"
-          >
-            <span
-              className="inline-block w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: color }}
-            />
-            {e.name}:{" "}
-            <span className="text-gray-900 dark:text-white font-semibold">
-              {e.value}
-              {unit ? ` ${unit}` : ""}
-            </span>
-          </p>
-        );
-      })}
-    </div>
-  );
 }
 
 function getGreeting(): string {
@@ -577,226 +411,42 @@ export function Dashboard() {
                 {historyFetching || !chartsReady ? "Loading…" : "No data"}
               </div>
             ) : (
-              <ResponsiveContainer
-                width="100%"
+              <TimeSeriesChart
                 height={300}
+                spanHours={chartSpanHours}
+                xTickFormat={(d: Date) => formatTick(d.toISOString(), chartSpanHours)}
+                tooltipDateFormat={(d: Date) => formatDateForTooltip(d.toISOString(), chartSpanHours)}
+                leftTickFormat={(v: number) => String(v)}
+                rightTickFormat={(v: number) => String(v)}
+                leftDomain={[powerDomain[0], powerDomain[1]]}
+                rightDomain={[currentDomain[0], currentDomain[1]]}
+                nowMarker={pf?.forecast?.length ? new Date().toISOString() : null}
                 className={historyFetching ? "opacity-70 transition-opacity" : undefined}
-              >
-                <ComposedChart data={history} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#3B82F6"
-                        stopOpacity={0.32}
-                      />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#F59E0B"
-                        stopOpacity={0.32}
-                      />
-                      <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="pfb" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#3B82F6"
-                        stopOpacity={0.06}
-                      />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="cfb" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#F59E0B"
-                        stopOpacity={0.06}
-                      />
-                      <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    vertical={false}
-                    stroke="#E5E7EB"
-                    strokeOpacity={0.3}
-                  />
-                  <XAxis
-                    dataKey="timestamp"
-                    tick={CF}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v: string) => formatTick(v, chartSpanHours)}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    yAxisId="left"
-                    tick={CF}
-                    axisLine={false}
-                    tickLine={false}
-                    width={45}
-                    domain={powerDomain}
-                    allowDataOverflow={false}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={CF}
-                    axisLine={false}
-                    tickLine={false}
-                    width={45}
-                    domain={currentDomain}
-                    allowDataOverflow={false}
-                  />
-                  <Tooltip content={<UnifiedTooltip spanHours={chartSpanHours} />} />
-                  <Legend
-                    wrapperStyle={{
-                      fontSize: 11,
-                      fontFamily: "Inter, sans-serif",
-                    }}
-                    payload={[
-                      {
-                        value: "Power (W)",
-                        type: "line" as const,
-                        color: "#3B82F6",
-                        id: "p",
-                      },
-                      {
-                        value: "Current (A)",
-                        type: "line" as const,
-                        color: "#F59E0B",
-                        id: "c",
-                      },
-                      ...(pf.forecast.length
-                        ? [
-                            {
-                              value: "P. Forecast",
-                              type: "line" as const,
-                              color: "#3B82F6",
-                              id: "pf",
-                            },
-                          ]
-                        : []),
-                      ...(cfc.forecast.length
-                        ? [
-                            {
-                              value: "C. Forecast",
-                              type: "line" as const,
-                              color: "#F59E0B",
-                              id: "cf",
-                            },
-                          ]
-                        : []),
-                    ]}
-                  />
-                  {pf.forecast.length > 0 && (
-                    <ReferenceLine
-                      x={now}
-                      yAxisId="left"
-                      stroke="#9CA3AF"
-                      strokeWidth={1}
-                      strokeDasharray="4,4"
-                      label={{
-                        value: "Now",
-                        position: "top",
-                        fill: "#9CA3AF",
-                        fontSize: 10,
-                      }}
-                    />
-                  )}
-                  <Area
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="power"
-                    fill="url(#pg)"
-                    stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="power"
-                    stroke="#3B82F6"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#3B82F6" }}
-                    name="Power (W)"
-                  />
-                  <Area
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="current"
-                    fill="url(#cg)"
-                    stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="current"
-                    stroke="#F59E0B"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#F59E0B" }}
-                    name="Current (A)"
-                  />
-                  {pb.upper.length > 0 && (
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      data={pb.upper}
-                      dataKey="value"
-                      stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                      fill="url(#pfb)"
-                    />
-                  )}
-                  {pf.forecast.length > 0 && (
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      data={pf.forecast}
-                      dataKey="value"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      strokeDasharray="6,4"
-                      dot={false}
-                      name="P. Forecast"
-                      connectNulls
-                    />
-                  )}
-                  {cb.upper.length > 0 && (
-                    <Area
-                      yAxisId="right"
-                      type="monotone"
-                      data={cb.upper}
-                      dataKey="value"
-                      stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                      fill="url(#cfb)"
-                    />
-                  )}
-                  {cfc.forecast.length > 0 && (
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      data={cfc.forecast}
-                      dataKey="value"
-                      stroke="#F59E0B"
-                      strokeWidth={2}
-                      strokeDasharray="6,4"
-                      dot={false}
-                      name="C. Forecast"
-                      connectNulls
-                    />
-                  )}
-                </ComposedChart>
-              </ResponsiveContainer>
+                series={[
+                  { id: "power", label: "Power (W)", color: "#3B82F6", axis: "left", data: history.map((h: any) => ({ x: h.timestamp, y: h.power })), area: true },
+                  { id: "current", label: "Current (A)", color: "#F59E0B", axis: "right", data: history.map((h: any) => ({ x: h.timestamp, y: h.current })), area: true },
+                  ...(pf.forecast.length > 0
+                    ? [{ id: "pf", label: "P. Forecast", color: "#3B82F6", axis: "left" as const, data: pf.forecast.map((f: any) => ({ x: f.timestamp, y: f.value })), dashed: true }]
+                    : []),
+                  ...(cfc.forecast.length > 0
+                    ? [{ id: "cf", label: "C. Forecast", color: "#F59E0B", axis: "right" as const, data: cfc.forecast.map((f: any) => ({ x: f.timestamp, y: f.value })), dashed: true }]
+                    : []),
+                ]}
+                bands={[
+                  ...(pb.upper.length > 0
+                    ? [{ axis: "left" as const, upper: pb.upper.map((f: any) => ({ x: f.timestamp, y: f.value })), lower: pb.lower.map((f: any) => ({ x: f.timestamp, y: f.value })), color: "#3B82F6" }]
+                    : []),
+                  ...(cb.upper.length > 0
+                    ? [{ axis: "right" as const, upper: cb.upper.map((f: any) => ({ x: f.timestamp, y: f.value })), lower: cb.lower.map((f: any) => ({ x: f.timestamp, y: f.value })), color: "#F59E0B" }]
+                    : []),
+                ]}
+                legend={[
+                  { label: "Power (W)", color: "#3B82F6" },
+                  { label: "Current (A)", color: "#F59E0B" },
+                  ...(pf.forecast.length > 0 ? [{ label: "P. Forecast", color: "#3B82F6", dashed: true }] : []),
+                  ...(cfc.forecast.length > 0 ? [{ label: "C. Forecast", color: "#F59E0B", dashed: true }] : []),
+                ]}
+              />
             )}
           </ChartCard>
           <ChartCard title="Power Overview">
@@ -846,202 +496,41 @@ export function Dashboard() {
                 No data
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={260}>
-                <ComposedChart data={ch} margin={{ top: 12, right: 4, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#EF4444"
-                        stopOpacity={0.32}
-                      />
-                      <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#3B82F6"
-                        stopOpacity={0.32}
-                      />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="tfb" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#EF4444"
-                        stopOpacity={0.06}
-                      />
-                      <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="hfb" x1="0" y1="0" x2="0" y2="1">
-                      <stop
-                        offset="0%"
-                        stopColor="#3B82F6"
-                        stopOpacity={0.06}
-                      />
-                      <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    vertical={false}
-                    stroke="#E5E7EB"
-                    strokeOpacity={0.3}
-                  />
-                  <XAxis
-                    dataKey="timestamp"
-                    tick={CF}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v: string) => formatTick(v, chartSpanHours)}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    yAxisId="left"
-                    tick={CF}
-                    axisLine={false}
-                    tickLine={false}
-                    width={45}
-                    domain={tempDomain}
-                    allowDataOverflow={false}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={CF}
-                    axisLine={false}
-                    tickLine={false}
-                    width={40}
-                    domain={humidityDomain}
-                    allowDataOverflow={false}
-                  />
-                  <Tooltip content={<ClimateTooltip spanHours={chartSpanHours} />} />
-                  <Legend
-                    wrapperStyle={{
-                      fontSize: 11,
-                      fontFamily: "Inter, sans-serif",
-                    }}
-                    payload={[
-                      {
-                        value: "Temperature (°C)",
-                        type: "line" as const,
-                        color: "#EF4444",
-                        id: "t",
-                      },
-                      {
-                        value: "Humidity (%)",
-                        type: "line" as const,
-                        color: "#3B82F6",
-                        id: "h",
-                      },
-                    ]}
-                  />
-                  {tf.forecast.length > 0 && (
-                    <ReferenceLine
-                      x={now}
-                      yAxisId="left"
-                      stroke="#9CA3AF"
-                      strokeWidth={1}
-                      strokeDasharray="4,4"
-                      label={{
-                        value: "Now",
-                        position: "top",
-                        fill: "#9CA3AF",
-                        fontSize: 10,
-                      }}
-                    />
-                  )}
-                  <Area
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="temperature"
-                    fill="url(#tg)"
-                    stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="temperature"
-                    stroke="#EF4444"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#EF4444" }}
-                    name="Temperature (°C)"
-                  />
-                  <Area
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="humidity"
-                    fill="url(#hg)"
-                    stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="humidity"
-                    stroke="#3B82F6"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4, fill: "#3B82F6" }}
-                    name="Humidity (%)"
-                  />
-                  {tb.upper.length > 0 && (
-                    <Area
-                      yAxisId="left"
-                      type="monotone"
-                      data={tb.upper}
-                      dataKey="value"
-                      stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                      fill="url(#tfb)"
-                    />
-                  )}
-                  {tf.forecast.length > 0 && (
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      data={tf.forecast}
-                      dataKey="value"
-                      stroke="#EF4444"
-                      strokeWidth={2}
-                      strokeDasharray="6,4"
-                      dot={false}
-                      name="T. Forecast"
-                      connectNulls
-                    />
-                  )}
-                  {hb.upper.length > 0 && (
-                    <Area
-                      yAxisId="right"
-                      type="monotone"
-                      data={hb.upper}
-                      dataKey="value"
-                      stroke="none"
-                      tooltipType="none"
-                      legendType="none"
-                      fill="url(#hfb)"
-                    />
-                  )}
-                  {hf.forecast.length > 0 && (
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      data={hf.forecast}
-                      dataKey="value"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      strokeDasharray="6,4"
-                      dot={false}
-                      name="H. Forecast"
-                      connectNulls
-                    />
-                  )}
-                </ComposedChart>
-              </ResponsiveContainer>
+              <TimeSeriesChart
+                height={260}
+                spanHours={chartSpanHours}
+                xTickFormat={(d: Date) => formatTick(d.toISOString(), chartSpanHours)}
+                tooltipDateFormat={(d: Date) => formatDateForTooltip(d.toISOString(), chartSpanHours)}
+                leftTickFormat={(v: number) => String(v)}
+                rightTickFormat={(v: number) => String(v)}
+                leftDomain={[tempDomain[0], tempDomain[1]]}
+                rightDomain={[humidityDomain[0], humidityDomain[1]]}
+                nowMarker={tf?.forecast?.length ? new Date().toISOString() : null}
+                series={[
+                  { id: "temp", label: "Temperature (°C)", color: "#EF4444", axis: "left", data: ch.map((h: any) => ({ x: h.timestamp, y: h.temperature })), area: true },
+                  { id: "hum", label: "Humidity (%)", color: "#3B82F6", axis: "right", data: ch.map((h: any) => ({ x: h.timestamp, y: h.humidity })), area: true },
+                  ...(tf.forecast.length > 0
+                    ? [{ id: "tf", label: "T. Forecast", color: "#EF4444", axis: "left" as const, data: tf.forecast.map((f: any) => ({ x: f.timestamp, y: f.value })), dashed: true }]
+                    : []),
+                  ...(hf.forecast.length > 0
+                    ? [{ id: "hf", label: "H. Forecast", color: "#3B82F6", axis: "right" as const, data: hf.forecast.map((f: any) => ({ x: f.timestamp, y: f.value })), dashed: true }]
+                    : []),
+                ]}
+                bands={[
+                  ...(tb.upper.length > 0
+                    ? [{ axis: "left" as const, upper: tb.upper.map((f: any) => ({ x: f.timestamp, y: f.value })), lower: tb.lower.map((f: any) => ({ x: f.timestamp, y: f.value })), color: "#EF4444" }]
+                    : []),
+                  ...(hb.upper.length > 0
+                    ? [{ axis: "right" as const, upper: hb.upper.map((f: any) => ({ x: f.timestamp, y: f.value })), lower: hb.lower.map((f: any) => ({ x: f.timestamp, y: f.value })), color: "#3B82F6" }]
+                    : []),
+                ]}
+                legend={[
+                  { label: "Temperature (°C)", color: "#EF4444" },
+                  { label: "Humidity (%)", color: "#3B82F6" },
+                  ...(tf.forecast.length > 0 ? [{ label: "T. Forecast", color: "#EF4444", dashed: true }] : []),
+                  ...(hf.forecast.length > 0 ? [{ label: "H. Forecast", color: "#3B82F6", dashed: true }] : []),
+                ]}
+              />
             )}
           </ChartCard>
           <ChartCard title="Climate Overview">

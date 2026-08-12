@@ -516,16 +516,23 @@ export async function getRecentLogs(
   limit: number = 20,
   offset: number = 0,
   order: "desc" | "asc" = "desc",
+  from?: string,
+  to?: string,
 ): Promise<{ rows: any[]; total: number }> {
   if (!pool) return { rows: [], total: 0 };
 
   const dir = order === "asc" ? "ASC" : "DESC";
+  const where = `WHERE time >= COALESCE($4::timestamptz, '-infinity')
+                 AND time <= COALESCE($5::timestamptz, 'infinity')`;
   const [result, countRes] = await Promise.all([
     pool.query(
-      `SELECT * FROM sensor_readings ORDER BY time ${dir} LIMIT $1 OFFSET $2`,
-      [limit, offset],
+      `SELECT * FROM sensor_readings ${where} ORDER BY time ${dir} LIMIT $1 OFFSET $2`,
+      [limit, offset, null, from ?? null, to ?? null],
     ),
-    pool.query("SELECT COUNT(*)::int AS total FROM sensor_readings"),
+    pool.query(
+      `SELECT COUNT(*)::int AS total FROM sensor_readings ${where}`,
+      [null, null, null, from ?? null, to ?? null],
+    ),
   ]);
   const rows = result.rows.map((row: any) => ({
     timestamp: new Date(row.time).toISOString(),

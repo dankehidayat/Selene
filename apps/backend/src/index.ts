@@ -441,16 +441,20 @@ app.get(
           pageSize: { type: "string", default: "20" },
           offset: { type: "string", default: "0" },
           order: { type: "string", enum: ["desc", "asc"], default: "desc" },
+          from: { type: "string" },
+          to: { type: "string" },
         },
       },
     },
   },
   async (request) => {
-    const query = request.query as { pageSize?: string; offset?: string; order?: string };
+    const query = request.query as { pageSize?: string; offset?: string; order?: string; from?: string; to?: string };
     const pageSize = Math.min(Number(query.pageSize ?? "20") || 20, 500);
     const offset = Math.max(Number(query.offset ?? "0") || 0, 0);
     const order = query.order === "asc" ? "asc" : "desc";
-    const { rows, total } = await getRecentLogs(pageSize, offset, order);
+    const from = query.from ?? undefined;
+    const to = query.to ?? undefined;
+    const { rows, total } = await getRecentLogs(pageSize, offset, order, from, to);
     return { rows, total, pageSize, offset };
   },
 );

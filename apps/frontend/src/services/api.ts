@@ -278,12 +278,16 @@ async function fetchReadingsPage(
   pageSize: number,
   offset: number,
   order: "desc" | "asc",
+  from?: string,
+  to?: string,
 ): Promise<ReadingsPage> {
   const qs = new URLSearchParams({
     pageSize: String(pageSize),
     offset: String(offset),
     order,
   });
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
   const res = await fetch(`${API_BASE}/readings/logs?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch logs");
   return res.json();
@@ -293,10 +297,12 @@ export function useReadingsPage(
   pageSize: number,
   offset: number,
   order: "desc" | "asc",
+  from?: string | null,
+  to?: string | null,
 ) {
   return useQuery<ReadingsPage>({
-    queryKey: ["readings-page", pageSize, offset, order],
-    queryFn: () => fetchReadingsPage(pageSize, offset, order),
+    queryKey: ["readings-page", pageSize, offset, order, from ?? "all", to ?? "all"],
+    queryFn: () => fetchReadingsPage(pageSize, offset, order, from ?? undefined, to ?? undefined),
     placeholderData: keepPreviousData,
   });
 }

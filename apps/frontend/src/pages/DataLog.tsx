@@ -12,6 +12,7 @@ import {
   FileText,
 } from "lucide-react";
 import { ChartCard, controlBtnClass } from "@/components/ChartCard";
+import { RangeFilter } from "@/components/RangeFilter";
 import { useReadingsPage } from "@/services/api";
 import type { EnergyReading } from "@/types/energy";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,8 @@ export function DataLog() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [from, setFrom] = useState<string | null>(null);
+  const [to, setTo] = useState<string | null>(null);
   const [exportLoading, setExportLoading] = useState<string | null>(null);
   const [jumpValue, setJumpValue] = useState("");
   const [jumpError, setJumpError] = useState("");
@@ -31,7 +34,13 @@ export function DataLog() {
   const jumpInputRef = useRef<HTMLInputElement>(null);
 
   const offset = (page - 1) * pageSize;
-  const { data, isLoading } = useReadingsPage(pageSize, offset, sortOrder);
+  const { data, isLoading } = useReadingsPage(pageSize, offset, sortOrder, from, to);
+
+  const handleRangeChange = useCallback((f: string | null, t: string | null) => {
+    setFrom(f);
+    setTo(t);
+    setPage(1);
+  }, []);
 
   const allReadings: EnergyReading[] = data?.rows ?? [];
   const totalRows = data?.total ?? 0;
@@ -62,7 +71,10 @@ export function DataLog() {
   const handleExport = async (format: "csv" | "tsv") => {
     setExportLoading(format);
     try {
-      const res = await fetch(`${API_BASE}/readings/export?format=${format}`);
+      const qs = new URLSearchParams({ format });
+      if (from) qs.set("from", from);
+      if (to) qs.set("to", to);
+      const res = await fetch(`${API_BASE}/readings/export?${qs}`);
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -110,7 +122,13 @@ export function DataLog() {
             Historical sensor readings
           </p>
         </div>
-        <DropdownMenu.Root>
+        <div className="flex items-center gap-2">
+          <RangeFilter
+            from={from}
+            to={to}
+            onChange={handleRangeChange}
+          />
+          <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button type="button" className={cn(controlBtnClass, "px-3")}>
               <Download size={13} className="text-gray-500 dark:text-gray-400" />
@@ -143,6 +161,7 @@ export function DataLog() {
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
+        </div>
       </div>
 
       <ChartCard title="Sensor Readings">

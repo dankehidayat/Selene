@@ -48,8 +48,7 @@ function LayoutShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-app-surface overflow-x-hidden">
       {/*
         Sidebar slides with transform; main margin animates in the same duration
-        so content shrinks/grows. Charts freeze resize via StableResponsiveContainer
-        while html.sidebar-resizing is set (see shellLayout).
+        so content shrinks/grows (see shellLayout).
       */}
       <aside
         className={`hidden lg:flex flex-col fixed left-0 top-0 z-30 h-dvh max-h-dvh bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 transition-transform ease-out will-change-transform ${
