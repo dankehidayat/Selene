@@ -118,12 +118,32 @@ function getForecastHorizon(range: string): {
   }
 }
 
+function getForecastHorizonFromSpan(spanHours: number): { points: number; intervalMinutes: number } {
+  if (spanHours <= 2) return { points: 12, intervalMinutes: 5 };
+  if (spanHours <= 24) return { points: 24, intervalMinutes: 60 };
+  if (spanHours <= 168) return { points: 48, intervalMinutes: 60 };
+  if (spanHours <= 720) return { points: 30, intervalMinutes: 1440 };
+  if (spanHours <= 2160) return { points: 12, intervalMinutes: 10080 };
+  return { points: 12, intervalMinutes: 43200 };
+}
+
+type ForecastRange = string | { from: string; to: string };
+
+function resolveForecastHorizon(range: ForecastRange): {
+  points: number;
+  intervalMinutes: number;
+} {
+  if (typeof range === "string") return getForecastHorizon(range);
+  const spanHours = (new Date(range.to).getTime() - new Date(range.from).getTime()) / 3600000;
+  return getForecastHorizonFromSpan(spanHours);
+}
+
 export function linearRegressionForecast(
   data: DataPoint[],
-  range: string = "24h",
+  range: ForecastRange = "24h",
 ): ForecastPoint[] {
   if (data.length < 3) return [];
-  const { points, intervalMinutes } = getForecastHorizon(range);
+  const { points, intervalMinutes } = resolveForecastHorizon(range);
   const trainingSize = Math.min(data.length, Math.max(3, points * 3));
   const training = data.slice(-trainingSize);
   const xVals = training.map((_, i) => i);
@@ -146,10 +166,10 @@ export function linearRegressionForecast(
 
 export function patternForecast(
   data: DataPoint[],
-  range: string = "24h",
+  range: ForecastRange = "24h",
 ): ForecastPoint[] {
   if (data.length < 2) return [];
-  const { points, intervalMinutes } = getForecastHorizon(range);
+  const { points, intervalMinutes } = resolveForecastHorizon(range);
   const pattern = extractHourlyPattern(data);
   const ema = emaWithTrend(data.slice(-200).map((d) => d.value));
   const lastTs = new Date(data[data.length - 1].timestamp);
@@ -172,10 +192,10 @@ export function patternForecast(
 
 export function ensembleForecast(
   data: DataPoint[],
-  range: string = "24h",
+  range: ForecastRange = "24h",
 ): { forecast: ForecastPoint[]; confidence: number } {
   if (data.length < 3) return { forecast: [], confidence: 0 };
-  const { points } = getForecastHorizon(range);
+  const { points } = resolveForecastHorizon(range);
   const lr = linearRegressionForecast(data, range);
   const pat = patternForecast(data, range);
   if (!lr.length || !pat.length)

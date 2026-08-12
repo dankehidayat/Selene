@@ -16,7 +16,7 @@ selene.dankehidayat.my.id {
 	}
 
 	# API → monolith (full auth/admin/2fa/notifications/readings/analytics/firmware/mqtt/glossary).
-	# Frontend contract is /api/v1/* (per openapi-v1.yml). Monolith registers at /api/*,
+	# Frontend contract is /api/v1/* (per docs/openapi.yml). Monolith registers at /api/*,
 	# so rewrite the /v1 segment away → /api/* → 8787. Once a microservice takes over a
 	# v1 route (services/auth etc.), give its prefix its own route ABOVE this one.
 	route /api/v1/* {

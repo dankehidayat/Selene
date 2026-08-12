@@ -166,18 +166,10 @@ export function ChartCard({
   );
 }
 
-interface RangeSelectProps {
-  options: readonly string[];
-  value: string;
-  onChange: (value: string) => void;
-  labels?: Record<string, string>;
-}
-
 /**
  * Soft control chrome — inset ring instead of a heavy black outline so
  * Forecast / Range sit lightly on the card header.
- */
-export const controlBtnClass =
+ */export const controlBtnClass =
   "inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-gray-50/90 dark:bg-gray-800/70 ring-1 ring-inset ring-gray-200/90 dark:ring-gray-700/90 rounded-lg px-2.5 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700/80 active:scale-[0.98] transition outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50";
 
 export const controlBtnActiveClass =
@@ -221,46 +213,6 @@ export function ForecastLegendHint() {
         Predicted
       </span>
     </div>
-  );
-}
-
-export function RangeSelect({
-  options,
-  value,
-  onChange,
-  labels,
-}: RangeSelectProps) {
-  return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button type="button" className={controlBtnClass}>
-          {labels?.[value] ?? value}{" "}
-          <ChevronDown size={13} className="text-gray-500 dark:text-gray-400" />
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          sideOffset={6}
-          className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg py-1 min-w-[9rem] z-50"
-        >
-          {options.map((option) => (
-            <DropdownMenu.Item
-              key={option}
-              onSelect={() => onChange(option)}
-              className={cn(
-                "text-sm px-3 py-2 cursor-pointer outline-none transition rounded-lg mx-1",
-                option === value
-                  ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/40"
-                  : "text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700",
-              )}
-            >
-              {labels?.[option] ?? option}
-            </DropdownMenu.Item>
-          ))}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
   );
 }
 

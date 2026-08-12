@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **From/To time-range filter** — the preset range selector was replaced with a
+  real date/time filter on the analytics pages (energy, environment, fuzzy, and
+  climate-fuzzy tabs) and the dashboard. From/To pickers with time selectors
+  when both dates match; defaults to the last 24 hours. All analytics, readings
+  history, energy-history, and export endpoints accept optional `from` and `to`
+  query parameters (RFC 3339) that override the preset `range`; span is capped
+  at 2 years and `from < to` is enforced (HTTP 400 otherwise).
+- **`getExportDataInRange`** — `/api/readings/export` now accepts `from`/`to`
+  and streams only the selected window instead of the full hypertable.
+- **OpenAPI contract** — `docs/openapi-v1.yml` renamed to `docs/openapi.yml`;
+  `from`/`to` query parameters documented on analytics and export endpoints.
+- **Docs restructure** — `docs/` reorganized into numbered reference/runbook
+  documents (`01-ARCHITECTURE` … `08-LOCAL-DEVELOPMENT`); README rewritten as a
+  pure documentation entry point.
+
+### Fixed
+- **1h / 24h analytics crash** — empty time windows returned a legacy
+  `{ error: "No data in range" }` object which the frontend crashed on
+  (`Cannot read properties of undefined (reading 'from')`). Summary and climate
+  endpoints now return complete zero-filled shapes with a `timeSpan` for empty
+  windows; climate returns a full empty climate shape instead of an error.
+- **Degree-hours gap inflation** — the climate `degreeHours` accumulation had no
+  inter-sample gap cap, so ranges spanning offline periods (e.g. the 2026-04-30
+  → 2026-07-09 gap) inflated cooling/heating degree-hours. Now capped like the
+  energy path (`Math.min(dt, 5/60)`).
+- **EMQX crash-loop (bootstrap file)** — the EMQX node crashed in a 43s restart
+  loop because `EMQX_API_KEY__BOOTSTRAP_FILE` pointed at
+  `/opt/emqx/etc/default_api_key.conf`, which the production compose never
+  mounted. The bootstrap-API-key mechanism was removed entirely: no
+  `emqx-api-key.conf`, no `emqx-init` one-shot service, no bootstrap env vars.
+  Dashboard and MQTT device credentials persist in the `emqx_data` volume.
+- **Compose unification** — `docker-compose.modular.yml` was rewritten to read
+  all credentials from the root `.env` (no hardcoded values), share the same
+  named volumes as `docker-compose.yml` (`postgres_data`, `timescale_data`,
+  `emqx_data`, `emqx_log`), and align container names. Infra containers no
+  longer use `env_file` (the vector that injected the bootstrap var). The
+  obsolete `scripts/deploy.sh` was deleted; deployment is a plain
+  `docker compose -f docker-compose.modular.yml up -d --build`.
+
 ### Planned
 - **Auth microservice cutover** — route `/api/v1/auth/*`, `/api/v1/me*`,
   `/api/v1/admin/*`, `/api/v1/notifications/*`, `/api/v1/glossary/*` in

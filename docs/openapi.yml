@@ -393,6 +393,8 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/FormatParam"
+        - $ref: "#/components/parameters/FromParam"
+        - $ref: "#/components/parameters/ToParam"
       responses:
         "200":
           description: Text stream (text/csv or text/tab-separated-values).
@@ -450,6 +452,8 @@ paths:
       security: []
       parameters:
         - $ref: "#/components/parameters/RangeParam"
+        - $ref: "#/components/parameters/FromParam"
+        - $ref: "#/components/parameters/ToParam"
       responses:
         "200":
           description: Statistical summary.
@@ -467,6 +471,8 @@ paths:
       security: []
       parameters:
         - $ref: "#/components/parameters/RangeParam"
+        - $ref: "#/components/parameters/FromParam"
+        - $ref: "#/components/parameters/ToParam"
       responses:
         "400": { $ref: "#/components/responses/BadRequest" }
         "200":
@@ -484,6 +490,8 @@ paths:
       security: []
       parameters:
         - $ref: "#/components/parameters/RangeParam"
+        - $ref: "#/components/parameters/FromParam"
+        - $ref: "#/components/parameters/ToParam"
       responses:
         "400": { $ref: "#/components/responses/BadRequest" }
         "200":
@@ -501,6 +509,8 @@ paths:
       security: []
       parameters:
         - $ref: "#/components/parameters/RangeParam"
+        - $ref: "#/components/parameters/FromParam"
+        - $ref: "#/components/parameters/ToParam"
       responses:
         "400": { $ref: "#/components/responses/BadRequest" }
         "200":
@@ -545,6 +555,8 @@ paths:
       security: []
       parameters:
         - $ref: "#/components/parameters/RangeParam"
+        - $ref: "#/components/parameters/FromParam"
+        - $ref: "#/components/parameters/ToParam"
       responses:
         "200":
           description: Box plot statistics by category.
@@ -562,6 +574,8 @@ paths:
       security: []
       parameters:
         - $ref: "#/components/parameters/RangeParam"
+        - $ref: "#/components/parameters/FromParam"
+        - $ref: "#/components/parameters/ToParam"
       responses:
         "400": { $ref: "#/components/responses/BadRequest" }
         "200":
@@ -789,6 +803,22 @@ components:
         type: string
         enum: [1h, 24h, 7d, 30d, 3m, 6m, 1y]
         default: 24h
+    FromParam:
+      name: from
+      in: query
+      required: false
+      description: Inclusive start of the time window (RFC 3339 / ISO 8601, e.g. 2026-08-01T00:00:00Z). Overrides the preset `range` when both are provided. Defaults to 24 hours before `to` when omitted.
+      schema:
+        type: string
+        format: date-time
+    ToParam:
+      name: to
+      in: query
+      required: false
+      description: Inclusive end of the time window (RFC 3339 / ISO 8601). Defaults to now when omitted. Must be after `from`; span is capped at 2 years.
+      schema:
+        type: string
+        format: date-time
     FormatParam:
       name: format
       in: query

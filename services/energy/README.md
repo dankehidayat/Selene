@@ -1,3 +1,3 @@
 # @selene/energy
 
-Port **3002** (core). See `docs/MODULAR_MICROSERVICES.md`.
+Port **3002** (core). See `docs/01-ARCHITECTURE.md`.

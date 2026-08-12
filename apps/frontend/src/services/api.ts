@@ -5,6 +5,20 @@ import type { EnergyReading } from "@/types/energy";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
+export interface TimeRangeQuery {
+  range?: string;
+  from?: string;
+  to?: string;
+}
+
+function buildTimeRangeParams(query: TimeRangeQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  if (query.range) p.set("range", query.range);
+  if (query.from) p.set("from", query.from);
+  if (query.to) p.set("to", query.to);
+  return p;
+}
+
 // ── SSE Live Data ─────────────────────────────────────────
 export function useLiveReading() {
   const [data, setData] = useState<EnergyReading | null>(null);
@@ -150,8 +164,8 @@ export interface BlandAltmanResult {
   lowerLoA: number;
 }
 
-async function fetchHistory(range: string, maxPoints?: number) {
-  const qs = new URLSearchParams({ range });
+async function fetchHistory(query: TimeRangeQuery, maxPoints?: number) {
+  const qs = buildTimeRangeParams(query);
   if (maxPoints != null) qs.set("maxPoints", String(maxPoints));
   const res = await fetch(`${API_BASE}/readings/history?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch history");
@@ -164,24 +178,25 @@ async function fetchRecentReadings(limit: number) {
   return res.json();
 }
 
-async function fetchAnalyticsSummary(range: string): Promise<AnalyticsSummary> {
-  const res = await fetch(`${API_BASE}/analytics/summary?range=${range}`);
+async function fetchAnalyticsSummary(query: TimeRangeQuery): Promise<AnalyticsSummary> {
+  const params = buildTimeRangeParams(query);
+  const res = await fetch(`${API_BASE}/analytics/summary?${params}`);
   if (!res.ok) throw new Error("Failed to fetch analytics");
   return res.json();
 }
 
-async function fetchClimateSummary(range: string): Promise<ClimateSummary> {
-  const res = await fetch(`${API_BASE}/analytics/climate?range=${range}`);
+async function fetchClimateSummary(query: TimeRangeQuery): Promise<ClimateSummary> {
+  const params = buildTimeRangeParams(query);
+  const res = await fetch(`${API_BASE}/analytics/climate?${params}`);
   if (!res.ok) throw new Error("Failed to fetch climate");
   return res.json();
 }
 
 async function fetchFuzzyDistribution(
-  range: string,
+  query: TimeRangeQuery,
 ): Promise<FuzzyDistribution> {
-  const res = await fetch(
-    `${API_BASE}/analytics/fuzzy-distribution?range=${range}`,
-  );
+  const params = buildTimeRangeParams(query);
+  const res = await fetch(`${API_BASE}/analytics/fuzzy-distribution?${params}`);
   if (!res.ok) throw new Error("Failed to fetch fuzzy");
   return res.json();
 }
@@ -198,20 +213,23 @@ async function fetchDecisionSurface(): Promise<DecisionSurfacePoint[]> {
   return res.json();
 }
 
-async function fetchBoxPlot(range: string): Promise<BoxPlotData[]> {
-  const res = await fetch(`${API_BASE}/analytics/box-plot?range=${range}`);
+async function fetchBoxPlot(query: TimeRangeQuery): Promise<BoxPlotData[]> {
+  const params = buildTimeRangeParams(query);
+  const res = await fetch(`${API_BASE}/analytics/box-plot?${params}`);
   if (!res.ok) throw new Error("Failed to fetch box plot");
   return res.json();
 }
 
-async function fetchBlandAltman(range: string): Promise<BlandAltmanResult> {
-  const res = await fetch(`${API_BASE}/analytics/bland-altman?range=${range}`);
+async function fetchBlandAltman(query: TimeRangeQuery): Promise<BlandAltmanResult> {
+  const params = buildTimeRangeParams(query);
+  const res = await fetch(`${API_BASE}/analytics/bland-altman?${params}`);
   if (!res.ok) throw new Error("Failed to fetch Bland-Altman");
   return res.json();
 }
 
-async function fetchEnergyHistory(range: string, maxPoints?: number) {
-  const qs = new URLSearchParams({ range, type: "energy" });
+async function fetchEnergyHistory(query: TimeRangeQuery, maxPoints?: number) {
+  const qs = buildTimeRangeParams(query);
+  qs.set("type", "energy");
   if (maxPoints != null) qs.set("maxPoints", String(maxPoints));
   const res = await fetch(`${API_BASE}/readings/history?${qs}`);
   if (!res.ok) throw new Error("Failed to fetch energy history");
@@ -219,7 +237,7 @@ async function fetchEnergyHistory(range: string, maxPoints?: number) {
 }
 
 export function useReadingHistory(
-  range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
+  query: TimeRangeQuery,
   enabled = true,
   maxPoints?: number,
 ) {
@@ -233,8 +251,8 @@ export function useReadingHistory(
       humidity: number;
     }>
   >({
-    queryKey: ["reading-history", range, maxPoints ?? "auto"],
-    queryFn: () => fetchHistory(range, maxPoints),
+    queryKey: ["reading-history", query, maxPoints ?? "auto"],
+    queryFn: () => fetchHistory(query, maxPoints),
     refetchInterval: 30_000,
     enabled,
     placeholderData: keepPreviousData,
@@ -242,13 +260,13 @@ export function useReadingHistory(
 }
 
 export function useEnergyHistory(
-  range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
+  query: TimeRangeQuery,
   enabled = true,
   maxPoints?: number,
 ) {
   return useQuery<Array<{ timestamp: string; energy_kwh: number }>>({
-    queryKey: ["energy-history", range, maxPoints ?? "auto"],
-    queryFn: () => fetchEnergyHistory(range, maxPoints),
+    queryKey: ["energy-history", query, maxPoints ?? "auto"],
+    queryFn: () => fetchEnergyHistory(query, maxPoints),
     refetchInterval: 30_000,
     enabled,
     placeholderData: keepPreviousData,
@@ -264,12 +282,12 @@ export function useRecentReadings(limit = 20) {
 }
 
 export function useAnalyticsSummary(
-  range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
+  query: TimeRangeQuery,
   enabled = true,
 ) {
   return useQuery<AnalyticsSummary>({
-    queryKey: ["analytics-summary", range],
-    queryFn: () => fetchAnalyticsSummary(range),
+    queryKey: ["analytics-summary", query],
+    queryFn: () => fetchAnalyticsSummary(query),
     refetchInterval: 30_000,
     enabled,
     placeholderData: keepPreviousData,
@@ -279,12 +297,12 @@ export function useAnalyticsSummary(
 }
 
 export function useClimateSummary(
-  range: "1h" | "24h" | "7d" | "30d" | "3m" | "6m" | "1y",
+  query: TimeRangeQuery,
   enabled = true,
 ) {
   return useQuery<ClimateSummary>({
-    queryKey: ["climate-summary", range],
-    queryFn: () => fetchClimateSummary(range),
+    queryKey: ["climate-summary", query],
+    queryFn: () => fetchClimateSummary(query),
     refetchInterval: 30_000,
     enabled,
     placeholderData: keepPreviousData,
@@ -292,10 +310,10 @@ export function useClimateSummary(
   });
 }
 
-export function useFuzzyDistribution(range: string, enabled = true) {
+export function useFuzzyDistribution(query: TimeRangeQuery, enabled = true) {
   return useQuery<FuzzyDistribution>({
-    queryKey: ["fuzzy-distribution", range],
-    queryFn: () => fetchFuzzyDistribution(range),
+    queryKey: ["fuzzy-distribution", query],
+    queryFn: () => fetchFuzzyDistribution(query),
     refetchInterval: 60_000,
     enabled,
     placeholderData: keepPreviousData,
@@ -320,20 +338,20 @@ export function useDecisionSurface(enabled = true) {
   });
 }
 
-export function useBoxPlot(range: string, enabled = true) {
+export function useBoxPlot(query: TimeRangeQuery, enabled = true) {
   return useQuery<BoxPlotData[]>({
-    queryKey: ["box-plot", range],
-    queryFn: () => fetchBoxPlot(range),
+    queryKey: ["box-plot", query],
+    queryFn: () => fetchBoxPlot(query),
     refetchInterval: 60_000,
     enabled,
     placeholderData: keepPreviousData,
   });
 }
 
-export function useBlandAltman(range: string, enabled = true) {
+export function useBlandAltman(query: TimeRangeQuery, enabled = true) {
   return useQuery<BlandAltmanResult>({
-    queryKey: ["bland-altman", range],
-    queryFn: () => fetchBlandAltman(range),
+    queryKey: ["bland-altman", query],
+    queryFn: () => fetchBlandAltman(query),
     refetchInterval: 60_000,
     enabled,
     placeholderData: keepPreviousData,
@@ -357,19 +375,20 @@ export interface ClimateFuzzyDistribution {
 }
 
 async function fetchClimateFuzzyDistribution(
-  range: string,
+  query: TimeRangeQuery,
 ): Promise<ClimateFuzzyDistribution> {
+  const params = buildTimeRangeParams(query);
   const res = await fetch(
-    `${API_BASE}/analytics/climate-fuzzy-distribution?range=${range}`,
+    `${API_BASE}/analytics/climate-fuzzy-distribution?${params}`,
   );
   if (!res.ok) throw new Error("Failed to fetch climate fuzzy distribution");
   return res.json();
 }
 
-export function useClimateFuzzyDistribution(range: string, enabled = true) {
+export function useClimateFuzzyDistribution(query: TimeRangeQuery, enabled = true) {
   return useQuery<ClimateFuzzyDistribution>({
-    queryKey: ["climate-fuzzy-distribution", range],
-    queryFn: () => fetchClimateFuzzyDistribution(range),
+    queryKey: ["climate-fuzzy-distribution", query],
+    queryFn: () => fetchClimateFuzzyDistribution(query),
     refetchInterval: 60_000,
     enabled,
     placeholderData: keepPreviousData,

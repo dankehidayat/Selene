@@ -259,14 +259,26 @@ export function clampMaxPoints(requested?: number, fallback = 400): number {
 /**
  * Which store to read for a UI range.
  * Short: raw. Medium: 5m CAGG. Long: 1h CAGG.
+ *
+ * When `spanHours` is provided (custom From/To), resolve by span:
+ *  ≤ 2h → raw,  ≤ 192h (8d) → 5m,  else → 1h.
  */
-function chartSourceForRange(rangeOrBucket?: string): {
+function chartSourceForRange(rangeOrBucket?: string, spanHours?: number): {
   source: "raw" | "5m" | "1h";
   interval: string | null;
   defaultMax: number;
   smoothAlpha: number;
   rawLimit: number;
 } {
+  // Span-based resolution for custom From/To ranges
+  if (spanHours != null) {
+    if (spanHours <= 2)
+      return { source: "raw", interval: null, defaultMax: 480, smoothAlpha: 0.12, rawLimit: 3600 };
+    if (spanHours <= 192)
+      return { source: "5m", interval: "5 minutes", defaultMax: 400, smoothAlpha: 0.22, rawLimit: 4000 };
+    return { source: "1h", interval: "1 hour", defaultMax: 360, smoothAlpha: 0.25, rawLimit: 4000 };
+  }
+
   if (rangeOrBucket === "hour")
     return {
       source: "5m",
@@ -378,10 +390,11 @@ export async function getReadingsInRange(
   to: string,
   rangeOrBucket?: string,
   maxPointsArg?: number,
+  spanHours?: number,
 ): Promise<any[]> {
   if (!pool) return [];
 
-  const plan = chartSourceForRange(rangeOrBucket);
+  const plan = chartSourceForRange(rangeOrBucket, spanHours);
   const maxPoints = clampMaxPoints(maxPointsArg, plan.defaultMax);
   let rows: any[];
 
@@ -571,13 +584,20 @@ export async function getAllReadingsForAnalytics(
   from: string,
   to: string,
   rangeOrBucket?: string,
+  spanHours?: number,
 ): Promise<any[]> {
   if (!pool) return [];
 
-  const longRange = ["24h", "7d", "30d", "3m", "6m", "1y", "day", "month"].includes(
-    rangeOrBucket ?? "",
-  );
-  const prefer1h = ["30d", "3m", "6m", "1y", "month"].includes(rangeOrBucket ?? "");
+  // Span-based resolution for custom From/To: ≤2h raw, ≤8d 5m, else 1h.
+  const spanBased = spanHours != null;
+  const longRange = spanBased
+    ? spanHours > 2
+    : ["24h", "7d", "30d", "3m", "6m", "1y", "day", "month"].includes(
+        rangeOrBucket ?? "",
+      );
+  const prefer1h = spanBased
+    ? spanHours > 192
+    : ["30d", "3m", "6m", "1y", "month"].includes(rangeOrBucket ?? "");
   // 1y hourly ≈ 8760; keep full span. Ceiling only for denser series.
   const maxClassify = prefer1h ? 9000 : longRange ? 6000 : 3000;
 
@@ -761,6 +781,7 @@ export async function getEnergySummaryFromCagg(
   from: string,
   to: string,
   range: string,
+  spanHours?: number,
 ): Promise<null | {
   dataPoints: number;
   timeSpan: { from: string; to: string };
@@ -779,7 +800,8 @@ export async function getEnergySummaryFromCagg(
 }> {
   if (!pool) return null;
 
-  const prefer1h = ["30d", "3m", "6m", "1y"].includes(range);
+  // Span-based: >192h (8d) → 1h, else 5m. Falls back to preset names when spanHours absent.
+  const prefer1h = spanHours != null ? spanHours > 192 : ["30d", "3m", "6m", "1y"].includes(range);
   const view = prefer1h || range !== "1h" ? (prefer1h ? CAGG_1H : CAGG_5M) : null;
   if (!view || !(await caggHasRows(view, from, to))) return null;
 
@@ -1038,3 +1060,36 @@ export async function getTimescaleStats(): Promise<any> {
 export async function closeTimescaleDB(): Promise<void> {
   if (pool) await pool.end();
 }
+
+/** Export rows within an optional [from, to] window (both optional = all rows). */
+export async function getExportDataInRange(
+  from?: string,
+  to?: string,
+): Promise<any[]> {
+  if (!pool) return [];
+  const result = from || to
+    ? await pool.query(
+        `SELECT * FROM sensor_readings
+         WHERE time >= COALESCE($1::timestamptz, '-infinity')
+           AND time <= COALESCE($2::timestamptz, 'infinity')
+         ORDER BY time ASC`,
+        [from ?? null, to ?? null],
+      )
+    : await pool.query(`SELECT * FROM sensor_readings ORDER BY time ASC`);
+  return result.rows.map((row: any) => ({
+    timestamp: new Date(row.time).toISOString(),
+    acVoltage: row.ac_voltage,
+    acCurrent: row.ac_current,
+    acPower: row.ac_power,
+    cosPhi: row.cos_phi,
+    apparentPower: row.apparent_power,
+    totalEnergy: row.total_energy,
+    frequency: row.frequency,
+    reactivePower: row.reactive_power,
+    temperature: row.temperature,
+    humidity: row.humidity,
+    tempComfort: row.temp_comfort,
+    energyStatus: row.energy_status,
+  }));
+}
+

@@ -15,8 +15,6 @@ services/*/.env.*
 dist
 build
 *.tsbuildinfo
-deploy/emqx-api-key.conf
-deploy/*.api-key.conf
 Dockerfile*
 docker-entrypoint.sh
 tmp

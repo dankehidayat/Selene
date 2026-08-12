@@ -30,7 +30,7 @@ Backend must be running (`bun run dev:backend` or Docker).
 Built into Docker (`apps/frontend/Dockerfile`).  
 `VITE_API_BASE_URL` is injected at **image build** time from compose (e.g. `https://selene.dankehidayat.my.id/api`).
 
-After UI changes on the VPS:
+After UI changes on the server:
 
 ```bash
 docker compose build frontend --no-cache
@@ -69,4 +69,4 @@ Admin **Firmware** tab uploads a compiled `.bin` and triggers MQTT OTA; `Eco Off
 ## Related docs
 
 - [Root README](../../README.md)  
-- [Modular microservices](../../docs/MODULAR_MICROSERVICES.md)  
+- [Modular microservices](../../docs/01-ARCHITECTURE.md)  

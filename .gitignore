@@ -61,7 +61,3 @@ apps/frontend/dist/
 tmp/
 temp/
 *.tmp
-
-# EMQX bootstrap API key (per-machine secret)
-deploy/emqx-api-key.conf
-deploy/*.api-key.conf

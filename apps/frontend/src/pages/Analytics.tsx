@@ -37,11 +37,11 @@ import {
 } from "lucide-react";
 import {
   ChartCard,
-  RangeSelect,
   ToggleControl,
   ConfidencePill,
   ForecastLegendHint,
 } from "@/components/ChartCard";
+import { RangeFilter } from "@/components/RangeFilter";
 import { StatCard, EST_COST_INFO, TOTAL_ENERGY_INFO } from "@/components/StatCard";
 import { InfoTip } from "@/components/InfoTip";
 import { useTabFromSearch } from "@/hooks/useTabFromSearch";
@@ -59,17 +59,6 @@ import {
 } from "@/services/api";
 import { ensembleForecast, confidenceBands } from "@/lib/forecast";
 import { cn } from "@/lib/utils";
-
-const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
-const RANGE_LABELS: Record<string, string> = {
-  "1h": "1 Hour",
-  "24h": "24 Hours",
-  "7d": "7 Days",
-  "30d": "30 Days",
-  "3m": "3 Months",
-  "6m": "6 Months",
-  "1y": "1 Year",
-};
 
 const FUZZY_COLORS: Record<string, string> = {
   ECONOMICAL: "#2ecc71",
@@ -117,66 +106,66 @@ function hourToISO(hour: number): string {
   ).toISOString();
 }
 
-function formatDateForTooltip(iso: string, range: string): string {
+function formatDateForTooltip(iso: string, spanHours: number): string {
   const d = new Date(iso);
   const now = new Date();
   const isFuture = d > now;
   const prefix = isFuture ? "Predicted · " : "";
-  switch (range) {
-    case "1h":
-      return (
-        prefix +
-        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      );
-    case "24h":
-      return (
-        prefix +
-        d.toLocaleDateString([], { weekday: "short" }) +
-        " " +
-        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      );
-    case "7d":
-      return (
-        prefix +
-        d.toLocaleDateString([], {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        }) +
-        " " +
-        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      );
-    case "30d":
-    case "3m":
-      return (
-        prefix + d.toLocaleDateString([], { month: "short", day: "numeric" })
-      );
-    case "6m":
-    case "1y":
-      return (
-        prefix + d.toLocaleDateString([], { month: "short", year: "numeric" })
-      );
-    default:
-      return prefix + d.toLocaleString();
+  if (spanHours <= 2) {
+    return (
+      prefix +
+      d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
   }
+  if (spanHours <= 48) {
+    return (
+      prefix +
+      d.toLocaleDateString([], { weekday: "short" }) +
+      " " +
+      d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
+  }
+  if (spanHours <= 168) {
+    return (
+      prefix +
+      d.toLocaleDateString([], {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }) +
+      " " +
+      d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
+  }
+  if (spanHours <= 720) {
+    return (
+      prefix + d.toLocaleDateString([], { month: "short", day: "numeric" })
+    );
+  }
+  return (
+    prefix + d.toLocaleDateString([], { month: "short", year: "numeric" })
+  );
 }
-function formatTick(v: string, range: string): string {
+function formatTick(v: string, spanHours: number): string {
   const d = new Date(v);
-  switch (range) {
-    case "1h":
-    case "24h":
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    case "7d":
-      return d.toLocaleDateString([], { weekday: "short" });
-    case "30d":
-    case "3m":
-      return d.toLocaleDateString([], { month: "short", day: "numeric" });
-    case "6m":
-    case "1y":
-      return d.toLocaleDateString([], { month: "short" });
-    default:
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (spanHours <= 48) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
+  if (spanHours <= 168) {
+    return d.toLocaleDateString([], { weekday: "short" });
+  }
+  if (spanHours <= 720) {
+    return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+  return d.toLocaleDateString([], { month: "short" });
+}
+
+/** Hours between from/to (default 24 when unset). */
+function getSpanHours(from: string | null, to: string | null): number {
+  if (from && to) {
+    return (new Date(to).getTime() - new Date(from).getTime()) / 3600000;
+  }
+  return 24;
 }
 
 /**
@@ -236,19 +225,19 @@ function PowerTooltip({
   active,
   payload,
   label,
-  range,
+  spanHours,
 }: {
   active?: boolean;
   payload?: any[];
   label?: string;
-  range: string;
+  spanHours: number;
 }) {
   const rows = uniqueTooltipRows(payload);
   if (!active || !rows.length || !label) return null;
   return (
     <div className={TOOLTIP_CLASS}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, range)}
+        {formatDateForTooltip(label, spanHours)}
       </p>
       {rows.map((e: any) => {
         const unit = seriesUnit(String(e.name));
@@ -277,12 +266,12 @@ function EnergyTooltip({
   active,
   payload,
   label,
-  range,
+  spanHours,
 }: {
   active?: boolean;
   payload?: any[];
   label?: string;
-  range: string;
+  spanHours: number;
 }) {
   const rows = uniqueTooltipRows(payload);
   const row =
@@ -292,7 +281,7 @@ function EnergyTooltip({
   return (
     <div className={TOOLTIP_CLASS}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, range)}
+        {formatDateForTooltip(label, spanHours)}
       </p>
       <p className="text-gray-400 dark:text-gray-400 flex items-center gap-2">
         <span
@@ -312,19 +301,19 @@ function EnvTooltip({
   active,
   payload,
   label,
-  range,
+  spanHours,
 }: {
   active?: boolean;
   payload?: any[];
   label?: string;
-  range: string;
+  spanHours: number;
 }) {
   const rows = uniqueTooltipRows(payload);
   if (!active || !rows.length || !label) return null;
   return (
     <div className={TOOLTIP_CLASS}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, range)}
+        {formatDateForTooltip(label, spanHours)}
       </p>
       {rows.map((e: any) => {
         const unit = seriesUnit(String(e.name));
@@ -867,9 +856,9 @@ const ANALYTICS_TAB_KEYS = [
 ] as const;
 
 export function Analytics() {
-  const [energyRange, setEnergyRange] = useState<string>("7d");
-  const [climateRange, setClimateRange] = useState<string>("7d");
-  const [climateFuzzyRange, setClimateFuzzyRange] = useState<string>("7d");
+  const [energyRange, setEnergyRange] = useState<{ from: string | null; to: string | null }>({ from: null, to: null });
+  const [climateRange, setClimateRange] = useState<{ from: string | null; to: string | null }>({ from: null, to: null });
+  const [climateFuzzyRange, setClimateFuzzyRange] = useState<{ from: string | null; to: string | null }>({ from: null, to: null });
   const [showForecast, setShowForecast] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "energy" | "environment" | "fuzzy" | "climate-fuzzy"
@@ -893,6 +882,19 @@ export function Analytics() {
   const isFuzzyTab = activeTab === "fuzzy";
   const isClimateFuzzyTab = activeTab === "climate-fuzzy";
   const chartMaxPoints = useChartMaxPoints();
+  const energySpanHours = getSpanHours(energyRange.from, energyRange.to);
+  const climateSpanHours = getSpanHours(climateRange.from, climateRange.to);
+  const climateFuzzySpanHours = getSpanHours(climateFuzzyRange.from, climateFuzzyRange.to);
+
+  const energyQuery = energyRange.from
+    ? { from: energyRange.from, to: energyRange.to! }
+    : { range: "24h" };
+  const climateQuery = climateRange.from
+    ? { from: climateRange.from, to: climateRange.to! }
+    : { range: "24h" };
+  const climateFuzzyQuery = climateFuzzyRange.from
+    ? { from: climateFuzzyRange.from, to: climateFuzzyRange.to! }
+    : { range: "24h" };
 
   // Stage 1: lightweight summary/stats first
   const {
@@ -900,14 +902,14 @@ export function Analytics() {
     isLoading: summaryLoading,
     isSuccess: summaryReady,
     isError: summaryFailed,
-  } = useAnalyticsSummary(energyRange as any, isEnergyTab);
+  } = useAnalyticsSummary(energyQuery, isEnergyTab);
 
   const {
     data: climate,
     isLoading: climateLoading,
     isSuccess: climateReady,
     isError: climateFailed,
-  } = useClimateSummary(climateRange as any, isEnvTab);
+  } = useClimateSummary(climateQuery, isEnvTab);
 
   // Stage 2: charts only after summary settles (progressive loading)
   const energyChartsReady =
@@ -916,22 +918,22 @@ export function Analytics() {
     isEnvTab && (climateReady || climateFailed || !climateLoading);
 
   const { data: history = [], isLoading: historyLoading } = useReadingHistory(
-    energyRange as any,
+    energyQuery,
     energyChartsReady,
     chartMaxPoints,
   );
   const { data: energyHistory = [], isLoading: energyLoading } =
-    useEnergyHistory(energyRange as any, energyChartsReady, chartMaxPoints);
+    useEnergyHistory(energyQuery, energyChartsReady, chartMaxPoints);
 
   // Fuzzy: distribution first wave; heavy static bits after distribution lands
   const { data: fuzzy, isLoading: fuzzyLoading, isSuccess: fuzzyReady } =
-    useFuzzyDistribution(energyRange, isFuzzyTab);
+    useFuzzyDistribution(energyQuery, isFuzzyTab);
   const { data: membership } = useMembershipData(isFuzzyTab && fuzzyReady);
   const { data: decisionSurface } = useDecisionSurface(
     isFuzzyTab && fuzzyReady,
   );
   const { data: climateFuzzy, isLoading: climateFuzzyLoading } =
-    useClimateFuzzyDistribution(climateFuzzyRange, isClimateFuzzyTab);
+    useClimateFuzzyDistribution(climateFuzzyQuery, isClimateFuzzyTab);
 
   const allPeakHours = Array.from({ length: 24 }, (_, i) => {
     const found = summary?.peakHours?.find((p: any) => p.hour === i);
@@ -1025,7 +1027,7 @@ export function Analytics() {
           timestamp: h.timestamp,
           value: h.power,
         })),
-        energyRange,
+        energyRange.from ? { from: energyRange.from, to: energyRange.to! } : "24h",
       )
     : { forecast: [], confidence: 0 };
   const efc = showForecast
@@ -1034,7 +1036,7 @@ export function Analytics() {
           timestamp: h.timestamp,
           value: h.energy_kwh,
         })),
-        energyRange,
+        energyRange.from ? { from: energyRange.from, to: energyRange.to! } : "24h",
       )
     : { forecast: [], confidence: 0 };
   const pb = pf.forecast.length
@@ -1055,7 +1057,7 @@ export function Analytics() {
           timestamp: h.timestamp,
           value: h.temperature,
         })),
-        climateRange,
+        climateRange.from ? { from: climateRange.from, to: climateRange.to! } : "24h",
       )
     : { forecast: [], confidence: 0 };
   const hf = showForecast
@@ -1064,7 +1066,7 @@ export function Analytics() {
           timestamp: h.timestamp,
           value: h.humidity,
         })),
-        climateRange,
+        climateRange.from ? { from: climateRange.from, to: climateRange.to! } : "24h",
       )
     : { forecast: [], confidence: 0 };
   const tb = tf.forecast.length
@@ -1243,11 +1245,10 @@ export function Analytics() {
                 >
                   Forecast
                 </ToggleControl>
-                <RangeSelect
-                  options={RANGE_OPTIONS}
-                  value={energyRange}
-                  onChange={setEnergyRange}
-                  labels={RANGE_LABELS}
+                <RangeFilter
+                  from={energyRange.from}
+                  to={energyRange.to}
+                  onChange={(from, to) => setEnergyRange({ from, to })}
                 />
               </div>
             }
@@ -1328,7 +1329,7 @@ export function Analytics() {
                     tick={CHART_FONT}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(v: string) => formatTick(v, energyRange)}
+                    tickFormatter={(v: string) => formatTick(v, energySpanHours)}
                     interval="preserveStartEnd"
                   />
                   <YAxis
@@ -1350,7 +1351,7 @@ export function Analytics() {
                     domain={energyCurrentDomain}
                     allowDataOverflow={false}
                   />
-                  <Tooltip content={<PowerTooltip range={energyRange} />} />
+                  <Tooltip content={<PowerTooltip spanHours={energySpanHours} />} />
                   <Legend
                     wrapperStyle={{
                       fontSize: 11,
@@ -1517,11 +1518,7 @@ export function Analytics() {
 
           <div className="grid lg:grid-cols-2 gap-4">
             <ChartCard title="Usage Pattern" chartId="chart-peak-hours">
-              {energyRange === "1h" ? (
-                <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400 px-4 text-center">
-                  Hourly breakdown requires at least 24 hours of data
-                </div>
-              ) : allPeakHours.length === 0 ? (
+              {allPeakHours.length === 0 ? (
                 <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   No data
                 </div>
@@ -1571,11 +1568,7 @@ export function Analytics() {
               title="Energy Consumption"
               chartId="chart-energy-consumption"
             >
-              {energyRange === "1h" ? (
-                <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400 px-4 text-center">
-                  Energy data requires at least 24 hours of data
-                </div>
-              ) : energyLoading ? (
+              {energyLoading ? (
                 <div className="flex h-[300px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                   Loading...
                 </div>
@@ -1628,7 +1621,7 @@ export function Analytics() {
                       tick={CHART_FONT}
                       axisLine={false}
                       tickLine={false}
-                      tickFormatter={(v: string) => formatTick(v, energyRange)}
+                      tickFormatter={(v: string) => formatTick(v, energySpanHours)}
                       interval="preserveStartEnd"
                     />
                     <YAxis
@@ -1645,7 +1638,7 @@ export function Analytics() {
                         style: CHART_FONT,
                       }}
                     />
-                    <Tooltip content={<EnergyTooltip range={energyRange} />} />
+                    <Tooltip content={<EnergyTooltip spanHours={energySpanHours} />} />
                     <Legend
                       wrapperStyle={{
                         fontSize: 11,
@@ -1910,11 +1903,10 @@ export function Analytics() {
                   >
                     Forecast
                   </ToggleControl>
-                  <RangeSelect
-                    options={RANGE_OPTIONS}
-                    value={climateRange}
-                    onChange={setClimateRange}
-                    labels={RANGE_LABELS}
+                  <RangeFilter
+                    from={climateRange.from}
+                    to={climateRange.to}
+                    onChange={(from, to) => setClimateRange({ from, to })}
                   />
                 </div>
               }
@@ -2030,7 +2022,7 @@ export function Analytics() {
                       domain={envHumidityDomain}
                       allowDataOverflow={false}
                     />
-                    <Tooltip content={<EnvTooltip range={climateRange} />} />
+                    <Tooltip content={<EnvTooltip spanHours={climateSpanHours} />} />
                     <Legend
                       wrapperStyle={{
                         fontSize: 11,
@@ -2361,11 +2353,10 @@ export function Analytics() {
               title="Energy Category Distribution"
               chartId="chart-fuzzy-pie"
               action={
-                <RangeSelect
-                  options={RANGE_OPTIONS}
-                  value={energyRange}
-                  onChange={setEnergyRange}
-                  labels={RANGE_LABELS}
+                <RangeFilter
+                  from={energyRange.from}
+                  to={energyRange.to}
+                  onChange={(from, to) => setEnergyRange({ from, to })}
                 />
               }
             >
@@ -2760,11 +2751,10 @@ export function Analytics() {
               title="Climate Category Distribution"
               chartId="chart-climate-fuzzy-pie"
               action={
-                <RangeSelect
-                  options={RANGE_OPTIONS}
-                  value={climateFuzzyRange}
-                  onChange={setClimateFuzzyRange}
-                  labels={RANGE_LABELS}
+                <RangeFilter
+                  from={climateFuzzyRange.from}
+                  to={climateFuzzyRange.to}
+                  onChange={(from, to) => setClimateFuzzyRange({ from, to })}
                 />
               }
             >

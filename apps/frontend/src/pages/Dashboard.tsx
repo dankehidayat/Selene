@@ -15,11 +15,11 @@ import { Zap, Activity, Gauge, DollarSign, Clock } from "lucide-react";
 import { StatCard, EST_COST_INFO } from "@/components/StatCard";
 import {
   ChartCard,
-  RangeSelect,
   ToggleControl,
   ConfidencePill,
   ForecastLegendHint,
 } from "@/components/ChartCard";
+import { RangeFilter } from "@/components/RangeFilter";
 import { PowerOverview } from "@/components/PowerOverview";
 import { ClimateOverview } from "@/components/ClimateOverview";
 import { StableResponsiveContainer as ResponsiveContainer } from "@/components/StableResponsiveContainer";
@@ -33,78 +33,59 @@ import { ensembleForecast, confidenceBands } from "@/lib/forecast";
 import { computeDomain } from "@/lib/chartDomain";
 import { useChartMaxPoints } from "@/hooks/useChartMaxPoints";
 
-const RANGE_OPTIONS = ["1h", "24h", "7d", "30d", "3m", "6m", "1y"] as const;
-const RANGE_LABELS: Record<string, string> = {
-  "1h": "1 Hour",
-  "24h": "24 Hours",
-  "7d": "7 Days",
-  "30d": "30 Days",
-  "3m": "3 Months",
-  "6m": "6 Months",
-  "1y": "1 Year",
-};
-
-function formatDateForTooltip(iso: string, range: string): string {
+function formatDateForTooltip(iso: string, spanHours: number): string {
   const d = new Date(iso);
   const now = new Date();
   const isFuture = d > now;
   const prefix = isFuture ? "Predicted · " : "";
-  switch (range) {
-    case "1h":
-      return (
-        prefix +
-        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      );
-    case "24h":
-      return (
-        prefix +
-        d.toLocaleDateString([], { weekday: "short" }) +
-        " " +
-        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      );
-    case "7d":
-      return (
-        prefix +
-        d.toLocaleDateString([], {
-          weekday: "short",
-          month: "short",
-          day: "numeric",
-        }) +
-        " " +
-        d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      );
-    case "30d":
-    case "3m":
-      return (
-        prefix + d.toLocaleDateString([], { month: "short", day: "numeric" })
-      );
-    case "6m":
-    case "1y":
-      return (
-        prefix + d.toLocaleDateString([], { month: "short", year: "numeric" })
-      );
-    default:
-      return prefix + d.toLocaleString();
+  if (spanHours <= 2) {
+    return (
+      prefix +
+      d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
   }
+  if (spanHours <= 48) {
+    return (
+      prefix +
+      d.toLocaleDateString([], { weekday: "short" }) +
+      " " +
+      d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
+  }
+  if (spanHours <= 168) {
+    return (
+      prefix +
+      d.toLocaleDateString([], {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }) +
+      " " +
+      d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    );
+  }
+  if (spanHours <= 720) {
+    return (
+      prefix + d.toLocaleDateString([], { month: "short", day: "numeric" })
+    );
+  }
+  return (
+    prefix + d.toLocaleDateString([], { month: "short", year: "numeric" })
+  );
 }
 
-function formatTick(v: string, range: string): string {
+function formatTick(v: string, spanHours: number): string {
   const d = new Date(v);
-  switch (range) {
-    case "1h":
-    case "24h":
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    case "7d":
-      return d.toLocaleDateString([], { weekday: "short" });
-    case "30d":
-    case "3m":
-      return d.toLocaleDateString([], { month: "short", day: "numeric" });
-    case "6m":
-    case "1y":
-      return d.toLocaleDateString([], { month: "short" });
-    default:
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (spanHours <= 48) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
+  if (spanHours <= 168) {
+    return d.toLocaleDateString([], { weekday: "short" });
+  }
+  if (spanHours <= 720) {
+    return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+  return d.toLocaleDateString([], { month: "short" });
 }
 
 const CF = { fontSize: 11, fontFamily: "Inter, sans-serif", fill: "#9CA3AF" };
@@ -168,7 +149,7 @@ function UnifiedTooltip({
   active,
   payload,
   label,
-  range,
+  spanHours,
 }: {
   active?: boolean;
   payload?: Array<{
@@ -180,14 +161,14 @@ function UnifiedTooltip({
     fill?: string;
   }>;
   label?: string;
-  range: string;
+  spanHours: number;
 }) {
   const rows = uniqueTooltipRows(payload);
   if (!active || !rows.length || !label) return null;
   return (
     <div className={TC}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, range)}
+        {formatDateForTooltip(label, spanHours)}
       </p>
       {rows.map((e) => {
         const unit = unitForSeries(String(e.name));
@@ -217,7 +198,7 @@ function ClimateTooltip({
   active,
   payload,
   label,
-  range,
+  spanHours,
 }: {
   active?: boolean;
   payload?: Array<{
@@ -229,14 +210,14 @@ function ClimateTooltip({
     fill?: string;
   }>;
   label?: string;
-  range: string;
+  spanHours: number;
 }) {
   const rows = uniqueTooltipRows(payload);
   if (!active || !rows.length || !label) return null;
   return (
     <div className={TC}>
       <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">
-        {formatDateForTooltip(label, range)}
+        {formatDateForTooltip(label, spanHours)}
       </p>
       {rows.map((e) => {
         const unit = unitForSeries(String(e.name));
@@ -339,7 +320,7 @@ function useNow(tickMs = 1000): Date {
 }
 
 export function Dashboard() {
-  const [chartRange, setChartRange] = useState<string>("24h");
+  const [chartRange, setChartRange] = useState<{ from: string | null; to: string | null }>({ from: null, to: null });
   const [showForecast, setShowForecast] = useState(false);
   const { user } = useAuth();
   const nowClock = useNow(1000);
@@ -348,6 +329,15 @@ export function Dashboard() {
   // ── SSE Live Data ────────────────────────────────────
   const { data: live } = useLiveReading();
   const chartMaxPoints = useChartMaxPoints();
+  const chartSpanHours = (() => {
+    if (chartRange.from && chartRange.to) {
+      return (new Date(chartRange.to).getTime() - new Date(chartRange.from).getTime()) / 3600000;
+    }
+    return 24;
+  })();
+  const chartQuery = chartRange.from
+    ? { from: chartRange.from, to: chartRange.to! }
+    : { range: "24h" };
 
   // Stage 1: summary (cheap CAGG path) — paints stat cards first
   const {
@@ -355,11 +345,11 @@ export function Dashboard() {
     isSuccess: summaryReady,
     isError: summaryFailed,
     isLoading: summaryLoading,
-  } = useAnalyticsSummary("24h");
+  } = useAnalyticsSummary(chartQuery);
   // Stage 2: chart series after summary (or if summary fails) + pixel budget
   const chartsReady = summaryReady || summaryFailed || !summaryLoading;
   const { data: history = [], isFetching: historyFetching } = useReadingHistory(
-    chartRange as any,
+    chartQuery,
     chartsReady,
     chartMaxPoints,
   );
@@ -374,25 +364,25 @@ export function Dashboard() {
   const pf = showForecast
     ? ensembleForecast(
         history.map((h: any) => ({ timestamp: h.timestamp, value: h.power })),
-        chartRange,
+        chartRange.from ? { from: chartRange.from, to: chartRange.to! } : "24h",
       )
     : { forecast: [], confidence: 0 };
   const cfc = showForecast
     ? ensembleForecast(
         history.map((h: any) => ({ timestamp: h.timestamp, value: h.current })),
-        chartRange,
+        chartRange.from ? { from: chartRange.from, to: chartRange.to! } : "24h",
       )
     : { forecast: [], confidence: 0 };
   const tf = showForecast
     ? ensembleForecast(
         ch.map((h: any) => ({ timestamp: h.timestamp, value: h.temperature })),
-        chartRange,
+        chartRange.from ? { from: chartRange.from, to: chartRange.to! } : "24h",
       )
     : { forecast: [], confidence: 0 };
   const hf = showForecast
     ? ensembleForecast(
         ch.map((h: any) => ({ timestamp: h.timestamp, value: h.humidity })),
-        chartRange,
+        chartRange.from ? { from: chartRange.from, to: chartRange.to! } : "24h",
       )
     : { forecast: [], confidence: 0 };
 
@@ -574,11 +564,10 @@ export function Dashboard() {
                 >
                   Forecast
                 </ToggleControl>
-                <RangeSelect
-                  options={RANGE_OPTIONS}
-                  value={chartRange}
-                  onChange={setChartRange}
-                  labels={RANGE_LABELS}
+                <RangeFilter
+                  from={chartRange.from}
+                  to={chartRange.to}
+                  onChange={(from, to) => setChartRange({ from, to })}
                 />
               </div>
             }
@@ -638,7 +627,7 @@ export function Dashboard() {
                     tick={CF}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(v: string) => formatTick(v, chartRange)}
+                    tickFormatter={(v: string) => formatTick(v, chartSpanHours)}
                     interval="preserveStartEnd"
                   />
                   <YAxis
@@ -660,7 +649,7 @@ export function Dashboard() {
                     domain={currentDomain}
                     allowDataOverflow={false}
                   />
-                  <Tooltip content={<UnifiedTooltip range={chartRange} />} />
+                  <Tooltip content={<UnifiedTooltip spanHours={chartSpanHours} />} />
                   <Legend
                     wrapperStyle={{
                       fontSize: 11,
@@ -844,11 +833,10 @@ export function Dashboard() {
                 >
                   Forecast
                 </ToggleControl>
-                <RangeSelect
-                  options={RANGE_OPTIONS}
-                  value={chartRange}
-                  onChange={setChartRange}
-                  labels={RANGE_LABELS}
+                <RangeFilter
+                  from={chartRange.from}
+                  to={chartRange.to}
+                  onChange={(from, to) => setChartRange({ from, to })}
                 />
               </div>
             }
@@ -904,7 +892,7 @@ export function Dashboard() {
                     tick={CF}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(v: string) => formatTick(v, chartRange)}
+                    tickFormatter={(v: string) => formatTick(v, chartSpanHours)}
                     interval="preserveStartEnd"
                   />
                   <YAxis
@@ -926,7 +914,7 @@ export function Dashboard() {
                     domain={humidityDomain}
                     allowDataOverflow={false}
                   />
-                  <Tooltip content={<ClimateTooltip range={chartRange} />} />
+                  <Tooltip content={<ClimateTooltip spanHours={chartSpanHours} />} />
                   <Legend
                     wrapperStyle={{
                       fontSize: 11,

@@ -7,7 +7,7 @@
 #   .env                 ← from .env.example
 #   apps/backend/.env    ← from apps/backend/.env.example
 #
-# Local Mac: use docker-compose.local.yml instead (see docs/DEPLOYMENT.md)
+# Local development: use docker-compose.local.yml instead (see docs/02-DEPLOYMENT.md)
 # =============================================================================
 
 services:

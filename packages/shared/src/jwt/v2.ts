@@ -1,7 +1,7 @@
 /**
  * JWT v2 — EdDSA (Ed25519) token signing/verification + JWKS export.
  *
- * Contract (see docs/openapi-v1.yml and Selene-mobile/docs/MOBILE_API.md):
+ * Contract (see docs/openapi.yml and Selene-mobile/docs/MOBILE_API.md):
  *  - Algorithm: EdDSA over Ed25519
  *  - Key ID (kid): selene-v2-2026
  *  - Issuer: selene-auth-v2

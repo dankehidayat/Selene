@@ -26,6 +26,7 @@ import {
   getRecentLogs,
   getAllReadingsForAnalytics,
   getExportData,
+  getExportDataInRange,
   getEnergyInRange,
   getEnergySummaryFromCagg,
   getCumulativeEnergyKwh,
@@ -181,6 +182,53 @@ function getRangeConfig(range: string): {
         bucketSize: "hour",
       };
   }
+}
+
+/**
+ * Resolve a time range from explicit from/to ISO strings or a named preset.
+ * - When from/to provided: validate, compute span, resolve bucketSize.
+ * - When only from: default window = 24h from `from`.
+ * - When only to: default window = 24h before `to`.
+ * - When neither: fall back to `getRangeConfig(range)` (default 24h).
+ * Bucket: ≤2h → null (raw), ≤8d → hour, ≤60d → day, else month.
+ */
+function resolveTimeRange(opts: {
+  from?: string;
+  to?: string;
+  range?: string;
+}): { from: Date; to: Date; spanMs: number; bucketSize: "hour" | "day" | "month" | null } {
+  let fromDate: Date;
+  let toDate: Date;
+
+  if (opts.from) {
+    fromDate = new Date(opts.from);
+    if (isNaN(fromDate.getTime())) throw new Error(`Invalid from date: ${opts.from}`);
+    toDate = opts.to ? new Date(opts.to) : new Date(fromDate.getTime() + 24 * 3600 * 1000);
+    if (isNaN(toDate.getTime())) throw new Error(`Invalid to date: ${opts.to}`);
+  } else if (opts.to) {
+    toDate = new Date(opts.to);
+    if (isNaN(toDate.getTime())) throw new Error(`Invalid to date: ${opts.to}`);
+    fromDate = new Date(toDate.getTime() - 24 * 3600 * 1000);
+  } else {
+    const cfg = getRangeConfig(opts.range ?? "24h");
+    fromDate = cfg.from;
+    toDate = cfg.to;
+  }
+
+  if (fromDate >= toDate) throw new Error("from must be before to");
+
+  const spanMs = toDate.getTime() - fromDate.getTime();
+  const maxSpanMs = 2 * 365 * 24 * 3600 * 1000;
+  if (spanMs > maxSpanMs) throw new Error("Range exceeds maximum span of 2 years");
+
+  const spanHours = spanMs / 3600000;
+  let bucketSize: "hour" | "day" | "month" | null;
+  if (spanHours <= 2) bucketSize = null;
+  else if (spanHours <= 192) bucketSize = "hour";
+  else if (spanHours <= 1440) bucketSize = "day";
+  else bucketSize = "month";
+
+  return { from: fromDate, to: toDate, spanMs, bucketSize };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -356,6 +404,8 @@ app.get(
         type: "object",
         properties: {
           range: { type: "string", default: "24h" },
+          from: { type: "string" },
+          to: { type: "string" },
           type: { type: "string", enum: ["power", "energy"], default: "power" },
           maxPoints: {
             type: "integer",
@@ -367,37 +417,15 @@ app.get(
       },
     },
   },
-  async (request) => {
-    const {
-      range = "24h",
-      type = "power",
-      maxPoints: maxPointsRaw,
-    } = request.query as {
-      range?: string;
-      type?: string;
-      maxPoints?: number | string;
-    };
-
-    const maxPoints = clampMaxPoints(
-      maxPointsRaw != null ? Number(maxPointsRaw) : undefined,
-    );
-    const { from, to, bucketSize } = getRangeConfig(range);
-
-    if (type === "energy") {
-      return getEnergyInRange(
-        from.toISOString(),
-        to.toISOString(),
-        bucketSize ?? undefined,
-        maxPoints,
-      );
-    }
-
-    return getReadingsInRange(
-      from.toISOString(),
-      to.toISOString(),
-      range,
-      maxPoints,
-    );
+  async (request, reply) => {
+    const query = request.query as { range?: string; from?: string; to?: string; type?: string; maxPoints?: number | string };
+    let resolved;
+    try { resolved = resolveTimeRange({ from: query.from, to: query.to, range: query.range }); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const maxPoints = clampMaxPoints(query.maxPoints != null ? Number(query.maxPoints) : undefined);
+    const type = query.type ?? "power";
+    if (type === "energy") return getEnergyInRange(resolved.from.toISOString(), resolved.to.toISOString(), resolved.bucketSize ?? undefined, maxPoints);
+    return getReadingsInRange(resolved.from.toISOString(), resolved.to.toISOString(), query.range ?? "", maxPoints, resolved.spanMs / 3600000);
   },
 );
 
@@ -430,14 +458,19 @@ app.get(
         type: "object",
         properties: {
           format: { type: "string", enum: ["csv", "tsv"], default: "csv" },
+          from: { type: "string" },
+          to: { type: "string" },
         },
       },
     },
   },
   async (request, reply) => {
-    const query = request.query as { format?: string };
+    const query = request.query as { format?: string; from?: string; to?: string; range?: string };
     const format = query.format ?? "csv";
-    const data = await getExportData();
+    let resolved;
+    try { resolved = resolveTimeRange({ from: query.from, to: query.to, range: query.range }); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const data = await getExportDataInRange(resolved.from.toISOString(), resolved.to.toISOString());
     if (!data.length)
       return reply.code(404).send({ error: "No data available" });
 
@@ -516,20 +549,30 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: { range: { type: "string", default: "7d" } },
+        properties: {
+          range: { type: "string", default: "7d" },
+          from: { type: "string" },
+          to: { type: "string" },
+        },
       },
     },
   },
-  async (request) => {
-    const query = request.query as { range?: string };
+  async (request, reply) => {
+    const query = request.query as { range?: string; from?: string; to?: string };
     const range = query.range ?? "7d";
-    const { from, to } = getRangeConfig(range);
+    let resolved;
+    try { resolved = resolveTimeRange({ from: query.from, to: query.to, range }); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const spanHours = resolved.spanMs / 3600000;
+    const from = resolved.from;
+    const to = resolved.to;
 
     // Prefer continuous-aggregate SQL path (no full series into Node)
     const cagg = await getEnergySummaryFromCagg(
       from.toISOString(),
       to.toISOString(),
       range,
+      spanHours,
     );
     if (cagg) {
       return { range, source: "cagg", ...cagg };
@@ -539,6 +582,7 @@ app.get(
       from.toISOString(),
       to.toISOString(),
       range,
+      spanHours,
     );
     if (!data.length) {
       return {
@@ -651,20 +695,41 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: { range: { type: "string", default: "7d" } },
+        properties: {
+          range: { type: "string", default: "7d" },
+          from: { type: "string" },
+          to: { type: "string" },
+        },
       },
     },
   },
-  async (request) => {
-    const query = request.query as { range?: string };
+  async (request, reply) => {
+    const query = request.query as { range?: string; from?: string; to?: string };
     const range = query.range ?? "7d";
-    const { from, to } = getRangeConfig(range);
+    let resolved;
+    try { resolved = resolveTimeRange({ from: query.from, to: query.to, range }); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const spanHours = resolved.spanMs / 3600000;
+    const from = resolved.from;
+    const to = resolved.to;
     const data = await getAllReadingsForAnalytics(
       from.toISOString(),
       to.toISOString(),
       range,
+      spanHours,
     );
-    if (!data.length) return { error: "No data in range" };
+    if (!data.length) {
+      return {
+        range,
+        dataPoints: 0,
+        temperature: { average: 0, median: 0, stdDeviation: 0, min: 0, max: 0, degreeHours: 0 },
+        humidity: { average: 0, median: 0, stdDeviation: 0, min: 0, max: 0 },
+        dewPoint: { average: 0 },
+        correlation: { tempHumidity: 0 },
+        comfortDistribution: [],
+        hourlyData: [],
+      };
+    }
 
     const temps = data
       .map((r: any) => r.temperature)
@@ -707,9 +772,10 @@ app.get(
         (new Date(data[i].timestamp).getTime() -
           new Date(data[i - 1].timestamp).getTime()) /
         3600000;
+      const hours = Math.min(dt, 5 / 60);
       degreeHours +=
         Math.max(0, (data[i].temperature + data[i - 1].temperature) / 2 - 18) *
-        dt;
+        hours;
     }
 
     const comfortDist: Record<string, number> = {};
@@ -776,14 +842,23 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: { range: { type: "string", default: "7d" } },
+        properties: {
+          range: { type: "string", default: "7d" },
+          from: { type: "string" },
+          to: { type: "string" },
+        },
       },
     },
   },
-  async (request) => {
-    const query = request.query as { range?: string };
+  async (request, reply) => {
+    const query = request.query as { range?: string; from?: string; to?: string };
     const range = query.range ?? "7d";
-    const { from, to } = getRangeConfig(range);
+    let resolved;
+    try { resolved = resolveTimeRange({ from: query.from, to: query.to, range }); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const spanHours = resolved.spanMs / 3600000;
+    const from = resolved.from;
+    const to = resolved.to;
     const data =
       range === "all"
         ? await getExportData()
@@ -791,6 +866,7 @@ app.get(
             from.toISOString(),
             to.toISOString(),
             range,
+            spanHours,
           );
     if (!data.length) return { error: "No data" };
 
@@ -829,14 +905,23 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: { range: { type: "string", default: "7d" } },
+        properties: {
+          range: { type: "string", default: "7d" },
+          from: { type: "string" },
+          to: { type: "string" },
+        },
       },
     },
   },
-  async (request) => {
-    const query = request.query as { range?: string };
+  async (request, reply) => {
+    const query = request.query as { range?: string; from?: string; to?: string };
     const range = query.range ?? "7d";
-    const { from, to } = getRangeConfig(range);
+    let resolved;
+    try { resolved = resolveTimeRange({ from: query.from, to: query.to, range }); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const spanHours = resolved.spanMs / 3600000;
+    const from = resolved.from;
+    const to = resolved.to;
     const data =
       range === "all"
         ? await getExportData()
@@ -844,6 +929,7 @@ app.get(
             from.toISOString(),
             to.toISOString(),
             range,
+            spanHours,
           );
     if (!data.length) return [];
     const categorized = data.map((r: any) => ({
@@ -867,14 +953,23 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: { range: { type: "string", default: "7d" } },
+        properties: {
+          range: { type: "string", default: "7d" },
+          from: { type: "string" },
+          to: { type: "string" },
+        },
       },
     },
   },
-  async (request) => {
-    const query = request.query as { range?: string };
+  async (request, reply) => {
+    const query = request.query as { range?: string; from?: string; to?: string };
     const range = query.range ?? "7d";
-    const { from, to } = getRangeConfig(range);
+    let resolved;
+    try { resolved = resolveTimeRange({ from: query.from, to: query.to, range }); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const spanHours = resolved.spanMs / 3600000;
+    const from = resolved.from;
+    const to = resolved.to;
     const data =
       range === "all"
         ? await getExportData()
@@ -882,6 +977,7 @@ app.get(
             from.toISOString(),
             to.toISOString(),
             range,
+            spanHours,
           );
     if (!data.length) return { error: "No data" };
     const input = data.map((r: any) => ({
@@ -902,14 +998,23 @@ app.get(
       tags: ["Analytics"],
       querystring: {
         type: "object",
-        properties: { range: { type: "string", default: "7d" } },
+        properties: {
+          range: { type: "string", default: "7d" },
+          from: { type: "string" },
+          to: { type: "string" },
+        },
       },
     },
   },
-  async (request) => {
-    const query = request.query as { range?: string };
+  async (request, reply) => {
+    const query = request.query as { range?: string; from?: string; to?: string };
     const range = query.range ?? "7d";
-    const { from, to } = getRangeConfig(range);
+    let resolved;
+    try { resolved = resolveTimeRange({ from: query.from, to: query.to, range }); }
+    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+    const spanHours = resolved.spanMs / 3600000;
+    const from = resolved.from;
+    const to = resolved.to;
     const data =
       range === "all"
         ? await getExportData()
@@ -917,6 +1022,7 @@ app.get(
             from.toISOString(),
             to.toISOString(),
             range,
+            spanHours,
           );
     if (!data.length) return { error: "No data" };
     return classifyClimateDistribution(data);

@@ -1,6 +1,6 @@
 # Alias of docker-compose.yml (production / VPS).
 # Prefer: sudo docker compose up -d --build
-# See docs/DEPLOYMENT.md
+# See docs/02-DEPLOYMENT.md
 
 services:
   postgres:
