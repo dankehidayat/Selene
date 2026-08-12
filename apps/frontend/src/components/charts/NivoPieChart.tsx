@@ -80,8 +80,7 @@ export function NivoPieChart({
             ],
           },
         ]}
-        animate
-        motionConfig="gentle"
+        
       />
     </div>
   );

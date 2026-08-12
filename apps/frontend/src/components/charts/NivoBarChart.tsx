@@ -65,8 +65,6 @@ export function NivoBarChart({
         enableLabel={false}
         isInteractive
         tooltip={tooltip ? (tooltip as any) : undefined}
-        animate
-        motionConfig="gentle"
         role="application"
       />
     </div>

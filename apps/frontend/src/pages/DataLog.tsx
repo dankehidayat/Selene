@@ -8,11 +8,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
-  FileSpreadsheet,
-  FileText,
 } from "lucide-react";
 import { ChartCard, controlBtnClass } from "@/components/ChartCard";
-import { RangeFilter } from "@/components/RangeFilter";
+import { RangeFilter, CalendarPicker } from "@/components/RangeFilter";
 import { useReadingsPage } from "@/services/api";
 import type { EnergyReading } from "@/types/energy";
 import { cn } from "@/lib/utils";
@@ -28,6 +26,8 @@ export function DataLog() {
   const [from, setFrom] = useState<string | null>(null);
   const [to, setTo] = useState<string | null>(null);
   const [exportLoading, setExportLoading] = useState<string | null>(null);
+  const [expFromDraft, setExpFromDraft] = useState<string | null>(null);
+  const [expToDraft, setExpToDraft] = useState<string | null>(null);
   const [jumpValue, setJumpValue] = useState("");
   const [jumpError, setJumpError] = useState("");
   const [jumpPopoverOpen, setJumpPopoverOpen] = useState(false);
@@ -68,12 +68,9 @@ export function DataLog() {
     }
   };
 
-  const handleExport = async (format: "csv" | "tsv") => {
+  const downloadExport = async (format: "csv" | "tsv", qs: URLSearchParams) => {
     setExportLoading(format);
     try {
-      const qs = new URLSearchParams({ format });
-      if (from) qs.set("from", from);
-      if (to) qs.set("to", to);
       const res = await fetch(`${API_BASE}/readings/export?${qs}`);
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
@@ -91,6 +88,28 @@ export function DataLog() {
     } finally {
       setExportLoading(null);
     }
+  };
+
+  const handleExport = (format: "csv" | "tsv") => {
+    const qs = new URLSearchParams({ format });
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    return downloadExport(format, qs);
+  };
+
+  // Draft range (YYYY-MM-DD) → ISO timestamps for the "Export by range" section.
+  const expFromDateISO = expFromDraft
+    ? new Date(`${expFromDraft}T00:00:00`).toISOString()
+    : null;
+  const expToDateISO = expToDraft
+    ? new Date(`${expToDraft}T23:59:59`).toISOString()
+    : null;
+
+  const handleRangedExport = (format: "csv" | "tsv") => {
+    const qs = new URLSearchParams({ format });
+    if (expFromDateISO) qs.set("from", expFromDateISO);
+    if (expToDateISO) qs.set("to", expToDateISO);
+    return downloadExport(format, qs);
   };
 
   const toggleSort = useCallback(() => {
@@ -127,40 +146,82 @@ export function DataLog() {
             from={from}
             to={to}
             onChange={handleRangeChange}
+            emptyLabel="All Time"
           />
-          <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button type="button" className={cn(controlBtnClass, "px-3")}>
-              <Download size={13} className="text-gray-500 dark:text-gray-400" />
-              Export
-              <ChevronDown size={13} className="text-gray-500 dark:text-gray-400" />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              align="end"
-              sideOffset={6}
-              className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg py-1 min-w-[11rem] z-50"
-            >
-              <DropdownMenu.Item
-                onSelect={() => handleExport("csv")}
-                disabled={exportLoading === "csv"}
-                className="flex items-center gap-2.5 text-sm px-3 py-2.5 cursor-pointer outline-none rounded-lg mx-1 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+          <Popover.Root>
+            <Popover.Trigger asChild>
+              <button type="button" className={cn(controlBtnClass, "px-3")}>
+                <Download size={13} className="text-gray-500 dark:text-gray-400" />
+                Export
+                <ChevronDown size={13} className="text-gray-500 dark:text-gray-400" />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                align="end"
+                sideOffset={6}
+                className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg z-50"
+                style={{ minWidth: 280 }}
               >
-                <FileSpreadsheet size={14} />{" "}
-                {exportLoading === "csv" ? "Downloading..." : "Download as CSV"}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => handleExport("tsv")}
-                disabled={exportLoading === "tsv"}
-                className="flex items-center gap-2.5 text-sm px-3 py-2.5 cursor-pointer outline-none rounded-lg mx-1 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                <FileText size={14} />{" "}
-                {exportLoading === "tsv" ? "Downloading..." : "Download as TSV"}
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+                <div className="p-3 space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                    Export all data
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleExport("csv")}
+                      disabled={exportLoading === "csv"}
+                      className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+                    >
+                      {exportLoading === "csv" ? "Downloading..." : "CSV"}
+                    </button>
+                    <button
+                      onClick={() => handleExport("tsv")}
+                      disabled={exportLoading === "tsv"}
+                      className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                    >
+                      {exportLoading === "tsv" ? "Downloading..." : "TSV"}
+                    </button>
+                  </div>
+                  <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                      Export by range
+                    </p>
+                    <CalendarPicker
+                      label="From"
+                      date={expFromDraft ?? ""}
+                      onChange={setExpFromDraft}
+                      min={undefined}
+                      max={expToDraft ?? undefined}
+                    />
+                    <CalendarPicker
+                      label="To"
+                      date={expToDraft ?? ""}
+                      onChange={setExpToDraft}
+                      min={expFromDraft ?? undefined}
+                      max={undefined}
+                    />
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <button
+                        onClick={() => handleRangedExport("csv")}
+                        disabled={exportLoading === "csv"}
+                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition disabled:opacity-50"
+                      >
+                        {exportLoading === "csv" ? "Downloading..." : "CSV"}
+                      </button>
+                      <button
+                        onClick={() => handleRangedExport("tsv")}
+                        disabled={exportLoading === "tsv"}
+                        className="flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                      >
+                        {exportLoading === "tsv" ? "Downloading..." : "TSV"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
         </div>
       </div>
 

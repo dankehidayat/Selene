@@ -12,11 +12,14 @@ import {
   Moon,
   Monitor,
   Shield,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "@/services/auth";
 import { useState, useEffect } from "react";
 import { useSettings } from "@/components/SettingsOverlay";
 import { SeleneMark } from "@/components/SeleneMark";
+import { cn } from "@/lib/utils";
 
 type Theme = "light" | "dark" | "system";
 
@@ -44,10 +47,19 @@ const infoItems = [
   { label: "Glossary", to: "/glossary", icon: BookOpen },
 ] as const;
 
+const linkBase =
+  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 active:scale-[0.98]";
+const activeBase =
+  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400";
+
 export function SidebarContent({
   onNavigate,
+  compact = false,
+  onToggleCompact,
 }: {
   onNavigate?: () => void;
+  compact?: boolean;
+  onToggleCompact?: () => void;
 } = {}) {
   const { user } = useAuth();
   const { openSettings } = useSettings();
@@ -95,37 +107,43 @@ export function SidebarContent({
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 pt-5 pb-3 shrink-0">
+      <div className={`flex items-center gap-2.5 pt-5 pb-3 shrink-0 ${compact ? "justify-center px-0" : "px-5"}`}>
         <SeleneMark size={36} className="shrink-0 rounded-xl" />
-        <div>
-          <p className="text-[15px] font-semibold text-gray-900 dark:text-white">
-            Selene
-          </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Smart Energy & Climate
-          </p>
-        </div>
+        {!compact && (
+          <div>
+            <p className="text-[15px] font-semibold text-gray-900 dark:text-white">
+              Selene
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Smart Energy & Climate
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Navigation — scrollable */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
-          Main
-        </p>
-        <nav className="px-3 space-y-0.5 pb-4">
+        {!compact && (
+          <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
+            Main
+          </p>
+        )}
+        <nav className={`${compact ? "px-2 space-y-1 pb-4 flex flex-col items-center" : "px-3 space-y-0.5 pb-4"}`}>
           {mainItems.map((item) => (
             <Link
               key={item.label}
               to={item.to}
               onClick={() => onNavigate?.()}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 active:scale-[0.98]"
+              className={`${linkBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`}
               activeOptions={{ exact: item.to === "/" }}
               activeProps={{
-                className:
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
+                className: `${activeBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`,
               }}
+              title={compact ? item.label : undefined}
+              aria-label={compact ? item.label : undefined}
             >
-              <item.icon size={16} /> {item.label}
+              <item.icon size={16} />
+              {!compact && item.label}
             </Link>
           ))}
         </nav>
@@ -133,41 +151,49 @@ export function SidebarContent({
         {/* Administration — Admin Only */}
         {user?.role === "ADMIN" && (
           <>
-            <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
-              Administration
-            </p>
-            <nav className="px-3 space-y-0.5 pb-4">
+            {!compact && (
+              <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
+                Administration
+              </p>
+            )}
+            <nav className={`${compact ? "px-2 space-y-1 pb-4 flex flex-col items-center" : "px-3 space-y-0.5 pb-4"}`}>
               <Link
                 to="/admin"
                 onClick={() => onNavigate?.()}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 active:scale-[0.98]"
+                className={`${linkBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`}
                 activeProps={{
-                  className:
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
+                  className: `${activeBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`,
                 }}
+                title={compact ? "Admin Tools" : undefined}
+                aria-label={compact ? "Admin Tools" : undefined}
               >
-                <Shield size={16} /> Admin Tools
+                <Shield size={16} />
+                {!compact && "Admin Tools"}
               </Link>
             </nav>
           </>
         )}
 
-        <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
-          Information
-        </p>
-        <nav className="px-3 space-y-0.5 pb-4">
+        {!compact && (
+          <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
+            Information
+          </p>
+        )}
+        <nav className={`${compact ? "px-2 space-y-1 pb-4 flex flex-col items-center" : "px-3 space-y-0.5 pb-4"}`}>
           {infoItems.map((item) => (
             <Link
               key={item.label}
               to={item.to}
               onClick={() => onNavigate?.()}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-all duration-200 active:scale-[0.98]"
+              className={`${linkBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`}
               activeProps={{
-                className:
-                  "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400",
+                className: `${activeBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`,
               }}
+              title={compact ? item.label : undefined}
+              aria-label={compact ? item.label : undefined}
             >
-              <item.icon size={16} /> {item.label}
+              <item.icon size={16} />
+              {!compact && item.label}
             </Link>
           ))}
         </nav>
@@ -176,25 +202,29 @@ export function SidebarContent({
       {/* Bottom bar — always pinned (do not put inside scroll region) */}
       <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2.5 shrink-0 bg-white dark:bg-gray-900 z-10">
         {user ? (
-          <div className="flex items-center gap-1.5">
+          <div className={`flex items-center gap-1.5 ${compact ? "justify-center" : ""}`}>
             {/* Avatar — opens settings */}
             <button
               onClick={handleOpenSettings}
-              className="flex items-center gap-2.5 flex-1 min-w-0 px-2 py-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition text-left"
+              title={compact ? "Account settings" : undefined}
+              aria-label={compact ? "Account settings" : undefined}
+              className={`${compact ? "p-1.5" : "flex items-center gap-2.5 flex-1 min-w-0 px-2 py-1.5"} rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition text-left shrink-0`}
             >
               <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0">
                 <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
                   {initial}
                 </span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium text-gray-900 dark:text-white truncate">
-                  {user.name || user.email}
-                </p>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                  {user.name ? user.email : "Account"}
-                </p>
-              </div>
+              {!compact && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-gray-900 dark:text-white truncate">
+                    {user.name || user.email}
+                  </p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                    {user.name ? user.email : "Account"}
+                  </p>
+                </div>
+              )}
             </button>
 
             {/* Settings gear */}
@@ -202,6 +232,7 @@ export function SidebarContent({
               onClick={handleOpenSettings}
               className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition shrink-0"
               title="Settings"
+              aria-label="Settings"
             >
               <Settings
                 size={15}
@@ -223,17 +254,36 @@ export function SidebarContent({
                 className="transition-transform duration-200 stroke-[2]"
               />
             </button>
+
+            {/* Toggle between full / compact */}
+            {onToggleCompact && (
+              <button
+                onClick={onToggleCompact}
+                className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition shrink-0"
+                title={compact ? "Expand sidebar" : "Collapse sidebar"}
+                aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {compact ? (
+                  <PanelLeftOpen size={15} />
+                ) : (
+                  <PanelLeftClose size={15} />
+                )}
+              </button>
+            )}
           </div>
         ) : (
           <Link
             to="/login"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition"
+            onClick={() => onNavigate?.()}
+            className={`${compact ? "w-10 h-10 justify-center px-0 mx-auto" : "flex items-center gap-3 px-3 py-2.5"} rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition`}
+            title={compact ? "Sign In" : undefined}
+            aria-label={compact ? "Sign In" : undefined}
           >
             <LogIn
               size={16}
               className="text-gray-400 dark:text-gray-500 shrink-0"
             />
-            <span>Sign In</span>
+            {!compact && <span>Sign In</span>}
           </Link>
         )}
       </div>

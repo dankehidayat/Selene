@@ -7,7 +7,6 @@ import { NotificationToasts } from "./NotificationToasts";
 import {
   ShellLayoutProvider,
   useShellLayout,
-  SHELL_SIDEBAR_W,
   SHELL_SIDEBAR_MS,
 } from "@/lib/shellLayout";
 
@@ -51,17 +50,17 @@ function LayoutShell({ children }: { children: ReactNode }) {
         so content shrinks/grows (see shellLayout).
       */}
       <aside
-        className={`hidden lg:flex flex-col fixed left-0 top-0 z-30 h-dvh max-h-dvh bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 transition-transform ease-out will-change-transform ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className="hidden lg:flex flex-col fixed left-0 top-0 z-30 h-dvh max-h-dvh bg-white dark:bg-gray-900 border-r border-gray-100 dark:border-gray-800 transition-[width] ease-out will-change-transform translate-x-0"
         style={{
-          width: SHELL_SIDEBAR_W,
+          width: sidebarOpen ? 248 : 64,
           transitionDuration: `${SHELL_SIDEBAR_MS}ms`,
         }}
-        aria-hidden={!sidebarOpen}
       >
         <div className="w-full h-full min-h-0 flex flex-col overflow-hidden">
-          <SidebarContent />
+          <SidebarContent
+            compact={!sidebarOpen}
+            onToggleCompact={toggleSidebar}
+          />
         </div>
       </aside>
 
@@ -89,7 +88,7 @@ function LayoutShell({ children }: { children: ReactNode }) {
 
       <div
         className={`min-w-0 max-w-full transition-[margin] ease-out ${
-          sidebarOpen ? "lg:ml-[248px]" : "lg:ml-0"
+          sidebarOpen ? "lg:ml-[248px]" : "lg:ml-[64px]"
         }`}
         style={{ transitionDuration: `${SHELL_SIDEBAR_MS}ms` }}
       >

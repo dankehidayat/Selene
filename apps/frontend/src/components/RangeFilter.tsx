@@ -5,10 +5,12 @@ import { controlBtnClass } from "./ChartCard";
 import { cn } from "@/lib/utils";
 
 interface RangeFilterProps {
-  /** ISO string or null for default 24h */
+  /** ISO string or null for default label */
   from: string | null;
   to: string | null;
   onChange: (from: string | null, to: string | null) => void;
+  /** Label shown when both from/to are null (default "24 Hours") */
+  emptyLabel?: string;
 }
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -21,12 +23,11 @@ const MONTHS = [
  * Date/time range filter: "From" and "To" calendar pickers with conditional
  * time pickers when both dates match. Defaults to 24h window.
  *
- * Two mini month-calendars (From | To) with prev/next navigation; selecting a
- * day fills the date. When From and To fall on the same day, native time
- * inputs appear (color-scheme aware so the clock icon renders correctly in
- * dark mode).
+ * Each mini calendar has styled native month/year <select> dropdowns for quick
+ * jumping, a "Today" chip, and prev/next chevrons. On narrow screens the
+ * popover renders as a fixed bottom-sheet overlay instead of a floating card.
  */
-export function RangeFilter({ from, to, onChange }: RangeFilterProps) {
+export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: RangeFilterProps) {
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -47,8 +48,18 @@ export function RangeFilter({ from, to, onChange }: RangeFilterProps) {
     to ? toLocalTimeString(new Date(to)) : "23:59",
   );
   const [open, setOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const sameDate = draftFromDate === draftToDate;
+
+  // Detect narrow viewport for mobile bottom-sheet layout
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   // Reset draft when external from/to change while closed
   useEffect(() => {
@@ -76,7 +87,83 @@ export function RangeFilter({ from, to, onChange }: RangeFilterProps) {
 
   const label = from && to
     ? `${formatShortDate(new Date(from))} – ${formatShortDate(new Date(to))}`
-    : "24 Hours";
+    : emptyLabel;
+
+  const body = (
+    <>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          Time Range
+        </span>
+        <button
+          onClick={() => setOpen(false)}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+          aria-label="Close"
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <CalendarPicker
+          label="From"
+          date={draftFromDate}
+          onChange={setDraftFromDate}
+          min={undefined}
+          max={draftToDate}
+        />
+        <CalendarPicker
+          label="To"
+          date={draftToDate}
+          onChange={setDraftToDate}
+          min={draftFromDate}
+          max={undefined}
+        />
+      </div>
+
+      {sameDate && (
+        <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+              From time
+            </label>
+            <input
+              type="time"
+              value={draftFromTime}
+              onChange={(e) => setDraftFromTime(e.target.value)}
+              className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 dark:[color-scheme:dark]"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+              To time
+            </label>
+            <input
+              type="time"
+              value={draftToTime}
+              onChange={(e) => setDraftToTime(e.target.value)}
+              className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 dark:[color-scheme:dark]"
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+        <button
+          onClick={handleApply}
+          className="flex-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
+        >
+          Apply
+        </button>
+        <button
+          onClick={handleReset}
+          className="text-xs font-semibold px-3 py-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+        >
+          Reset ({emptyLabel})
+        </button>
+      </div>
+    </>
+  );
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -87,83 +174,30 @@ export function RangeFilter({ from, to, onChange }: RangeFilterProps) {
         </button>
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content
-          align="end"
-          sideOffset={6}
-          className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg p-4 z-50 w-[540px] max-w-[calc(100vw-2rem)]"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              Time Range
-            </span>
-            <button
+        {isMobile ? (
+          <div className="fixed inset-0 z-50 flex flex-col justify-end sm:justify-center">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/20"
               onClick={() => setOpen(false)}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              aria-label="Close"
+            />
+            {/* Sheet */}
+            <div
+              className="relative bg-white dark:bg-gray-800 rounded-t-xl border-x border-t border-gray-100 dark:border-gray-700 shadow-xl p-4 w-full max-h-[85vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
             >
-              <X size={14} />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <CalendarPicker
-              label="From"
-              date={draftFromDate}
-              onChange={setDraftFromDate}
-              min={undefined}
-              max={draftToDate}
-            />
-            <CalendarPicker
-              label="To"
-              date={draftToDate}
-              onChange={setDraftToDate}
-              min={draftFromDate}
-              max={undefined}
-            />
-          </div>
-
-          {sameDate && (
-            <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
-                  From time
-                </label>
-                <input
-                  type="time"
-                  value={draftFromTime}
-                  onChange={(e) => setDraftFromTime(e.target.value)}
-                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 dark:[color-scheme:dark]"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
-                  To time
-                </label>
-                <input
-                  type="time"
-                  value={draftToTime}
-                  onChange={(e) => setDraftToTime(e.target.value)}
-                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 dark:[color-scheme:dark]"
-                />
-              </div>
+              {body}
             </div>
-          )}
-
-          <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-            <button
-              onClick={handleApply}
-              className="flex-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
-            >
-              Apply
-            </button>
-            <button
-              onClick={handleReset}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-            >
-              Reset (24h)
-            </button>
           </div>
-        </Popover.Content>
+        ) : (
+          <Popover.Content
+            align="end"
+            sideOffset={6}
+            className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg p-4 z-50 w-[540px] max-w-[calc(100vw-2rem)]"
+          >
+            {body}
+          </Popover.Content>
+        )}
       </Popover.Portal>
     </Popover.Root>
   );
@@ -181,7 +215,7 @@ interface CalendarPickerProps {
   max?: string;
 }
 
-function CalendarPicker({ label, date, onChange, min, max }: CalendarPickerProps) {
+export function CalendarPicker({ label, date, onChange, min, max }: CalendarPickerProps) {
   const selected = date ? parseLocalDate(date) : null;
   const [view, setView] = useState(() =>
     selected ? new Date(selected.getFullYear(), selected.getMonth(), 1) : startOfMonth(new Date()),
@@ -192,6 +226,16 @@ function CalendarPicker({ label, date, onChange, min, max }: CalendarPickerProps
 
   const year = view.getFullYear();
   const month = view.getMonth();
+
+  // ±10 years around the current year for the year dropdown
+  const currentYear = new Date().getFullYear();
+  const yearOptions = useMemo(() => {
+    const years: number[] = [];
+    for (let y = currentYear - 10; y <= currentYear + 10; y++) {
+      years.push(y);
+    }
+    return years;
+  }, [currentYear]);
 
   const cells = useMemo(() => {
     const firstDow = new Date(year, month, 1).getDay();
@@ -210,17 +254,39 @@ function CalendarPicker({ label, date, onChange, min, max }: CalendarPickerProps
 
   const isSelected = (d: Date) =>
     selected && sameDay(d, selected);
-  const isToday = (d: Date) => sameDay(d, new Date());
+  const isTodayCheck = (d: Date) => sameDay(d, new Date());
   const isOutOfRange = (d: Date) =>
     (minDate && d < minDate) || (maxDate && d > maxDate);
 
+  const goToToday = useCallback(() => {
+    const now = new Date();
+    setView(new Date(now.getFullYear(), now.getMonth(), 1));
+    onChange(toLocalDateString(now));
+  }, [onChange]);
+
+  const handleMonthChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      setView(new Date(year, parseInt(e.target.value, 10), 1));
+    },
+    [year],
+  );
+
+  const handleYearChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      setView(new Date(parseInt(e.target.value, 10), month, 1));
+    },
+    [month],
+  );
+
   return (
     <div>
+      {/* Header: label left, controls right */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">
           {label}
         </span>
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
+          {/* Previous month */}
           <button
             type="button"
             onClick={() => setView(new Date(year, month - 1, 1))}
@@ -230,9 +296,36 @@ function CalendarPicker({ label, date, onChange, min, max }: CalendarPickerProps
           >
             <ChevronLeft size={14} />
           </button>
-          <span className="text-xs font-medium text-gray-700 dark:text-gray-200 min-w-[92px] text-center">
-            {MONTHS[month]} {year}
-          </span>
+
+          {/* Month native select — acts as quick month jumper */}
+          <select
+            value={month}
+            onChange={handleMonthChange}
+            className="text-xs font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-gray-200 dark:border-gray-600 rounded-md px-1 py-0.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 dark:[color-scheme:dark]"
+            aria-label="Select month"
+          >
+            {MONTHS.map((name, idx) => (
+              <option key={idx} value={idx}>
+                {name}
+              </option>
+            ))}
+          </select>
+
+          {/* Year native select — ±10 year range */}
+          <select
+            value={year}
+            onChange={handleYearChange}
+            className="text-xs font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-gray-200 dark:border-gray-600 rounded-md px-1 py-0.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 dark:[color-scheme:dark]"
+            aria-label="Select year"
+          >
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+
+          {/* Next month */}
           <button
             type="button"
             onClick={() => setView(new Date(year, month + 1, 1))}
@@ -242,9 +335,20 @@ function CalendarPicker({ label, date, onChange, min, max }: CalendarPickerProps
           >
             <ChevronRight size={14} />
           </button>
+
+          {/* "Today" quick chip button */}
+          <button
+            type="button"
+            onClick={goToToday}
+            className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition whitespace-nowrap"
+            aria-label="Go to today"
+          >
+            Today
+          </button>
         </div>
       </div>
 
+      {/* Day-of-week header + day grid */}
       <div className="grid grid-cols-7 gap-0.5 text-center">
         {WEEKDAYS.map((w) => (
           <span
@@ -265,7 +369,7 @@ function CalendarPicker({ label, date, onChange, min, max }: CalendarPickerProps
                 "h-7 text-xs rounded-lg transition flex items-center justify-center",
                 isSelected(d)
                   ? "bg-blue-600 text-white font-semibold shadow-sm"
-                  : isToday(d)
+                  : isTodayCheck(d)
                     ? "text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-inset ring-blue-300 dark:ring-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40"
                     : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700",
                 isOutOfRange(d) && "text-gray-300 dark:text-gray-600 cursor-not-allowed",

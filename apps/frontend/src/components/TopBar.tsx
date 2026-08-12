@@ -179,7 +179,7 @@ export function TopBar({
 
   return (
     <header
-      className={`grid grid-cols-[auto_1fr_auto] items-center gap-3 px-5 lg:px-8 py-4 border-b border-gray-200/50 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md sticky top-0 z-20 transition-transform duration-300 ease-out ${
+      className={`grid grid-cols-[auto_1fr_auto] items-center gap-3 px-5 lg:px-8 py-4 border-b border-gray-200/50 dark:border-gray-800 bg-white dark:bg-gray-900 sticky top-0 z-20 transition-transform duration-300 ease-out ${
         barHidden && !open ? "-translate-y-full" : "translate-y-0"
       }`}
     >

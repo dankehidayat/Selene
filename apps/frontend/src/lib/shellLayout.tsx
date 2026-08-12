@@ -31,7 +31,13 @@ export function useShellLayout() {
 }
 
 export function ShellLayoutProvider({ children }: { children: ReactNode }) {
-  const [sidebarOpen, setSidebarOpenState] = useState(true);
+  const [sidebarOpen, setSidebarOpenState] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("selene.sidebar.open");
+      if (saved !== null) return saved === "true";
+    }
+    return true;
+  });
   const [isResizing, setIsResizing] = useState(false);
   const timerRef = useRef<number | null>(null);
 
@@ -49,6 +55,7 @@ export function ShellLayoutProvider({ children }: { children: ReactNode }) {
   const setSidebarOpen = useCallback(
     (open: boolean) => {
       markResizing();
+      localStorage.setItem("selene.sidebar.open", String(open));
       setSidebarOpenState(open);
     },
     [markResizing],
@@ -56,7 +63,11 @@ export function ShellLayoutProvider({ children }: { children: ReactNode }) {
 
   const toggleSidebar = useCallback(() => {
     markResizing();
-    setSidebarOpenState((v) => !v);
+    setSidebarOpenState((v) => {
+      const next = !v;
+      localStorage.setItem("selene.sidebar.open", String(next));
+      return next;
+    });
   }, [markResizing]);
 
   const value = useMemo(

@@ -22,7 +22,7 @@ export function CookieBanner() {
 
   return (
     <div className="fixed bottom-0 inset-x-0 z-[60] p-4 sm:p-6 pointer-events-none">
-      <div className="pointer-events-auto max-w-3xl mx-auto rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md shadow-2xl p-4 sm:p-5">
+      <div className="pointer-events-auto max-w-3xl mx-auto rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 shadow-2xl p-4 sm:p-5">
         <p className="text-sm font-semibold text-gray-900 dark:text-white">
           Cookies & privacy
         </p>

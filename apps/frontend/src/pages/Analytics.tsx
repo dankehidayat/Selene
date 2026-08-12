@@ -1,6 +1,5 @@
 // apps/frontend/src/pages/Analytics.tsx
-import { useState, useRef, useEffect, useMemo } from "react";
-import * as Plot from "@observablehq/plot";
+import { useState, useMemo } from "react";
 
 import {
   Zap,
@@ -45,6 +44,8 @@ import { cn } from "@/lib/utils";
 import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
 import { NivoBarChart } from "@/components/charts/NivoBarChart";
 import { NivoPieChart } from "@/components/charts/NivoPieChart";
+import { NivoScatterChart } from "@/components/charts/NivoScatterChart";
+import { NivoBoxPlot } from "@/components/charts/NivoBoxPlot";
 
 const FUZZY_COLORS: Record<string, string> = {
   ECONOMICAL: "#2ecc71",
@@ -64,13 +65,6 @@ const CLIMATE_FUZZY_COLORS: Record<string, string> = {
   COMFORTABLE: "#10B981",
   WARM: "#F59E0B",
   HOT: "#EF4444",
-};
-
-const PLOT_STYLE = {
-  fontFamily: "Inter, sans-serif",
-  fontSize: "11px",
-  color: "#6B7280",
-  background: "transparent",
 };
 
 function hourToISO(hour: number): string {
@@ -203,313 +197,6 @@ function AnalyticsSectionHeader({
   );
 }
 
-function ObsScatter({
-  data,
-}: {
-  data: Array<{ power: number; powerFactor: number; category: string }>;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!ref.current || !data.length) return;
-    ref.current.innerHTML = "";
-    const plot = Plot.plot({
-      width: 500,
-      height: 350,
-      marginLeft: 50,
-      marginBottom: 35,
-      style: PLOT_STYLE,
-      color: {
-        legend: true,
-        domain: ["ECONOMICAL", "NORMAL", "WASTEFUL"],
-        range: [
-          FUZZY_COLORS.ECONOMICAL,
-          FUZZY_COLORS.NORMAL,
-          FUZZY_COLORS.WASTEFUL,
-        ],
-      },
-      x: { label: "Power (W)" },
-      y: { label: "Power Factor", domain: [0, 1] },
-      marks: [
-        Plot.dot(data, {
-          x: "power",
-          y: "powerFactor",
-          fill: "category",
-          r: 5,
-          opacity: 0.7,
-          stroke: "#1E293B",
-          strokeWidth: 0.5,
-        }),
-        Plot.ruleY([0.85], {
-          stroke: "#3B82F6",
-          strokeWidth: 2,
-          strokeDasharray: "6,3",
-        }),
-        Plot.ruleY([0.6], {
-          stroke: "#F59E0B",
-          strokeWidth: 1.5,
-          strokeDasharray: "3,3",
-        }),
-      ],
-    });
-    ref.current.appendChild(plot);
-  }, [data]);
-  return <div ref={ref} className="flex justify-center overflow-visible" />;
-}
-function ObsClimateScatter({
-  data,
-}: {
-  data: Array<{ temperature: number; humidity: number; category: string }>;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!ref.current || !data.length) return;
-    ref.current.innerHTML = "";
-    const plot = Plot.plot({
-      width: 500,
-      height: 350,
-      marginLeft: 50,
-      marginBottom: 35,
-      style: PLOT_STYLE,
-      color: {
-        legend: true,
-        domain: ["COLD", "COOL", "COMFORTABLE", "WARM", "HOT"],
-        range: [
-          CLIMATE_FUZZY_COLORS.COLD,
-          CLIMATE_FUZZY_COLORS.COOL,
-          CLIMATE_FUZZY_COLORS.COMFORTABLE,
-          CLIMATE_FUZZY_COLORS.WARM,
-          CLIMATE_FUZZY_COLORS.HOT,
-        ],
-      },
-      x: { label: "Temperature (°C)" },
-      y: { label: "Humidity (%)" },
-      marks: [
-        Plot.dot(data, {
-          x: "temperature",
-          y: "humidity",
-          fill: "category",
-          r: 5,
-          opacity: 0.7,
-          stroke: "#1E293B",
-          strokeWidth: 0.5,
-        }),
-        Plot.ruleX([24], {
-          stroke: "#3B82F6",
-          strokeWidth: 1.5,
-          strokeDasharray: "4,4",
-          opacity: 0.5,
-        }),
-        Plot.ruleX([28], {
-          stroke: "#F59E0B",
-          strokeWidth: 1.5,
-          strokeDasharray: "4,4",
-          opacity: 0.5,
-        }),
-        Plot.ruleY([50], {
-          stroke: "#3B82F6",
-          strokeWidth: 1.5,
-          strokeDasharray: "4,4",
-          opacity: 0.5,
-        }),
-        Plot.ruleY([70], {
-          stroke: "#EF4444",
-          strokeWidth: 1.5,
-          strokeDasharray: "4,4",
-          opacity: 0.5,
-        }),
-      ],
-    });
-    ref.current.appendChild(plot);
-  }, [data]);
-  return <div ref={ref} className="flex justify-center overflow-visible" />;
-}
-function ObsBoxPlot({
-  data,
-}: {
-  data: Array<{ power: number; category: string }>;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!ref.current || !data.length) return;
-    ref.current.innerHTML = "";
-    const plot = Plot.plot({
-      width: 500,
-      height: 250,
-      marginLeft: 90,
-      marginBottom: 35,
-      style: PLOT_STYLE,
-      x: { label: "Power (W)", grid: true },
-      y: { label: null, domain: ["ECONOMICAL", "NORMAL", "WASTEFUL"] },
-      marks: [
-        Plot.boxX(data, {
-          x: "power",
-          y: "category",
-          fill: (d: any) => FUZZY_COLORS[d.category] || "#6366F1",
-          fillOpacity: 0.4,
-          stroke: "#1E293B",
-          strokeWidth: 1.5,
-        }),
-      ],
-    });
-    ref.current.appendChild(plot);
-  }, [data]);
-  return <div ref={ref} className="flex justify-center overflow-visible" />;
-}
-function ObsBlandAltman({
-  data,
-  meanDiff,
-  upperLoA,
-  lowerLoA,
-}: {
-  data: Array<{ mean: number; difference: number }>;
-  meanDiff: number;
-  upperLoA: number;
-  lowerLoA: number;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!ref.current) return;
-    ref.current.innerHTML = "";
-    const plot = Plot.plot({
-      width: 500,
-      height: 280,
-      marginLeft: 45,
-      marginBottom: 35,
-      style: PLOT_STYLE,
-      x: {
-        label: "Mean (Fuzzy + Threshold) / 2",
-        domain: [0.5, 3.5],
-        ticks: 3,
-      },
-      y: { label: "Difference", grid: true },
-      marks: [
-        Plot.dot(data, {
-          x: "mean",
-          y: "difference",
-          fill: "#6366F1",
-          fillOpacity: 0.6,
-          r: 4,
-        }),
-        Plot.ruleY([meanDiff], {
-          stroke: "#EF4444",
-          strokeWidth: 2,
-          strokeDasharray: "6,3",
-        }),
-        Plot.ruleY([upperLoA], {
-          stroke: "#F59E0B",
-          strokeWidth: 1.5,
-          strokeDasharray: "4,4",
-        }),
-        Plot.ruleY([lowerLoA], {
-          stroke: "#F59E0B",
-          strokeWidth: 1.5,
-          strokeDasharray: "4,4",
-        }),
-      ],
-    });
-    ref.current.appendChild(plot);
-  }, [data, meanDiff, upperLoA, lowerLoA]);
-  return (
-    <div>
-      <div ref={ref} className="flex justify-center overflow-visible" />
-      <div className="flex items-center justify-center gap-6 mt-2 text-xs text-gray-600 dark:text-gray-400 font-medium">
-        <span>
-          Mean Diff:{" "}
-          <strong className="text-gray-900 dark:text-white">
-            {meanDiff.toFixed(3)}
-          </strong>
-        </span>
-        <span>
-          Upper LoA:{" "}
-          <strong className="text-gray-900 dark:text-white">
-            {upperLoA.toFixed(3)}
-          </strong>
-        </span>
-        <span>
-          Lower LoA:{" "}
-          <strong className="text-gray-900 dark:text-white">
-            {lowerLoA.toFixed(3)}
-          </strong>
-        </span>
-      </div>
-    </div>
-  );
-}
-function ObsDecisionSurface({
-  surface,
-  actual,
-}: {
-  surface: Array<{ power: number; pf: number; category: string }>;
-  actual: Array<{ power: number; powerFactor: number; category: string }>;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!ref.current) return;
-    ref.current.innerHTML = "";
-    const plot = Plot.plot({
-      width: 500,
-      height: 350,
-      marginLeft: 55,
-      marginBottom: 35,
-      style: PLOT_STYLE,
-      color: {
-        legend: true,
-        domain: ["ECONOMICAL", "NORMAL", "WASTEFUL"],
-        range: [
-          FUZZY_COLORS.ECONOMICAL,
-          FUZZY_COLORS.NORMAL,
-          FUZZY_COLORS.WASTEFUL,
-        ],
-      },
-      x: { label: "Power (W)", domain: [0, 120] },
-      y: { label: "Power Factor", domain: [0.3, 1] },
-      marks: [
-        Plot.dot(surface, {
-          x: "power",
-          y: "pf",
-          fill: "category",
-          r: 5,
-          opacity: 0.5,
-          symbol: "square",
-        }),
-        Plot.dot(actual, {
-          x: "power",
-          y: "powerFactor",
-          fill: "category",
-          r: 4,
-          opacity: 0.9,
-          stroke: "#1E293B",
-          strokeWidth: 0.5,
-        }),
-        Plot.ruleY([0.85], {
-          stroke: "#3B82F6",
-          strokeWidth: 2,
-          strokeDasharray: "6,3",
-        }),
-        Plot.ruleY([0.6], {
-          stroke: "#F59E0B",
-          strokeWidth: 1.5,
-          strokeDasharray: "3,3",
-        }),
-        Plot.ruleX([30], {
-          stroke: "#2ecc71",
-          strokeWidth: 1.5,
-          strokeDasharray: "4,4",
-          opacity: 0.6,
-        }),
-        Plot.ruleX([70], {
-          stroke: "#e74c3c",
-          strokeWidth: 1.5,
-          strokeDasharray: "4,4",
-          opacity: 0.6,
-        }),
-      ],
-    });
-    ref.current.appendChild(plot);
-  }, [surface, actual]);
-  return <div ref={ref} className="flex justify-center overflow-visible" />;
-}
-
 function MetricRow({
   label,
   value,
@@ -637,23 +324,35 @@ export function Analytics() {
   const { data: climateFuzzy, isLoading: climateFuzzyLoading } =
     useClimateFuzzyDistribution(climateFuzzyQuery, isClimateFuzzyTab);
 
-  const allPeakHours = Array.from({ length: 24 }, (_, i) => {
-    const found = summary?.peakHours?.find((p: any) => p.hour === i);
-    return { name: `${i}:00`, power: found?.avgPower ?? 0 };
-  });
+  const allPeakHours = useMemo(
+    () =>
+      Array.from({ length: 24 }, (_, i) => {
+        const found = summary?.peakHours?.find((p: any) => p.hour === i);
+        return { name: `${i}:00`, power: found?.avgPower ?? 0 };
+      }),
+    [summary],
+  );
   const comfortData = climate?.comfortDistribution ?? [];
-  const hourlyClimate = (climate?.hourlyData ?? []).map((h: any) => ({
-    ...h,
-    timestamp: hourToISO(h.hour),
-  }));
-  const enrichedHistory = history.map((h: any) => ({
-    ...h,
-    apparentPower: +(h.voltage * h.current).toFixed(1) || 0,
-    reactivePower:
-      +Math.sqrt(
-        Math.max(0, (h.voltage * h.current) ** 2 - h.power ** 2),
-      ).toFixed(1) || 0,
-  }));
+  const hourlyClimate = useMemo(
+    () =>
+      (climate?.hourlyData ?? []).map((h: any) => ({
+        ...h,
+        timestamp: hourToISO(h.hour),
+      })),
+    [climate],
+  );
+  const enrichedHistory = useMemo(
+    () =>
+      history.map((h: any) => ({
+        ...h,
+        apparentPower: +(h.voltage * h.current).toFixed(1) || 0,
+        reactivePower:
+          +Math.sqrt(
+            Math.max(0, (h.voltage * h.current) ** 2 - h.power ** 2),
+          ).toFixed(1) || 0,
+      })),
+    [history],
+  );
 
   const pieData = fuzzy
     ? [
@@ -748,11 +447,15 @@ export function Analytics() {
     ? confidenceBands(efc.forecast)
     : { upper: [], lower: [] };
 
-  const envHistory = hourlyClimate.map((h: any) => ({
-    timestamp: hourToISO(h.hour),
-    temperature: h.temperature,
-    humidity: h.humidity,
-  }));
+  const envHistory = useMemo(
+    () =>
+      hourlyClimate.map((h: any) => ({
+        timestamp: hourToISO(h.hour),
+        temperature: h.temperature,
+        humidity: h.humidity,
+      })),
+    [hourlyClimate],
+  );
   const tf = showForecast
     ? ensembleForecast(
         envHistory.map((h: any) => ({
@@ -967,8 +670,8 @@ export function Analytics() {
               <TimeSeriesChart
                 height={300}
                 spanHours={energySpanHours}
-                xTickFormat={(d: Date) => formatTick(d.toISOString(), energySpanHours)}
-                tooltipDateFormat={(d: Date) => formatDateForTooltip(d.toISOString(), energySpanHours)}
+xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), energySpanHours)}
+                    tooltipDateFormat={(v: number) => formatDateForTooltip(new Date(v).toISOString(), energySpanHours)}
                 leftTickFormat={(v: number) => String(v)}
                 rightTickFormat={(v: number) => String(v)}
                 leftDomain={energyPowerDomain}
@@ -1083,8 +786,8 @@ export function Analytics() {
                 <TimeSeriesChart
                   height={260}
                   spanHours={energySpanHours}
-                  xTickFormat={(d: Date) => formatTick(d.toISOString(), energySpanHours)}
-                  tooltipDateFormat={(d: Date) => formatDateForTooltip(d.toISOString(), energySpanHours)}
+                  xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), energySpanHours)}
+                    tooltipDateFormat={(v: number) => formatDateForTooltip(new Date(v).toISOString(), energySpanHours)}
                   leftTickFormat={(v: number) => String(v)}
                   leftDomain={energyKwhDomain}
                   nowMarker={efc.forecast.length ? now : null}
@@ -1332,8 +1035,8 @@ export function Analytics() {
                 <TimeSeriesChart
                   height={280}
                   spanHours={climateSpanHours}
-                  xTickFormat={(d: Date) => formatTick(d.toISOString(), climateSpanHours)}
-                  tooltipDateFormat={(d: Date) => formatDateForTooltip(d.toISOString(), climateSpanHours)}
+xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), climateSpanHours)}
+                    tooltipDateFormat={(v: number) => formatDateForTooltip(new Date(v).toISOString(), climateSpanHours)}
                   leftTickFormat={(v: number) => String(v)}
                   rightTickFormat={(v: number) => String(v)}
                   leftDomain={envTempDomain}
@@ -1631,7 +1334,43 @@ export function Analytics() {
                   No data
                 </div>
               ) : (
-                <ObsScatter data={fuzzy.scatterData} />
+                <NivoScatterChart
+                  height={350}
+                  series={["ECONOMICAL", "NORMAL", "WASTEFUL"]
+                    .filter((cat) =>
+                      fuzzy.scatterData.some((d: any) => d.category === cat),
+                    )
+                    .map((cat) => ({
+                      id: cat,
+                      label: cat,
+                      color: FUZZY_COLORS[cat],
+                      data: fuzzy.scatterData
+                        .filter((d: any) => d.category === cat)
+                        .map((d: any) => ({
+                          x: d.power,
+                          y: d.powerFactor,
+                        })),
+                    }))}
+                  xLabel="Power (W)"
+                  yLabel="Power Factor"
+                  yDomain={[0, 1]}
+                  markers={[
+                    {
+                      axis: "y",
+                      value: 0.85,
+                      color: "#3B82F6",
+                      dashed: true,
+                      label: "PF=0.85",
+                    },
+                    {
+                      axis: "y",
+                      value: 0.6,
+                      color: "#F59E0B",
+                      dashed: true,
+                      label: "PF=0.6",
+                    },
+                  ]}
+                />
               )}
             </ChartCard>
           </div>
@@ -1645,9 +1384,82 @@ export function Analytics() {
                   Loading...
                 </div>
               ) : (
-                <ObsDecisionSurface
-                  surface={decisionSurface}
-                  actual={fuzzy.scatterData}
+                <NivoScatterChart
+                  height={350}
+                  series={[
+                    ...["ECONOMICAL", "NORMAL", "WASTEFUL"]
+                      .filter((cat) =>
+                        decisionSurface.some(
+                          (d: any) => d.category === cat,
+                        ),
+                      )
+                      .map((cat) => ({
+                        id: `Grid · ${cat}`,
+                        label: `Grid · ${cat}`,
+                        color: FUZZY_COLORS[cat],
+                        opacity: 0.5,
+                        symbol: "square" as const,
+                        data: decisionSurface
+                          .filter((d: any) => d.category === cat)
+                          .map((d: any) => ({
+                            x: d.power,
+                            y: d.pf,
+                          })),
+                      })),
+                    ...["ECONOMICAL", "NORMAL", "WASTEFUL"]
+                      .filter((cat) =>
+                        fuzzy.scatterData.some(
+                          (d: any) => d.category === cat,
+                        ),
+                      )
+                      .map((cat) => ({
+                        id: `Actual · ${cat}`,
+                        label: `Actual · ${cat}`,
+                        color: FUZZY_COLORS[cat],
+                        opacity: 0.9,
+                        symbol: "circle" as const,
+                        data: fuzzy.scatterData
+                          .filter((d: any) => d.category === cat)
+                          .map((d: any) => ({
+                            x: d.power,
+                            y: d.powerFactor,
+                          })),
+                      })),
+                  ]}
+                  xLabel="Power (W)"
+                  yLabel="Power Factor"
+                  xDomain={[0, 120]}
+                  yDomain={[0.3, 1]}
+                  markers={[
+                    {
+                      axis: "y",
+                      value: 0.85,
+                      color: "#3B82F6",
+                      dashed: true,
+                      label: "PF=0.85",
+                    },
+                    {
+                      axis: "y",
+                      value: 0.6,
+                      color: "#F59E0B",
+                      dashed: true,
+                      label: "PF=0.6",
+                    },
+                    {
+                      axis: "x",
+                      value: 30,
+                      color: "#2ecc71",
+                      dashed: true,
+                      label: "30W",
+                    },
+                    {
+                      axis: "x",
+                      value: 70,
+                      color: "#e74c3c",
+                      dashed: true,
+                      label: "70W",
+                    },
+                  ]}
                 />
               )}
             </ChartCard>
@@ -1666,14 +1478,16 @@ export function Analytics() {
                   No data
                 </div>
               ) : (
-                <ObsBoxPlot
-                  data={
-                    fuzzy.boxSamples ??
-                    fuzzy.results!.map((d: any) => ({
-                      power: d.power,
-                      category: d.category,
-                    }))
-                  }
+                <NivoBoxPlot
+                  data={(fuzzy.boxSamples ?? fuzzy.results!.map((d: any) => ({
+                    value: d.power,
+                    category: d.category,
+                  }))).map((d: any) => ({
+                    value: d.power ?? d.value,
+                    category: d.category,
+                  }))}
+                  categories={["ECONOMICAL", "NORMAL", "WASTEFUL"]}
+                  colors={FUZZY_COLORS}
                 />
               )}
             </ChartCard>
@@ -1684,12 +1498,69 @@ export function Analytics() {
                 No data
               </div>
             ) : (
-              <ObsBlandAltman
-                data={blandAltmanData.data}
-                meanDiff={blandAltmanData.meanDiff}
-                upperLoA={blandAltmanData.upperLoA}
-                lowerLoA={blandAltmanData.lowerLoA}
-              />
+              <div>
+                <NivoScatterChart
+                  height={280}
+                  series={[
+                    {
+                      id: "Difference",
+                      label: "Difference",
+                      color: "#6366F1",
+                      data: blandAltmanData.data.map((d: any) => ({
+                        x: d.mean,
+                        y: d.difference,
+                      })),
+                    },
+                  ]}
+                  xLabel="Mean (Fuzzy + Threshold) / 2"
+                  yLabel="Difference"
+                  xDomain={[0.5, 3.5]}
+                  nodeSize={8}
+                  markers={[
+                    {
+                      axis: "y",
+                      value: blandAltmanData.meanDiff,
+                      color: "#EF4444",
+                      dashed: true,
+                      label: "Mean",
+                    },
+                    {
+                      axis: "y",
+                      value: blandAltmanData.upperLoA,
+                      color: "#F59E0B",
+                      dashed: true,
+                      label: "+1.96σ",
+                    },
+                    {
+                      axis: "y",
+                      value: blandAltmanData.lowerLoA,
+                      color: "#F59E0B",
+                      dashed: true,
+                      label: "-1.96σ",
+                    },
+                  ]}
+                />
+                <div className="flex items-center justify-center gap-6 mt-2 text-xs text-gray-600 dark:text-gray-400 font-medium">
+                  <span>
+                    Mean Diff:{" "}
+                    <strong className="text-gray-900 dark:text-white">
+                      {blandAltmanData.meanDiff.toFixed(3)}
+                    </strong>
+                  </span>
+                  <span>
+                    Upper LoA:{" "}
+                    <strong className="text-gray-900 dark:text-white">
+                      {blandAltmanData.upperLoA.toFixed(3)}
+                    </strong>
+                  </span>
+                  <span>
+                    Lower LoA:{" "}
+                    <strong className="text-gray-900 dark:text-white">
+                      {blandAltmanData.lowerLoA.toFixed(3)}
+                    </strong>
+                  </span>
+                </div>
+              </div>
             )}
           </ChartCard>
           <MembershipPanel
@@ -1706,9 +1577,8 @@ export function Analytics() {
                   <TimeSeriesChart
                     height={260}
                     spanHours={24}
-                    xTickFormat={(d: Date) => String(d.getTime())}
-                    tooltipDateFormat={(d: Date) => `Value: ${d.getTime()}`}
-                    leftTickFormat={(v: number) => v.toFixed(1)}
+                    xTickFormat={(v: number) => v.toFixed(0) + " V"}
+                    tooltipDateFormat={(v: number) => `Value: ${v.toFixed(1)}`}
                     leftDomain={[0, 1]}
                     series={[
                       {
@@ -1750,9 +1620,8 @@ export function Analytics() {
                   <TimeSeriesChart
                     height={260}
                     spanHours={24}
-                    xTickFormat={(d: Date) => String(d.getTime())}
-                    tooltipDateFormat={(d: Date) => `Value: ${d.getTime()}`}
-                    leftTickFormat={(v: number) => v.toFixed(1)}
+                    xTickFormat={(v: number) => v.toFixed(0) + " W"}
+                    tooltipDateFormat={(v: number) => `Value: ${v.toFixed(1)} W`}
                     leftDomain={[0, 1]}
                     series={[
                       {
@@ -1909,7 +1778,58 @@ export function Analytics() {
                   No data
                 </div>
               ) : (
-                <ObsClimateScatter data={climateFuzzy.scatterData} />
+                <NivoScatterChart
+                  height={350}
+                  series={["COLD", "COOL", "COMFORTABLE", "WARM", "HOT"]
+                    .filter((cat) =>
+                      climateFuzzy.scatterData.some(
+                        (d: any) => d.category === cat,
+                      ),
+                    )
+                    .map((cat) => ({
+                      id: cat,
+                      label: cat,
+                      color: CLIMATE_FUZZY_COLORS[cat],
+                      data: climateFuzzy.scatterData
+                        .filter((d: any) => d.category === cat)
+                        .map((d: any) => ({
+                          x: d.temperature,
+                          y: d.humidity,
+                        })),
+                    }))}
+                  xLabel="Temperature (°C)"
+                  yLabel="Humidity (%)"
+                  markers={[
+                    {
+                      axis: "x",
+                      value: 24,
+                      color: "#3B82F6",
+                      dashed: true,
+                      label: "24°C",
+                    },
+                    {
+                      axis: "x",
+                      value: 28,
+                      color: "#F59E0B",
+                      dashed: true,
+                      label: "28°C",
+                    },
+                    {
+                      axis: "y",
+                      value: 50,
+                      color: "#3B82F6",
+                      dashed: true,
+                      label: "50%",
+                    },
+                    {
+                      axis: "y",
+                      value: 70,
+                      color: "#EF4444",
+                      dashed: true,
+                      label: "70%",
+                    },
+                  ]}
+                />
               )}
             </ChartCard>
           </div>

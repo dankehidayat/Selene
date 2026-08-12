@@ -522,16 +522,34 @@ export async function getRecentLogs(
   if (!pool) return { rows: [], total: 0 };
 
   const dir = order === "asc" ? "ASC" : "DESC";
-  const where = `WHERE time >= COALESCE($4::timestamptz, '-infinity')
-                 AND time <= COALESCE($5::timestamptz, 'infinity')`;
+
+  // Build WHERE dynamically — no unused placeholders, no ::cast ambiguity.
+  const conds: string[] = [];
+  const rowParams: (number | string | null)[] = [limit, offset];
+  const countParams: (string | null)[] = [];
+  let pi = 2; // $1 and $2 are LIMIT/OFFSET already
+  if (from) {
+    pi++;
+    conds.push(`time >= $${pi}::timestamptz`);
+    rowParams.push(from);
+    countParams.push(from);
+  }
+  if (to) {
+    pi++;
+    conds.push(`time <= $${pi}::timestamptz`);
+    rowParams.push(to);
+    countParams.push(to);
+  }
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
   const [result, countRes] = await Promise.all([
     pool.query(
       `SELECT * FROM sensor_readings ${where} ORDER BY time ${dir} LIMIT $1 OFFSET $2`,
-      [limit, offset, null, from ?? null, to ?? null],
+      rowParams,
     ),
     pool.query(
       `SELECT COUNT(*)::int AS total FROM sensor_readings ${where}`,
-      [null, null, null, from ?? null, to ?? null],
+      countParams,
     ),
   ]);
   const rows = result.rows.map((row: any) => ({
