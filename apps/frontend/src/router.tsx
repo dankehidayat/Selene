@@ -1,4 +1,5 @@
 // apps/frontend/src/router.tsx
+import { lazy, Suspense } from "react";
 import {
   createRootRoute,
   createRoute,
@@ -8,16 +9,50 @@ import {
 import { Layout } from "@/components/Layout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Dashboard } from "@/pages/Dashboard";
-import { DataLog } from "@/pages/DataLog";
-import { Analytics } from "@/pages/Analytics";
-import { AdminPage } from "@/pages/AdminPage";
-import { Login } from "@/pages/Login";
-import { Register } from "@/pages/Register";
-import { ForgotPassword } from "@/pages/ForgotPassword";
-import { ResetPassword } from "@/pages/ResetPassword";
-import { Impressum } from "@/pages/Impressum";
-import { Glossary } from "@/pages/Glossary";
 import { NotFound } from "@/pages/NotFound";
+
+// Route-level code splitting: the heavy / secondary pages load on demand.
+// Dashboard stays eager (it is the primary landing page after login).
+const DataLog = lazy(() =>
+  import("@/pages/DataLog").then((m) => ({ default: m.DataLog })),
+);
+const Analytics = lazy(() =>
+  import("@/pages/Analytics").then((m) => ({ default: m.Analytics })),
+);
+const AdminPage = lazy(() =>
+  import("@/pages/AdminPage").then((m) => ({ default: m.AdminPage })),
+);
+const Login = lazy(() =>
+  import("@/pages/Login").then((m) => ({ default: m.Login })),
+);
+const Register = lazy(() =>
+  import("@/pages/Register").then((m) => ({ default: m.Register })),
+);
+const ForgotPassword = lazy(() =>
+  import("@/pages/ForgotPassword").then((m) => ({ default: m.ForgotPassword })),
+);
+const ResetPassword = lazy(() =>
+  import("@/pages/ResetPassword").then((m) => ({ default: m.ResetPassword })),
+);
+const Impressum = lazy(() =>
+  import("@/pages/Impressum").then((m) => ({ default: m.Impressum })),
+);
+const Glossary = lazy(() =>
+  import("@/pages/Glossary").then((m) => ({ default: m.Glossary })),
+);
+
+/** Quiet, on-brand fallback while a lazy route chunk loads. */
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center py-24">
+      <span
+        aria-hidden
+        className="h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-blue-500 dark:border-gray-700 dark:border-t-blue-400"
+      />
+      <span className="sr-only">Loading…</span>
+    </div>
+  );
+}
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
@@ -42,7 +77,9 @@ const logRoute = createRoute({
   component: () => (
     <ProtectedRoute>
       <Layout>
-        <DataLog />
+        <Suspense fallback={<PageFallback />}>
+          <DataLog />
+        </Suspense>
       </Layout>
     </ProtectedRoute>
   ),
@@ -54,7 +91,9 @@ const analyticsRoute = createRoute({
   component: () => (
     <ProtectedRoute>
       <Layout>
-        <Analytics />
+        <Suspense fallback={<PageFallback />}>
+          <Analytics />
+        </Suspense>
       </Layout>
     </ProtectedRoute>
   ),
@@ -66,7 +105,9 @@ const adminRoute = createRoute({
   component: () => (
     <ProtectedRoute>
       <Layout>
-        <AdminPage />
+        <Suspense fallback={<PageFallback />}>
+          <AdminPage />
+        </Suspense>
       </Layout>
     </ProtectedRoute>
   ),
@@ -78,7 +119,9 @@ const impressumRoute = createRoute({
   component: () => (
     <ProtectedRoute>
       <Layout>
-        <Impressum />
+        <Suspense fallback={<PageFallback />}>
+          <Impressum />
+        </Suspense>
       </Layout>
     </ProtectedRoute>
   ),
@@ -90,7 +133,9 @@ const glossaryRoute = createRoute({
   component: () => (
     <ProtectedRoute>
       <Layout>
-        <Glossary />
+        <Suspense fallback={<PageFallback />}>
+          <Glossary />
+        </Suspense>
       </Layout>
     </ProtectedRoute>
   ),
@@ -99,25 +144,41 @@ const glossaryRoute = createRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  component: () => <Login />,
+  component: () => (
+    <Suspense fallback={<PageFallback />}>
+      <Login />
+    </Suspense>
+  ),
 });
 
 const registerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/register",
-  component: () => <Register />,
+  component: () => (
+    <Suspense fallback={<PageFallback />}>
+      <Register />
+    </Suspense>
+  ),
 });
 
 const forgotPasswordRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/forgot-password",
-  component: () => <ForgotPassword />,
+  component: () => (
+    <Suspense fallback={<PageFallback />}>
+      <ForgotPassword />
+    </Suspense>
+  ),
 });
 
 const resetPasswordRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/reset-password",
-  component: () => <ResetPassword />,
+  component: () => (
+    <Suspense fallback={<PageFallback />}>
+      <ResetPassword />
+    </Suspense>
+  ),
 });
 
 const routeTree = rootRoute.addChildren([

@@ -10,7 +10,8 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { ChartCard, controlBtnClass } from "@/components/ChartCard";
-import { RangeFilter, DatePickerRow } from "@/components/RangeFilter";
+import { DatePickerRow } from "@/components/RangeFilter";
+import { RangeBar } from "@/components/RangeBar";
 import { useReadingsPage } from "@/services/api";
 import type { EnergyReading } from "@/types/energy";
 import { cn } from "@/lib/utils";
@@ -142,11 +143,12 @@ export function DataLog() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <RangeFilter
+          <RangeBar
             from={from}
             to={to}
             onChange={handleRangeChange}
             emptyLabel="All Time"
+            dateOnly
           />
           <Popover.Root>
             <Popover.Trigger asChild>

@@ -1,11 +1,12 @@
 // apps/frontend/src/components/charts/TimeSeriesChart.tsx
 // Nivo-based time series with dual Y-axes, gradient areas, dashed forecasts,
 // confidence bands, "Now" marker and a merged crosshair tooltip.
-import { useMemo, useId, type ReactNode } from "react";
+import { useMemo, useId } from "react";
 import { ResponsiveLine } from "@nivo/line";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
+import { ChartTooltipCard, TooltipRow, formatTooltipValue } from "./ChartTooltip";
 
 export interface SeriesPoint {
   x: number | string | Date;
@@ -187,15 +188,20 @@ export function TimeSeriesChart({
       if (!rows.length) return null;
       const dateStr = tooltipDateFormat ? tooltipDateFormat(xVal) : xTickFormat ? xTickFormat(xVal) : new Date(xVal).toLocaleString();
       return (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg px-3.5 py-2.5 text-xs font-sans">
+        <ChartTooltipCard>
           <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">{dateStr}</p>
-          {rows.map((r) => (
-            <p key={r.label} className="text-gray-400 dark:text-gray-400 flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
-              {r.label}: <span className="text-gray-900 dark:text-white font-semibold">{typeof r.value === "number" ? Number(r.value.toFixed(2)) : r.value}{r.unit ? ` ${r.unit}` : ""}</span>
-            </p>
-          ))}
-        </div>
+          {rows.map((r) =>
+            typeof r.value === "number" ? (
+              <TooltipRow
+                key={r.label}
+                label={r.label}
+                value={formatTooltipValue(r.value)}
+                color={r.color}
+                unit={r.unit}
+              />
+            ) : null,
+          )}
+        </ChartTooltipCard>
       );
     };
     return TooltipFn;

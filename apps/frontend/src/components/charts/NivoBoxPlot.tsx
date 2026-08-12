@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { scaleBand, scaleLinear } from "d3-scale";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
+import { ChartTooltipCard, formatTooltipValue } from "./ChartTooltip";
 
 export interface NivoBoxPlotDatum {
   value: number;
@@ -302,7 +303,7 @@ export function NivoBoxPlot({
           ["Max", box.max],
         ];
         return (
-          <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg px-3.5 py-2.5 text-xs font-sans whitespace-nowrap">
+          <ChartTooltipCard className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap">
             <p className="text-gray-900 dark:text-white font-semibold mb-1">
               {box.category}
             </p>
@@ -313,11 +314,11 @@ export function NivoBoxPlot({
               >
                 <span>{label}</span>
                 <span className="text-gray-900 dark:text-white font-semibold tabular-nums">
-                  {value.toFixed(1)}
+                  {formatTooltipValue(value, 2)}
                 </span>
               </p>
             ))}
-          </div>
+          </ChartTooltipCard>
         );
       })() : null}
     </div>

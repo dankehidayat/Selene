@@ -5,6 +5,7 @@ import { CartesianMarkerProps } from "@nivo/core";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
+import { ChartTooltipCard, formatTooltipValue } from "./ChartTooltip";
 
 export type ScatterSymbol = "circle" | "square" | "diamond" | "triangle";
 
@@ -141,19 +142,20 @@ export function NivoScatterChart({
     [markers],
   );
 
-  const defaultTooltip = useCallback(
-    ({ node }: any) => (
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg px-3.5 py-2.5 text-xs font-sans">
+  const defaultTooltip = useCallback(({ node }: any) => {
+    const xv = Number(node.xValue ?? node.data?.x);
+    const yv = Number(node.yValue ?? node.data?.y);
+    return (
+      <ChartTooltipCard>
         <p className="text-gray-400 dark:text-gray-400">
           {node.serieId}:{" "}
-          <span className="text-gray-900 dark:text-white font-semibold">
-            x={node.formattedX}, y={node.formattedY}
+          <span className="text-gray-900 dark:text-white font-semibold tabular-nums">
+            x={formatTooltipValue(xv)}, y={formatTooltipValue(yv)}
           </span>
         </p>
-      </div>
-    ),
-    [],
-  );
+      </ChartTooltipCard>
+    );
+  }, []);
 
   const nodeComp = useCallback(
     (props: any) => <SymbolNode {...props} getSymbol={symbolOf} getOpacity={opacityOf} />,

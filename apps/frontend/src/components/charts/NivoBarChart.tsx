@@ -4,6 +4,7 @@ import { ResponsiveBar } from "@nivo/bar";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
+import { ChartTooltipCard, formatTooltipValue } from "./ChartTooltip";
 
 interface NivoBarChartProps {
   data: Record<string, any>[];
@@ -67,7 +68,20 @@ export function NivoBarChart({
         enableLabel={false}
         isInteractive
         animate={animate}
-        tooltip={tooltip ? (tooltip as any) : undefined}
+        tooltip={
+          tooltip
+            ? (tooltip as any)
+            : ({ id, value }: any) => (
+                <ChartTooltipCard>
+                  <p className="text-gray-400 dark:text-gray-400">
+                    {id}:{" "}
+                    <span className="text-gray-900 dark:text-white font-semibold tabular-nums">
+                      {formatTooltipValue(Number(value))}
+                    </span>
+                  </p>
+                </ChartTooltipCard>
+              )
+        }
         role="application"
       />
     </div>

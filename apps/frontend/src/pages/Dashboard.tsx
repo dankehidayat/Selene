@@ -9,7 +9,7 @@ import {
   ConfidencePill,
   ForecastLegendHint,
 } from "@/components/ChartCard";
-import { RangeFilter } from "@/components/RangeFilter";
+import { RangeBar } from "@/components/RangeBar";
 import { PowerOverview } from "@/components/PowerOverview";
 import { ClimateOverview } from "@/components/ClimateOverview";
 import {
@@ -219,6 +219,14 @@ export function Dashboard() {
     <div className="space-y-8 font-sans">
       <LiveClock userName={user?.name} />
 
+      <div className="flex justify-end">
+        <RangeBar
+          from={chartRange.from}
+          to={chartRange.to}
+          onChange={(from, to) => setChartRange({ from, to })}
+        />
+      </div>
+
       {/* Energy */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -275,11 +283,6 @@ export function Dashboard() {
                 >
                   Forecast
                 </ToggleControl>
-                <RangeFilter
-                  from={chartRange.from}
-                  to={chartRange.to}
-                  onChange={(from, to) => setChartRange({ from, to })}
-                />
               </div>
             }
           >
@@ -360,11 +363,6 @@ export function Dashboard() {
                 >
                   Forecast
                 </ToggleControl>
-                <RangeFilter
-                  from={chartRange.from}
-                  to={chartRange.to}
-                  onChange={(from, to) => setChartRange({ from, to })}
-                />
               </div>
             }
           >

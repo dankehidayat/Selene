@@ -4,6 +4,7 @@ import { ResponsivePie } from "@nivo/pie";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
+import { ChartTooltipCard } from "./ChartTooltip";
 
 interface NivoPieDatum {
   id: string;
@@ -50,14 +51,14 @@ export function NivoPieChart({
         tooltip={({ datum }) => {
           const pct = total > 0 ? ((datum.value / total) * 100).toFixed(1) : "0";
           return (
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg px-3.5 py-2.5 text-xs font-sans">
+            <ChartTooltipCard>
               <p className="text-gray-400 dark:text-gray-400">
                 {datum.id}:{" "}
-                <span className="text-gray-900 dark:text-white font-semibold">
+                <span className="text-gray-900 dark:text-white font-semibold tabular-nums">
                   {datum.value} ({pct}%)
                 </span>
               </p>
-            </div>
+            </ChartTooltipCard>
           );
         }}
         legends={[

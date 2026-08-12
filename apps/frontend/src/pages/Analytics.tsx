@@ -23,7 +23,7 @@ import {
   ConfidencePill,
   ForecastLegendHint,
 } from "@/components/ChartCard";
-import { RangeFilter } from "@/components/RangeFilter";
+import { RangeBar } from "@/components/RangeBar";
 import { StatCard, EST_COST_INFO, TOTAL_ENERGY_INFO } from "@/components/StatCard";
 import { InfoTip } from "@/components/InfoTip";
 import { useTabFromSearch } from "@/hooks/useTabFromSearch";
@@ -593,6 +593,13 @@ export function Analytics() {
               Power consumption patterns and statistical summaries
             </p>
           </div>
+          <div className="flex justify-end">
+            <RangeBar
+              from={energyRange.from}
+              to={energyRange.to}
+              onChange={(from, to) => setEnergyRange({ from, to })}
+            />
+          </div>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Avg Power"
@@ -650,11 +657,6 @@ export function Analytics() {
                 >
                   Forecast
                 </ToggleControl>
-                <RangeFilter
-                  from={energyRange.from}
-                  to={energyRange.to}
-                  onChange={(from, to) => setEnergyRange({ from, to })}
-                />
               </div>
             }
           >
@@ -955,6 +957,13 @@ xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), energySpanHour
               Temperature, humidity, and climate comfort analytics
             </p>
           </div>
+          <div className="flex justify-end">
+            <RangeBar
+              from={climateRange.from}
+              to={climateRange.to}
+              onChange={(from, to) => setClimateRange({ from, to })}
+            />
+          </div>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Avg Temp"
@@ -1015,11 +1024,6 @@ xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), energySpanHour
                   >
                     Forecast
                   </ToggleControl>
-                  <RangeFilter
-                    from={climateRange.from}
-                    to={climateRange.to}
-                    onChange={(from, to) => setClimateRange({ from, to })}
-                  />
                 </div>
               }
             >
@@ -1258,6 +1262,13 @@ xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), climateSpanHou
               />
             </div>
           </div>
+          <div className="flex justify-end">
+            <RangeBar
+              from={energyRange.from}
+              to={energyRange.to}
+              onChange={(from, to) => setEnergyRange({ from, to })}
+            />
+          </div>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
               label="Economical"
@@ -1294,13 +1305,6 @@ xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), climateSpanHou
             <ChartCard
               title="Energy Category Distribution"
               chartId="chart-fuzzy-pie"
-              action={
-                <RangeFilter
-                  from={energyRange.from}
-                  to={energyRange.to}
-                  onChange={(from, to) => setEnergyRange({ from, to })}
-                />
-              }
             >
               {fuzzyLoading ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
@@ -1676,6 +1680,13 @@ xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), climateSpanHou
               />
             </div>
           </div>
+          <div className="flex justify-end">
+            <RangeBar
+              from={climateFuzzyRange.from}
+              to={climateFuzzyRange.to}
+              onChange={(from, to) => setClimateFuzzyRange({ from, to })}
+            />
+          </div>
           <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
             <StatCard
               label="Cold"
@@ -1738,13 +1749,6 @@ xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), climateSpanHou
             <ChartCard
               title="Climate Category Distribution"
               chartId="chart-climate-fuzzy-pie"
-              action={
-                <RangeFilter
-                  from={climateFuzzyRange.from}
-                  to={climateFuzzyRange.to}
-                  onChange={(from, to) => setClimateFuzzyRange({ from, to })}
-                />
-              }
             >
               {climateFuzzyLoading ? (
                 <div className="flex h-[280px] items-center justify-center text-sm text-gray-500 dark:text-gray-400">
