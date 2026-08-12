@@ -12,8 +12,6 @@ import {
   Moon,
   Monitor,
   Shield,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "@/services/auth";
 import { useState, useEffect } from "react";
@@ -55,7 +53,6 @@ const activeBase =
 export function SidebarContent({
   onNavigate,
   compact = false,
-  onToggleCompact,
 }: {
   onNavigate?: () => void;
   compact?: boolean;
@@ -242,20 +239,34 @@ export function SidebarContent({
       {/* Bottom bar — always pinned (do not put inside scroll region) */}
       <div className="border-t border-gray-100 dark:border-gray-800 px-3 py-2.5 shrink-0 bg-white dark:bg-gray-900 z-10">
         {user ? (
-          <div className={`flex items-center gap-1.5 ${compact ? "justify-center" : ""}`}>
-            {/* Avatar — opens settings */}
-            <button
-              onClick={handleOpenSettings}
-              title={compact ? "Account settings" : undefined}
-              aria-label={compact ? "Account settings" : undefined}
-              className={`${compact ? "p-1.5" : "flex items-center gap-2.5 flex-1 min-w-0 px-2 py-1.5"} rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition text-left shrink-0`}
-            >
-              <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0">
-                <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
-                  {initial}
-                </span>
-              </div>
-              {!compact && (
+          compact ? (
+            // Collapsed rail: a single profile monogram, centered — opens settings.
+            <div className="flex items-center justify-center">
+              <button
+                onClick={handleOpenSettings}
+                title="Account settings"
+                aria-label="Account settings"
+                className="p-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+              >
+                <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                  <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                    {initial}
+                  </span>
+                </div>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              {/* Avatar — opens settings */}
+              <button
+                onClick={handleOpenSettings}
+                className="flex items-center gap-2.5 flex-1 min-w-0 px-2 py-1.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition text-left"
+              >
+                <div className="h-7 w-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0">
+                  <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-300">
+                    {initial}
+                  </span>
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium text-gray-900 dark:text-white truncate">
                     {user.name || user.email}
@@ -264,53 +275,37 @@ export function SidebarContent({
                     {user.name ? user.email : "Account"}
                   </p>
                 </div>
-              )}
-            </button>
-
-            {/* Settings gear */}
-            <button
-              onClick={handleOpenSettings}
-              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition shrink-0"
-              title="Settings"
-              aria-label="Settings"
-            >
-              <Settings
-                size={15}
-                className={gearSpin ? "animate-gearSpin" : ""}
-              />
-            </button>
-
-            {/* Theme toggle — higher contrast so Moon/Sun don't blend on mobile */}
-            <button
-              onClick={cycleTheme}
-              className={`p-1.5 rounded-lg text-gray-600 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 shrink-0 active:scale-90 ${
-                themePulse ? "animate-themePop" : ""
-              }`}
-              title={themeTooltip}
-              aria-label={themeTooltip}
-            >
-              <ThemeIcon
-                size={15}
-                className="transition-transform duration-200 stroke-[2]"
-              />
-            </button>
-
-            {/* Toggle between full / compact */}
-            {onToggleCompact && (
-              <button
-                onClick={onToggleCompact}
-                className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition shrink-0"
-                title={compact ? "Expand sidebar" : "Collapse sidebar"}
-                aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
-              >
-                {compact ? (
-                  <PanelLeftOpen size={15} />
-                ) : (
-                  <PanelLeftClose size={15} />
-                )}
               </button>
-            )}
-          </div>
+
+              {/* Settings gear */}
+              <button
+                onClick={handleOpenSettings}
+                className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition shrink-0"
+                title="Settings"
+                aria-label="Settings"
+              >
+                <Settings
+                  size={15}
+                  className={gearSpin ? "animate-gearSpin" : ""}
+                />
+              </button>
+
+              {/* Theme toggle */}
+              <button
+                onClick={cycleTheme}
+                className={`p-1.5 rounded-lg text-gray-600 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 shrink-0 active:scale-90 ${
+                  themePulse ? "animate-themePop" : ""
+                }`}
+                title={themeTooltip}
+                aria-label={themeTooltip}
+              >
+                <ThemeIcon
+                  size={15}
+                  className="transition-transform duration-200 stroke-[2]"
+                />
+              </button>
+            </div>
+          )
         ) : (
           <Link
             to="/login"

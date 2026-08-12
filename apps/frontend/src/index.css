@@ -356,3 +356,35 @@
 .animate-accordionOut {
   animation: accordionOut 0.2s ease-in forwards;
 }
+
+/* Range popover — rises and settles over the content (never pushes it). */
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-popoverIn {
+  animation: popoverIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes sheetIn {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animate-sheetIn {
+  animation: sheetIn 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-popoverIn,
+  .animate-sheetIn {
+    animation: none;
+  }
+}

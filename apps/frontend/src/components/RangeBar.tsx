@@ -1,5 +1,6 @@
 // apps/frontend/src/components/RangeBar.tsx
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import * as Popover from "@radix-ui/react-popover";
 import { CalendarDays, ChevronDown, Clock, X } from "lucide-react";
 import { controlBtnClass } from "./ChartCard";
 import { cn } from "@/lib/utils";
@@ -73,7 +74,8 @@ function buildDateString(day: number, month: number, year: number): string {
 }
 
 /* ================================================================== */
-/* RangeBar — inline, section-level time-range picker (auto-applies)   */
+/* RangeBar — floating time-range popover (auto-applies, never pushes  */
+/* content). Bottom sheet on mobile.                                    */
 /* ================================================================== */
 
 export function RangeBar({
@@ -329,116 +331,121 @@ export function RangeBar({
     </div>
   );
 
-  return (
-    <div className={cn("flex flex-col items-end", className)}>
-      {/* Summary row — collapsed by default; click to expand in-place */}
+  // The picker panel (date rows + optional same-day time inputs). Rendered in a
+  // floating popover on desktop, a bottom sheet on mobile — never pushes content.
+  const panel = (
+    <>
       <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        aria-label={`Time range: ${label}`}
-        onClick={() => setOpen((v) => !v)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            setOpen((v) => !v);
-          }
-        }}
-        className={cn(controlBtnClass, "cursor-pointer select-none")}
+        className={cn(
+          "flex gap-4",
+          isMobile ? "flex-col" : "flex-row flex-wrap",
+        )}
       >
-        <CalendarDays size={13} className="text-gray-500 dark:text-gray-300 shrink-0" />
-        <span>{label}</span>
-        <ChevronDown
-          size={12}
-          className={cn(
-            "text-gray-400 dark:text-gray-500 transition-transform duration-150",
-            open && "rotate-180",
-          )}
-        />
-        {hasRange && (
-          <button
-            type="button"
-            aria-label="Reset time range"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleReset();
-            }}
-            className="inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-1 rounded-full border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
-          >
-            <X size={10} />
-            Reset
-          </button>
+        {renderDateRow(
+          "From",
+          fromParts,
+          handleFromDay,
+          handleFromMonth,
+          handleFromYear,
+        )}
+        {renderDateRow(
+          "To",
+          toParts,
+          handleToDay,
+          handleToMonth,
+          handleToYear,
         )}
       </div>
 
-      {/* Expanded inline panel (pushes content down — not a popover) */}
-      {open && (
-        <div className="mt-2 w-max max-w-[calc(100vw-2rem)] rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 space-y-2 shadow-lg shadow-gray-200/60 dark:shadow-black/20">
-          <div
-            className={cn(
-              "flex gap-4",
-              isMobile
-                ? "flex-col overflow-y-auto max-h-[70vh]"
-                : "flex-row flex-wrap",
-            )}
-          >
-            {renderDateRow(
-              "From",
-              fromParts,
-              handleFromDay,
-              handleFromMonth,
-              handleFromYear,
-            )}
-            {renderDateRow(
-              "To",
-              toParts,
-              handleToDay,
-              handleToMonth,
-              handleToYear,
-            )}
+      {showTime && (
+        <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+          <div>
+            <label className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+              <Clock size={11} className="text-gray-400" />
+              From time
+            </label>
+            <input
+              type="time"
+              value={draftFromTime}
+              onChange={handleFromTime}
+              className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 dark:[color-scheme:dark]"
+              aria-label="From time"
+            />
           </div>
-
-          {showTime && (
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100 dark:border-gray-700">
-              <div>
-                <label className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
-                  <Clock size={11} className="text-gray-400" />
-                  From time
-                </label>
-                <input
-                  type="time"
-                  value={draftFromTime}
-                  onChange={handleFromTime}
-                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 dark:[color-scheme:dark]"
-                  aria-label="From time"
-                />
-              </div>
-              <div>
-                <label className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
-                  <Clock size={11} className="text-gray-400" />
-                  To time
-                </label>
-                <input
-                  type="time"
-                  value={draftToTime}
-                  onChange={handleToTime}
-                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 dark:[color-scheme:dark]"
-                  aria-label="To time"
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-700">
-            <button
-              type="button"
-              onClick={handleReset}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
-            >
-              Reset ({emptyLabel})
-            </button>
+          <div>
+            <label className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+              <Clock size={11} className="text-gray-400" />
+              To time
+            </label>
+            <input
+              type="time"
+              value={draftToTime}
+              onChange={handleToTime}
+              className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 dark:[color-scheme:dark]"
+              aria-label="To time"
+            />
           </div>
         </div>
+      )}
+    </>
+  );
+
+  return (
+    <div className={cn("flex items-center gap-1.5", className)}>
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            className={controlBtnClass}
+            aria-label={`Time range: ${label}`}
+          >
+            <CalendarDays
+              size={13}
+              className="text-gray-500 dark:text-gray-300 shrink-0"
+            />
+            <span>{label}</span>
+            <ChevronDown
+              size={12}
+              className={cn(
+                "text-gray-400 dark:text-gray-500 transition-transform duration-150",
+                open && "rotate-180",
+              )}
+            />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          {isMobile ? (
+            <div className="fixed inset-0 z-50 flex flex-col justify-end">
+              <div
+                className="absolute inset-0 bg-black/20"
+                onClick={() => setOpen(false)}
+              />
+              <div className="relative bg-white dark:bg-gray-800 rounded-t-xl border-x border-t border-gray-100 dark:border-gray-700 shadow-overlay p-4 w-full max-h-[85vh] overflow-y-auto animate-sheetIn">
+                {panel}
+              </div>
+            </div>
+          ) : (
+            <Popover.Content
+              align="end"
+              sideOffset={6}
+              className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-overlay p-3.5 z-50 w-max max-w-[calc(100vw-2rem)] animate-popoverIn"
+            >
+              {panel}
+            </Popover.Content>
+          )}
+        </Popover.Portal>
+      </Popover.Root>
+
+      {hasRange && (
+        <button
+          type="button"
+          aria-label="Reset time range"
+          onClick={handleReset}
+          className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
+        >
+          <X size={10} />
+          Reset
+        </button>
       )}
     </div>
   );

@@ -67,6 +67,12 @@ const CLIMATE_FUZZY_COLORS: Record<string, string> = {
   HOT: "#EF4444",
 };
 
+/** Round a metric to 2 decimals for display; "..." when absent. */
+function round2(v: number | undefined | null): string | number {
+  if (v == null || !Number.isFinite(v)) return "...";
+  return +v.toFixed(2);
+}
+
 function hourToISO(hour: number): string {
   const now = new Date();
   return new Date(
@@ -1178,14 +1184,14 @@ xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), climateSpanHou
                 />
                 <MetricRow
                   label="Min Temp"
-                  value={climate?.temperature?.min ?? "..."}
+                  value={round2(climate?.temperature?.min)}
                   unit="°C"
                   icon={TrendingDown}
                   color="text-emerald-500"
                 />
                 <MetricRow
                   label="Max Temp"
-                  value={climate?.temperature?.max ?? "..."}
+                  value={round2(climate?.temperature?.max)}
                   unit="°C"
                   icon={TrendingUp}
                   color="text-red-500"
@@ -1221,14 +1227,14 @@ xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), climateSpanHou
                 />
                 <MetricRow
                   label="Min Humidity"
-                  value={climate?.humidity?.min ?? "..."}
+                  value={round2(climate?.humidity?.min)}
                   unit="%"
                   icon={TrendingDown}
                   color="text-emerald-500"
                 />
                 <MetricRow
                   label="Max Humidity"
-                  value={climate?.humidity?.max ?? "..."}
+                  value={round2(climate?.humidity?.max)}
                   unit="%"
                   icon={TrendingUp}
                   color="text-red-500"
