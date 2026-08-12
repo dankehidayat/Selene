@@ -10,7 +10,7 @@ import {
   ArrowUpDown,
 } from "lucide-react";
 import { ChartCard, controlBtnClass } from "@/components/ChartCard";
-import { RangeFilter, CalendarPicker } from "@/components/RangeFilter";
+import { RangeFilter, DatePickerRow } from "@/components/RangeFilter";
 import { useReadingsPage } from "@/services/api";
 import type { EnergyReading } from "@/types/energy";
 import { cn } from "@/lib/utils";
@@ -187,20 +187,8 @@ export function DataLog() {
                     <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
                       Export by range
                     </p>
-                    <CalendarPicker
-                      label="From"
-                      date={expFromDraft ?? ""}
-                      onChange={setExpFromDraft}
-                      min={undefined}
-                      max={expToDraft ?? undefined}
-                    />
-                    <CalendarPicker
-                      label="To"
-                      date={expToDraft ?? ""}
-                      onChange={setExpToDraft}
-                      min={expFromDraft ?? undefined}
-                      max={undefined}
-                    />
+                    <DatePickerRow label="From" date={expFromDraft ?? ""} onChange={setExpFromDraft} />
+                    <DatePickerRow label="To" date={expToDraft ?? ""} onChange={setExpToDraft} />
                     <div className="grid grid-cols-2 gap-2 mt-2">
                       <button
                         onClick={() => handleRangedExport("csv")}

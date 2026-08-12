@@ -1,9 +1,10 @@
 // apps/frontend/src/components/charts/NivoScatterChart.tsx
-import { useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback } from "react";
 import { ResponsiveScatterPlot } from "@nivo/scatterplot";
 import { CartesianMarkerProps } from "@nivo/core";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
+import { useChartAnimation } from "@/hooks/useChartAnimation";
 
 export type ScatterSymbol = "circle" | "square" | "diamond" | "triangle";
 
@@ -37,72 +38,37 @@ export interface NivoScatterChartProps {
   tooltip?: (datum: any) => React.ReactNode;
 }
 
-/** Resolve a possibly-spring animated value to a plain number. */
-function val(v: any): number {
-  if (v == null) return 0;
-  return typeof v.to === "function" ? v.to() : (v as number);
-}
-
 /** SVG shape for a scatter node. Looks up per-series symbol/opacity. */
-function SymbolNode({
+const SymbolNode = memo(function SymbolNode({
+  node,
+  style,
   getSymbol,
   getOpacity,
 }: {
+  node: any;
+  style: any;
   getSymbol: (serieId: string | number) => ScatterSymbol;
   getOpacity: (serieId: string | number) => number;
 }) {
-  return useCallback(
-    ({ node, style }: any) => {
-      const cx = val(style.x);
-      const cy = val(style.y);
-      const size = val(style.size);
-      const color = typeof (style.color as any)?.to === "function"
-        ? (style.color as any).to()
-        : (style.color as string);
-      const r = size;
-      const half = r / 2;
-      const symbol = getSymbol(node.serieId);
-      const opacity = getOpacity(node.serieId);
-      const common = { opacity, style: { mixBlendMode: "normal" as const } };
-
-      switch (symbol) {
-        case "square":
-          return (
-            <rect
-              x={cx - half}
-              y={cy - half}
-              width={r}
-              height={r}
-              rx={1}
-              fill={color}
-              {...common}
-            />
-          );
-        case "diamond":
-          return (
-            <polygon
-              points={`${cx},${cy - half} ${cx + half},${cy} ${cx},${cy + half} ${cx - half},${cy}`}
-              fill={color}
-              {...common}
-            />
-          );
-        case "triangle":
-          return (
-            <polygon
-              points={`${cx},${cy - half} ${cx + half * 0.866},${cy + half * 0.5} ${cx - half * 0.866},${cy + half * 0.5}`}
-              fill={color}
-              {...common}
-            />
-          );
-        default:
-          return (
-            <circle cx={cx} cy={cy} r={r / 2} fill={color} {...common} />
-          );
-      }
-    },
-    [getSymbol, getOpacity],
-  );
-}
+  const cx = style?.x ?? 0;
+  const cy = style?.y ?? 0;
+  const size = style?.size ?? 9;
+  const color = style?.color ?? "#666";
+  const r = size;
+  const half = r / 2;
+  const symbol = getSymbol(node.serieId);
+  const opacity = getOpacity(node.serieId);
+  switch (symbol) {
+    case "square":
+      return <rect x={cx - half} y={cy - half} width={r} height={r} rx={1} fill={color} opacity={opacity} />;
+    case "diamond":
+      return <polygon points={`${cx},${cy - half} ${cx + half},${cy} ${cx},${cy + half} ${cx - half},${cy}`} fill={color} opacity={opacity} />;
+    case "triangle":
+      return <polygon points={`${cx},${cy - half} ${cx + half * 0.866},${cy + half * 0.5} ${cx - half * 0.866},${cy + half * 0.5}`} fill={color} opacity={opacity} />;
+    default:
+      return <circle cx={cx} cy={cy} r={r / 2} fill={color} opacity={opacity} />;
+  }
+});
 
 export function NivoScatterChart({
   series,
@@ -117,6 +83,7 @@ export function NivoScatterChart({
   tooltip,
 }: NivoScatterChartProps) {
   const isDark = useIsDarkMode();
+  const animate = useChartAnimation();
   const theme = useMemo(() => createNivoTheme(isDark), [isDark]);
 
   const xScaleSpec = useMemo(() => {
@@ -188,10 +155,18 @@ export function NivoScatterChart({
     [],
   );
 
-  const nodeComp = useMemo(
-    () => SymbolNode({ getSymbol: symbolOf, getOpacity: opacityOf }),
+  const nodeComp = useCallback(
+    (props: any) => <SymbolNode {...props} getSymbol={symbolOf} getOpacity={opacityOf} />,
     [symbolOf, opacityOf],
   );
+
+  if (nivoData.every((s) => s.data.length === 0)) {
+    return (
+      <div style={{ height }} className="flex items-center justify-center text-sm text-gray-400 dark:text-gray-500">
+        No data
+      </div>
+    );
+  }
 
   return (
     <div style={{ height }}>
@@ -224,8 +199,7 @@ export function NivoScatterChart({
         isInteractive
         tooltip={tooltip ? ({ node }) => tooltip(node) : defaultTooltip}
         markers={nivoMarkers}
-        animate
-        motionConfig="gentle"
+        animate={animate}
         role="application"
       />
     </div>

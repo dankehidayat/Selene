@@ -328,7 +328,7 @@ export function Analytics() {
     () =>
       Array.from({ length: 24 }, (_, i) => {
         const found = summary?.peakHours?.find((p: any) => p.hour === i);
-        return { name: `${i}:00`, power: found?.avgPower ?? 0 };
+        return { name: String(i), power: found?.avgPower ?? 0 };
       }),
     [summary],
   );
@@ -1479,10 +1479,10 @@ xTickFormat={(v: number) => formatTick(new Date(v).toISOString(), climateSpanHou
                 </div>
               ) : (
                 <NivoBoxPlot
-                  data={(fuzzy.boxSamples ?? fuzzy.results!.map((d: any) => ({
+                  data={(fuzzy.boxSamples ?? fuzzy.results?.map((d: any) => ({
                     value: d.power,
                     category: d.category,
-                  }))).map((d: any) => ({
+                  })) ?? []).map((d: any) => ({
                     value: d.power ?? d.value,
                     category: d.category,
                   }))}

@@ -123,80 +123,120 @@ export function SidebarContent({
 
       {/* Navigation — scrollable */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {!compact && (
-          <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
-            Main
-          </p>
-        )}
-        <nav className={`${compact ? "px-2 space-y-1 pb-4 flex flex-col items-center" : "px-3 space-y-0.5 pb-4"}`}>
-          {mainItems.map((item) => (
-            <Link
-              key={item.label}
-              to={item.to}
-              onClick={() => onNavigate?.()}
-              className={`${linkBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`}
-              activeOptions={{ exact: item.to === "/" }}
-              activeProps={{
-                className: `${activeBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`,
-              }}
-              title={compact ? item.label : undefined}
-              aria-label={compact ? item.label : undefined}
-            >
-              <item.icon size={16} />
-              {!compact && item.label}
-            </Link>
-          ))}
-        </nav>
-
-        {/* Administration — Admin Only */}
-        {user?.role === "ADMIN" && (
-          <>
-            {!compact && (
-              <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
-                Administration
-              </p>
-            )}
-            <nav className={`${compact ? "px-2 space-y-1 pb-4 flex flex-col items-center" : "px-3 space-y-0.5 pb-4"}`}>
+        {compact ? (
+          <nav className="px-2 flex flex-col items-center gap-1">
+            {mainItems.map((item) => (
               <Link
-                to="/admin"
+                key={item.label}
+                to={item.to}
                 onClick={() => onNavigate?.()}
-                className={`${linkBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`}
+                className={`${linkBase} w-10 h-10 justify-center px-0`}
+                activeOptions={{ exact: item.to === "/" }}
                 activeProps={{
-                  className: `${activeBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`,
+                  className: `${activeBase} w-10 h-10 justify-center px-0`,
                 }}
-                title={compact ? "Admin Tools" : undefined}
-                aria-label={compact ? "Admin Tools" : undefined}
+                title={item.label}
+                aria-label={item.label}
               >
-                <Shield size={16} />
-                {!compact && "Admin Tools"}
+                <item.icon size={16} />
               </Link>
+            ))}
+            {user?.role === "ADMIN" && (
+              <>
+                <div className="w-6 border-t border-gray-200 dark:border-gray-700 my-1" />
+                <Link
+                  to="/admin"
+                  onClick={() => onNavigate?.()}
+                  className={`${linkBase} w-10 h-10 justify-center px-0`}
+                  activeProps={{
+                    className: `${activeBase} w-10 h-10 justify-center px-0`,
+                  }}
+                  title="Admin Tools"
+                  aria-label="Admin Tools"
+                >
+                  <Shield size={16} />
+                </Link>
+              </>
+            )}
+            <div className="w-6 border-t border-gray-200 dark:border-gray-700 my-1" />
+            {infoItems.map((item) => (
+              <Link
+                key={item.label}
+                to={item.to}
+                onClick={() => onNavigate?.()}
+                className={`${linkBase} w-10 h-10 justify-center px-0`}
+                activeProps={{
+                  className: `${activeBase} w-10 h-10 justify-center px-0`,
+                }}
+                title={item.label}
+                aria-label={item.label}
+              >
+                <item.icon size={16} />
+              </Link>
+            ))}
+          </nav>
+        ) : (
+          <>
+            <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
+              Main
+            </p>
+            <nav className="px-3 space-y-0.5 pb-4">
+              {mainItems.map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  onClick={() => onNavigate?.()}
+                  className={linkBase}
+                  activeOptions={{ exact: item.to === "/" }}
+                  activeProps={{ className: activeBase }}
+                  title={compact ? item.label : undefined}
+                  aria-label={compact ? item.label : undefined}
+                >
+                  <item.icon size={16} />
+                  {!compact && item.label}
+                </Link>
+              ))}
+            </nav>
+
+            {/* Administration — Admin Only */}
+            {user?.role === "ADMIN" && (
+              <>
+                <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
+                  Administration
+                </p>
+                <nav className="px-3 space-y-0.5 pb-4">
+                  <Link
+                    to="/admin"
+                    onClick={() => onNavigate?.()}
+                    className={linkBase}
+                    activeProps={{ className: activeBase }}
+                  >
+                    <Shield size={16} />
+                    Admin Tools
+                  </Link>
+                </nav>
+              </>
+            )}
+
+            <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
+              Information
+            </p>
+            <nav className="px-3 space-y-0.5 pb-4">
+              {infoItems.map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  onClick={() => onNavigate?.()}
+                  className={linkBase}
+                  activeProps={{ className: activeBase }}
+                >
+                  <item.icon size={16} />
+                  {item.label}
+                </Link>
+              ))}
             </nav>
           </>
         )}
-
-        {!compact && (
-          <p className="px-5 text-[11px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 mt-2">
-            Information
-          </p>
-        )}
-        <nav className={`${compact ? "px-2 space-y-1 pb-4 flex flex-col items-center" : "px-3 space-y-0.5 pb-4"}`}>
-          {infoItems.map((item) => (
-            <Link
-              key={item.label}
-              to={item.to}
-              onClick={() => onNavigate?.()}
-              className={`${linkBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`}
-              activeProps={{
-                className: `${activeBase} ${compact ? "w-10 h-10 justify-center px-0" : ""}`,
-              }}
-              title={compact ? item.label : undefined}
-              aria-label={compact ? item.label : undefined}
-            >
-              <item.icon size={16} />
-              {!compact && item.label}
-            </Link>
-          ))}
-        </nav>
       </div>
 
       {/* Bottom bar — always pinned (do not put inside scroll region) */}

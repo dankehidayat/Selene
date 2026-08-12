@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { ResponsiveBar } from "@nivo/bar";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
+import { useChartAnimation } from "@/hooks/useChartAnimation";
 
 interface NivoBarChartProps {
   data: Record<string, any>[];
@@ -34,6 +35,7 @@ export function NivoBarChart({
   tooltip,
 }: NivoBarChartProps) {
   const isDark = useIsDarkMode();
+  const animate = useChartAnimation();
   const theme = useMemo(() => createNivoTheme(isDark), [isDark]);
 
   return (
@@ -64,6 +66,7 @@ export function NivoBarChart({
         }}
         enableLabel={false}
         isInteractive
+        animate={animate}
         tooltip={tooltip ? (tooltip as any) : undefined}
         role="application"
       />

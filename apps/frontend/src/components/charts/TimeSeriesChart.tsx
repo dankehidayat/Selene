@@ -5,6 +5,7 @@ import { useMemo, useId, type ReactNode } from "react";
 import { ResponsiveLine } from "@nivo/line";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
+import { useChartAnimation } from "@/hooks/useChartAnimation";
 
 export interface SeriesPoint {
   x: number | string | Date;
@@ -73,6 +74,7 @@ export function TimeSeriesChart({
 }: TimeSeriesChartProps) {
   const isDark = useIsDarkMode();
   const theme = useMemo(() => createNivoTheme(isDark), [isDark]);
+  const animate = useChartAnimation();
   const uid = useId();
 
   const leftSeries = series.filter((s) => s.axis === "left").map((s) => ({ ...s, data: s.data.map((d) => ({ x: TO_MS(d.x), y: d.y })) }));
@@ -135,12 +137,13 @@ export function TimeSeriesChart({
   );
 
   // AreaLayer: uses the chart's computed series (props) so only the chart's own axis areas are drawn
-  const AreaLayer = ({ series: cs, xScale: xs, yScale: ys }: any) => (
+  const AreaLayer = ({ series: cs, xScale: xs, yScale: ys, innerHeight: ih }: any) => (
     <g>{cs.filter((s: any) => areaIds.has(s.id)).map((s: any) => {
       const pts = s.data.map((p: any) => ({ x: p.position.x, y: p.position.y })).filter((p: any) => p.y != null);
       if (pts.length < 2) return null;
       const line = pts.map((p: { x: number; y: number }) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join("L");
-      return <path key={s.id} d={`M${line}L${pts[pts.length - 1].x.toFixed(2)},${ys(0).toFixed(2)}L${pts[0].x.toFixed(2)},${ys(0).toFixed(2)}Z`} fill={`url(#${uid}-grad-${s.id})`} stroke="none" />;
+      const base = Math.min(ys(0), ih); // clamp to plot bottom so areas don't overflow past the axis
+      return <path key={s.id} d={`M${line}L${pts[pts.length - 1].x.toFixed(2)},${base.toFixed(2)}L${pts[0].x.toFixed(2)},${base.toFixed(2)}Z`} fill={`url(#${uid}-grad-${s.id})`} stroke="none" />;
     })}</g>
   );
 
@@ -212,7 +215,7 @@ export function TimeSeriesChart({
   const layers: any[] = ["grid", "markers", "axes", LeftBandLayer, AreaLayer, LineLayer, "crosshair", "slices", "points", "mesh", "legends"];
   const overlayLayers: any[] = ["grid", "markers", "axes", RightBandLayer, AreaLayer, LineLayer, "crosshair", "legends"];
 
-  const cp: any = { theme, margin, animate: false, enablePoints: false, enableGridX: false, enableArea: false, enableSlices: false, defs, fill };
+  const cp: any = { theme, margin, animate, enablePoints: false, enableGridX: false, enableArea: false, enableSlices: false, defs, fill };
 
   return (
     <div className={className}>

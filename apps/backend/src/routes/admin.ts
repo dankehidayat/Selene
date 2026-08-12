@@ -151,7 +151,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         security: [{ bearerAuth: [] }],
         body: {
           type: "object",
-          required: ["role", "totpCode", "confirmationCode"],
+          required: ["role"],
           properties: {
             role: { type: "string", enum: ["USER", "ADMIN"] },
             totpCode: { type: "string", minLength: 6, maxLength: 6 },
@@ -164,23 +164,28 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       const { id } = request.params as { id: string };
       const { role, totpCode, confirmationCode } = request.body as {
         role: "USER" | "ADMIN";
-        totpCode: string;
-        confirmationCode: string;
+        totpCode?: string;
+        confirmationCode?: string;
       };
       const req = request as AuthenticatedRequest;
 
       // Audit log attempt
       console.log(`[audit] Role change attempt: userId=${req.userId}, targetId=${id}, role=${role}`);
 
-      // Layer 1: Prevent demotion without admin privileges
-      if (role !== "ADMIN") {
+      // Self-demotion is not allowed via API.
+      if (id === req.userId && role !== "ADMIN") {
         return reply.code(403).send({
-          error: "Role downgrades are prohibited via API",
+          error: "You cannot change your own role to USER",
         });
       }
 
       // Special handling for self-elevation attempts
       if (id === req.userId && role === "ADMIN") {
+        if (!totpCode || !confirmationCode) {
+          return reply.code(400).send({
+            error: "totpCode and confirmationCode are required for self-elevation",
+          });
+        }
         try {
           const existingUser = await prisma.user.findUnique({
             where: { id },

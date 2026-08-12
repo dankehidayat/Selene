@@ -1,8 +1,12 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { CalendarDays, ChevronDown, Clock, X } from "lucide-react";
 import { controlBtnClass } from "./ChartCard";
 import { cn } from "@/lib/utils";
+
+/* ------------------------------------------------------------------ */
+/* Types                                                               */
+/* ------------------------------------------------------------------ */
 
 interface RangeFilterProps {
   /** ISO string or null for default label */
@@ -13,20 +17,72 @@ interface RangeFilterProps {
   emptyLabel?: string;
 }
 
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-const MONTHS = [
+export interface DatePickerRowProps {
+  label: string; // "From" / "To"
+  date: string; // YYYY-MM-DD or empty
+  onChange: (d: string) => void;
+  min?: string;
+  max?: string;
+  showTime?: boolean;
+  time?: string; // HH:MM
+  onTimeChange?: (t: string) => void;
+}
+
+/* ------------------------------------------------------------------ */
+/* Constants                                                           */
+/* ------------------------------------------------------------------ */
+
+const SHORT_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const FULL_MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
 
-/**
- * Date/time range filter: "From" and "To" calendar pickers with conditional
- * time pickers when both dates match. Defaults to 24h window.
- *
- * Each mini calendar has styled native month/year <select> dropdowns for quick
- * jumping, a "Today" chip, and prev/next chevrons. On narrow screens the
- * popover renders as a fixed bottom-sheet overlay instead of a floating card.
- */
+const YEAR_OPTIONS = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
+
+/* ------------------------------------------------------------------ */
+/* Date helpers (local-time safe)                                      */
+/* ------------------------------------------------------------------ */
+
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function toLocalTimeString(d: Date): string {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatDateLabel(d: Date): string {
+  return `${d.getDate()} ${SHORT_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function parseDateParts(s: string): { day: number; month: number; year: number } {
+  const [y, m, d] = s.split("-").map(Number);
+  return { day: d, month: m, year: y };
+}
+
+/** Clamp a day-of-month to the valid range for the given month/year. */
+function clampDay(day: number, month: number, year: number): number {
+  const maxDays = new Date(year, month, 0).getDate();
+  return Math.max(1, Math.min(day, maxDays));
+}
+
+function buildDateString(day: number, month: number, year: number): string {
+  const clamped = clampDay(day, month, year);
+  return `${year}-${String(month).padStart(2, "0")}-${String(clamped).padStart(2, "0")}`;
+}
+
+/* ================================================================== */
+/* RangeFilter — popover with collapsible From / To date sections      */
+/* ================================================================== */
+
 export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: RangeFilterProps) {
   const today = useMemo(() => {
     const d = new Date();
@@ -34,9 +90,15 @@ export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: Ran
     return d;
   }, []);
 
+  const yesterday = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - 1);
+    return d;
+  }, [today]);
+
   // Draft state: date parts as "YYYY-MM-DD", time parts as "HH:MM"
   const [draftFromDate, setDraftFromDate] = useState(() =>
-    from ? toLocalDateString(new Date(from)) : toLocalDateString(shiftDays(today, -1)),
+    from ? toLocalDateString(new Date(from)) : toLocalDateString(yesterday),
   );
   const [draftToDate, setDraftToDate] = useState(() =>
     to ? toLocalDateString(new Date(to)) : toLocalDateString(today),
@@ -49,8 +111,15 @@ export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: Ran
   );
   const [open, setOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [fromOpen, setFromOpen] = useState(false);
+  const [toOpen, setToOpen] = useState(false);
 
   const sameDate = draftFromDate === draftToDate;
+  const showTime = sameDate && fromOpen && toOpen;
+
+  // Derive day/month/year parts from draft strings
+  const fromParts = useMemo(() => parseDateParts(draftFromDate), [draftFromDate]);
+  const toParts = useMemo(() => parseDateParts(draftToDate), [draftToDate]);
 
   // Detect narrow viewport for mobile bottom-sheet layout
   useEffect(() => {
@@ -64,12 +133,14 @@ export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: Ran
   // Reset draft when external from/to change while closed
   useEffect(() => {
     if (!open) {
-      setDraftFromDate(from ? toLocalDateString(new Date(from)) : toLocalDateString(shiftDays(today, -1)));
+      setDraftFromDate(from ? toLocalDateString(new Date(from)) : toLocalDateString(yesterday));
       setDraftToDate(to ? toLocalDateString(new Date(to)) : toLocalDateString(today));
       setDraftFromTime(from ? toLocalTimeString(new Date(from)) : "00:00");
       setDraftToTime(to ? toLocalTimeString(new Date(to)) : "23:59");
+      setFromOpen(false);
+      setToOpen(false);
     }
-  }, [from, to, open, today]);
+  }, [from, to, open, today, yesterday]);
 
   const handleApply = useCallback(() => {
     const fromDate = new Date(`${draftFromDate}T${sameDate ? draftFromTime : "00:00"}`);
@@ -85,9 +156,138 @@ export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: Ran
     setOpen(false);
   }, [onChange]);
 
-  const label = from && to
-    ? `${formatShortDate(new Date(from))} – ${formatShortDate(new Date(to))}`
-    : emptyLabel;
+  const label = useMemo(() => {
+    if (!from || !to) return emptyLabel;
+    const f = new Date(from);
+    const t = new Date(to);
+    const fStr = toLocalDateString(f);
+    const tStr = toLocalDateString(t);
+    if (fStr === tStr) {
+      return `${formatDateLabel(f)} ${toLocalTimeString(f)} – ${toLocalTimeString(t)}`;
+    }
+    return `${formatDateLabel(f)} – ${formatDateLabel(t)}`;
+  }, [from, to, emptyLabel]);
+
+  // Handlers for From date parts
+  const handleFromDay = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = parseInt(e.target.value, 10);
+      if (isNaN(val)) return;
+      setDraftFromDate(buildDateString(val, fromParts.month, fromParts.year));
+    },
+    [fromParts],
+  );
+
+  const handleFromMonth = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const m = parseInt(e.target.value, 10);
+      setDraftFromDate(buildDateString(fromParts.day, m, fromParts.year));
+    },
+    [fromParts],
+  );
+
+  const handleFromYear = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const y = parseInt(e.target.value, 10);
+      setDraftFromDate(buildDateString(fromParts.day, fromParts.month, y));
+    },
+    [fromParts],
+  );
+
+  // Handlers for To date parts
+  const handleToDay = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = parseInt(e.target.value, 10);
+      if (isNaN(val)) return;
+      setDraftToDate(buildDateString(val, toParts.month, toParts.year));
+    },
+    [toParts],
+  );
+
+  const handleToMonth = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const m = parseInt(e.target.value, 10);
+      setDraftToDate(buildDateString(toParts.day, m, toParts.year));
+    },
+    [toParts],
+  );
+
+  const handleToYear = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const y = parseInt(e.target.value, 10);
+      setDraftToDate(buildDateString(toParts.day, toParts.month, y));
+    },
+    [toParts],
+  );
+
+  // Renders one collapsible date section
+  const renderDateSection = (
+    sectionLabel: string,
+    open: boolean,
+    onToggle: () => void,
+    parts: { day: number; month: number; year: number },
+    onDay: (e: React.ChangeEvent<HTMLInputElement>) => void,
+    onMonth: (e: React.ChangeEvent<HTMLSelectElement>) => void,
+    onYear: (e: React.ChangeEvent<HTMLSelectElement>) => void,
+  ) => (
+    <div className="border-b border-gray-100 dark:border-gray-700 last:border-b-0 pb-2 last:pb-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex items-center gap-1.5 w-full text-left text-xs font-semibold text-gray-700 dark:text-gray-200 py-1.5 hover:text-gray-900 dark:hover:text-white transition outline-none"
+      >
+        <CalendarDays size={13} className="text-gray-400 dark:text-gray-500 shrink-0" />
+        <span className="flex-1">{sectionLabel}</span>
+        <ChevronDown
+          size={12}
+          className={cn(
+            "text-gray-400 dark:text-gray-500 transition-transform duration-150",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && (
+        <div className="flex items-center gap-1.5 pb-2">
+          {/* Day */}
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={parts.day}
+            onChange={onDay}
+            className={cn(controlBtnClass, "w-14 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none")}
+            aria-label={`${sectionLabel} day`}
+          />
+          {/* Month */}
+          <select
+            value={parts.month}
+            onChange={onMonth}
+            className={cn(controlBtnClass, "w-24")}
+            aria-label={`${sectionLabel} month`}
+          >
+            {FULL_MONTHS.map((name, idx) => (
+              <option key={idx} value={idx + 1}>
+                {name}
+              </option>
+            ))}
+          </select>
+          {/* Year */}
+          <select
+            value={parts.year}
+            onChange={onYear}
+            className={cn(controlBtnClass, "w-20")}
+            aria-label={`${sectionLabel} year`}
+          >
+            {YEAR_OPTIONS.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  );
 
   const body = (
     <>
@@ -104,27 +304,31 @@ export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: Ran
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <CalendarPicker
-          label="From"
-          date={draftFromDate}
-          onChange={setDraftFromDate}
-          min={undefined}
-          max={draftToDate}
-        />
-        <CalendarPicker
-          label="To"
-          date={draftToDate}
-          onChange={setDraftToDate}
-          min={draftFromDate}
-          max={undefined}
-        />
-      </div>
+      {renderDateSection(
+        "From",
+        fromOpen,
+        () => setFromOpen((v) => !v),
+        fromParts,
+        handleFromDay,
+        handleFromMonth,
+        handleFromYear,
+      )}
 
-      {sameDate && (
-        <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+      {renderDateSection(
+        "To",
+        toOpen,
+        () => setToOpen((v) => !v),
+        toParts,
+        handleToDay,
+        handleToMonth,
+        handleToYear,
+      )}
+
+      {showTime && (
+        <div className="grid grid-cols-2 gap-3 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+            <label className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+              <Clock size={11} className="text-gray-400" />
               From time
             </label>
             <input
@@ -135,7 +339,8 @@ export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: Ran
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+            <label className="flex items-center gap-1 text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">
+              <Clock size={11} className="text-gray-400" />
               To time
             </label>
             <input
@@ -148,7 +353,7 @@ export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: Ran
         </div>
       )}
 
-      <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+      <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
         <button
           onClick={handleApply}
           className="flex-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
@@ -193,7 +398,7 @@ export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: Ran
           <Popover.Content
             align="end"
             sideOffset={6}
-            className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg p-4 z-50 w-[540px] max-w-[calc(100vw-2rem)]"
+            className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-lg p-4 z-50 w-[320px] max-w-[calc(100vw-2rem)]"
           >
             {body}
           </Popover.Content>
@@ -203,231 +408,98 @@ export function RangeFilter({ from, to, onChange, emptyLabel = "24 Hours" }: Ran
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Mini month calendar                                                 */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/* DatePickerRow — compact day/month/year + optional time inputs       */
+/* Used standalone in DataLog's export-by-range section.               */
+/* ================================================================== */
 
-interface CalendarPickerProps {
-  label: string;
-  date: string; // YYYY-MM-DD or ""
-  onChange: (d: string) => void;
-  min?: string;
-  max?: string;
-}
+export function DatePickerRow({ label, date, onChange, min: _min, max: _max, showTime, time, onTimeChange }: DatePickerRowProps) {
+  // When date is empty, derive a default from today
+  const resolved = useMemo(() => {
+    const src = date || toLocalDateString(new Date());
+    return parseDateParts(src);
+  }, [date]);
 
-export function CalendarPicker({ label, date, onChange, min, max }: CalendarPickerProps) {
-  const selected = date ? parseLocalDate(date) : null;
-  const [view, setView] = useState(() =>
-    selected ? new Date(selected.getFullYear(), selected.getMonth(), 1) : startOfMonth(new Date()),
+  const handleDay = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = parseInt(e.target.value, 10);
+      if (isNaN(val)) return;
+      onChange(buildDateString(val, resolved.month, resolved.year));
+    },
+    [resolved, onChange],
   );
 
-  const minDate = min ? parseLocalDate(min) : undefined;
-  const maxDate = max ? parseLocalDate(max) : undefined;
-
-  const year = view.getFullYear();
-  const month = view.getMonth();
-
-  // ±10 years around the current year for the year dropdown
-  const currentYear = new Date().getFullYear();
-  const yearOptions = useMemo(() => {
-    const years: number[] = [];
-    for (let y = currentYear - 10; y <= currentYear + 10; y++) {
-      years.push(y);
-    }
-    return years;
-  }, [currentYear]);
-
-  const cells = useMemo(() => {
-    const firstDow = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const list: (Date | null)[] = [];
-    for (let i = 0; i < firstDow; i++) list.push(null);
-    for (let d = 1; d <= daysInMonth; d++) list.push(new Date(year, month, d));
-    while (list.length % 7 !== 0) list.push(null);
-    return list;
-  }, [year, month]);
-
-  const prevDisabled =
-    minDate && new Date(year, month - 1, 1) < startOfMonth(minDate);
-  const nextDisabled =
-    maxDate && new Date(year, month + 1, 1) > startOfMonth(maxDate);
-
-  const isSelected = (d: Date) =>
-    selected && sameDay(d, selected);
-  const isTodayCheck = (d: Date) => sameDay(d, new Date());
-  const isOutOfRange = (d: Date) =>
-    (minDate && d < minDate) || (maxDate && d > maxDate);
-
-  const goToToday = useCallback(() => {
-    const now = new Date();
-    setView(new Date(now.getFullYear(), now.getMonth(), 1));
-    onChange(toLocalDateString(now));
-  }, [onChange]);
-
-  const handleMonthChange = useCallback(
+  const handleMonth = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
-      setView(new Date(year, parseInt(e.target.value, 10), 1));
+      const m = parseInt(e.target.value, 10);
+      onChange(buildDateString(resolved.day, m, resolved.year));
     },
-    [year],
+    [resolved, onChange],
   );
 
-  const handleYearChange = useCallback(
+  const handleYear = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
-      setView(new Date(parseInt(e.target.value, 10), month, 1));
+      const y = parseInt(e.target.value, 10);
+      onChange(buildDateString(resolved.day, resolved.month, y));
     },
-    [month],
+    [resolved, onChange],
   );
 
   return (
-    <div>
-      {/* Header: label left, controls right */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">
-          {label}
-        </span>
-        <div className="flex items-center gap-1">
-          {/* Previous month */}
-          <button
-            type="button"
-            onClick={() => setView(new Date(year, month - 1, 1))}
-            disabled={!!prevDisabled}
-            className="h-6 w-6 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 transition"
-            aria-label="Previous month"
-          >
-            <ChevronLeft size={14} />
-          </button>
-
-          {/* Month native select — acts as quick month jumper */}
-          <select
-            value={month}
-            onChange={handleMonthChange}
-            className="text-xs font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-gray-200 dark:border-gray-600 rounded-md px-1 py-0.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 dark:[color-scheme:dark]"
-            aria-label="Select month"
-          >
-            {MONTHS.map((name, idx) => (
-              <option key={idx} value={idx}>
-                {name}
-              </option>
-            ))}
-          </select>
-
-          {/* Year native select — ±10 year range */}
-          <select
-            value={year}
-            onChange={handleYearChange}
-            className="text-xs font-medium text-gray-700 dark:text-gray-200 bg-transparent border border-gray-200 dark:border-gray-600 rounded-md px-1 py-0.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 dark:[color-scheme:dark]"
-            aria-label="Select year"
-          >
-            {yearOptions.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-
-          {/* Next month */}
-          <button
-            type="button"
-            onClick={() => setView(new Date(year, month + 1, 1))}
-            disabled={!!nextDisabled}
-            className="h-6 w-6 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 transition"
-            aria-label="Next month"
-          >
-            <ChevronRight size={14} />
-          </button>
-
-          {/* "Today" quick chip button */}
-          <button
-            type="button"
-            onClick={goToToday}
-            className="text-[10px] font-medium px-1.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition whitespace-nowrap"
-            aria-label="Go to today"
-          >
-            Today
-          </button>
+    <div className="space-y-1.5">
+      <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+        {label}
+      </span>
+      <div className="flex items-center gap-1.5">
+        {/* Day */}
+        <input
+          type="number"
+          min={1}
+          max={31}
+          value={resolved.day}
+          onChange={handleDay}
+          className={cn(controlBtnClass, "w-14 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none")}
+          aria-label={`${label} day`}
+        />
+        {/* Month */}
+        <select
+          value={resolved.month}
+          onChange={handleMonth}
+          className={cn(controlBtnClass, "w-24")}
+          aria-label={`${label} month`}
+        >
+          {FULL_MONTHS.map((name, idx) => (
+            <option key={idx} value={idx + 1}>
+              {name}
+            </option>
+          ))}
+        </select>
+        {/* Year */}
+        <select
+          value={resolved.year}
+          onChange={handleYear}
+          className={cn(controlBtnClass, "w-20")}
+          aria-label={`${label} year`}
+        >
+          {YEAR_OPTIONS.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
+      </div>
+      {showTime && onTimeChange && time !== undefined && (
+        <div className="flex items-center gap-1.5">
+          <Clock size={11} className="text-gray-400 shrink-0" />
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => onTimeChange(e.target.value)}
+            className="w-full text-xs px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 dark:[color-scheme:dark]"
+            aria-label={`${label} time`}
+          />
         </div>
-      </div>
-
-      {/* Day-of-week header + day grid */}
-      <div className="grid grid-cols-7 gap-0.5 text-center">
-        {WEEKDAYS.map((w) => (
-          <span
-            key={w}
-            className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 py-1"
-          >
-            {w}
-          </span>
-        ))}
-        {cells.map((d, i) =>
-          d ? (
-            <button
-              key={d.toISOString()}
-              type="button"
-              disabled={isOutOfRange(d)}
-              onClick={() => onChange(toLocalDateString(d))}
-              className={cn(
-                "h-7 text-xs rounded-lg transition flex items-center justify-center",
-                isSelected(d)
-                  ? "bg-blue-600 text-white font-semibold shadow-sm"
-                  : isTodayCheck(d)
-                    ? "text-blue-600 dark:text-blue-400 font-semibold ring-1 ring-inset ring-blue-300 dark:ring-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                    : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700",
-                isOutOfRange(d) && "text-gray-300 dark:text-gray-600 cursor-not-allowed",
-              )}
-            >
-              {d.getDate()}
-            </button>
-          ) : (
-            <span key={`e-${i}`} />
-          ),
-        )}
-      </div>
+      )}
     </div>
   );
-}
-
-/* ------------------------------------------------------------------ */
-/* Date helpers (local-time safe)                                      */
-/* ------------------------------------------------------------------ */
-
-function startOfMonth(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
-}
-
-function shiftDays(d: Date, n: number): Date {
-  const c = new Date(d);
-  c.setDate(c.getDate() + n);
-  return c;
-}
-
-function sameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function parseLocalDate(s: string): Date {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function toLocalDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function toLocalTimeString(d: Date): string {
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-function formatShortDate(d: Date): string {
-  return d.toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }

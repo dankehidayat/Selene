@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { ResponsivePie } from "@nivo/pie";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
+import { useChartAnimation } from "@/hooks/useChartAnimation";
 
 interface NivoPieDatum {
   id: string;
@@ -24,6 +25,7 @@ export function NivoPieChart({
   tooltip,
 }: NivoPieChartProps) {
   const isDark = useIsDarkMode();
+  const animate = useChartAnimation();
   const theme = useMemo(() => createNivoTheme(isDark), [isDark]);
 
   const total = data.reduce((s, d) => s + d.value, 0);
@@ -44,6 +46,7 @@ export function NivoPieChart({
         enableArcLinkLabels={false}
         enableArcLabels={false}
         isInteractive
+        animate={animate}
         tooltip={({ datum }) => {
           const pct = total > 0 ? ((datum.value / total) * 100).toFixed(1) : "0";
           return (
