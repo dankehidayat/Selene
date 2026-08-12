@@ -433,18 +433,25 @@ app.get(
   "/api/readings/logs",
   {
     schema: {
-      description: "Get recent sensor readings for data log table",
+      description: "Get sensor readings page for the data log table (server-side pagination)",
       tags: ["Readings"],
       querystring: {
         type: "object",
-        properties: { pageSize: { type: "string", default: "20" } },
+        properties: {
+          pageSize: { type: "string", default: "20" },
+          offset: { type: "string", default: "0" },
+          order: { type: "string", enum: ["desc", "asc"], default: "desc" },
+        },
       },
     },
   },
   async (request) => {
-    const query = request.query as { pageSize?: string };
-    const pageSize = Number(query.pageSize ?? "20");
-    return getRecentLogs(pageSize);
+    const query = request.query as { pageSize?: string; offset?: string; order?: string };
+    const pageSize = Math.min(Number(query.pageSize ?? "20") || 20, 500);
+    const offset = Math.max(Number(query.offset ?? "0") || 0, 0);
+    const order = query.order === "asc" ? "asc" : "desc";
+    const { rows, total } = await getRecentLogs(pageSize, offset, order);
+    return { rows, total, pageSize, offset };
   },
 );
 
@@ -467,10 +474,16 @@ app.get(
   async (request, reply) => {
     const query = request.query as { format?: string; from?: string; to?: string; range?: string };
     const format = query.format ?? "csv";
-    let resolved;
-    try { resolved = resolveTimeRange({ from: query.from, to: query.to, range: query.range }); }
-    catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
-    const data = await getExportDataInRange(resolved.from.toISOString(), resolved.to.toISOString());
+    let data;
+    if (query.from || query.to) {
+      let resolved;
+      try { resolved = resolveTimeRange({ from: query.from, to: query.to, range: query.range }); }
+      catch (e) { return reply.code(400).send({ error: (e as Error).message }); }
+      data = await getExportDataInRange(resolved.from.toISOString(), resolved.to.toISOString());
+    } else {
+      // No explicit window → export the full table (legacy behavior).
+      data = await getExportData();
+    }
     if (!data.length)
       return reply.code(404).send({ error: "No data available" });
 

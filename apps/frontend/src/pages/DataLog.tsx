@@ -1,5 +1,5 @@
 // apps/frontend/src/pages/DataLog.tsx
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import {
@@ -12,7 +12,8 @@ import {
   FileText,
 } from "lucide-react";
 import { ChartCard, controlBtnClass } from "@/components/ChartCard";
-import { useRecentReadings } from "@/services/api";
+import { useReadingsPage } from "@/services/api";
+import type { EnergyReading } from "@/types/energy";
 import { cn } from "@/lib/utils";
 
 const API_BASE =
@@ -29,21 +30,13 @@ export function DataLog() {
   const [jumpPopoverOpen, setJumpPopoverOpen] = useState(false);
   const jumpInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: allReadings = [], isLoading } = useRecentReadings(500);
+  const offset = (page - 1) * pageSize;
+  const { data, isLoading } = useReadingsPage(pageSize, offset, sortOrder);
 
-  const sortedReadings = [...allReadings].sort((a, b) => {
-    const da = new Date(a.timestamp).getTime();
-    const db = new Date(b.timestamp).getTime();
-    return sortOrder === "desc" ? db - da : da - db;
-  });
-
-  const totalRows = sortedReadings.length;
+  const allReadings: EnergyReading[] = data?.rows ?? [];
+  const totalRows = data?.total ?? 0;
   const totalPages = Math.ceil(totalRows / pageSize);
-  const startIndex = (page - 1) * pageSize;
-  const paginatedReadings = sortedReadings.slice(
-    startIndex,
-    startIndex + pageSize,
-  );
+  const startIndex = offset + 1;
 
   const handleJump = () => {
     const num = parseInt(jumpValue, 10);
@@ -87,6 +80,11 @@ export function DataLog() {
       setExportLoading(null);
     }
   };
+
+  const toggleSort = useCallback(() => {
+    setSortOrder((o) => (o === "desc" ? "asc" : "desc"));
+    setPage(1);
+  }, []);
 
   const getPageNumbers = (): (number | "ellipsis")[] => {
     if (totalPages <= 7)
@@ -148,7 +146,7 @@ export function DataLog() {
       </div>
 
       <ChartCard title="Sensor Readings">
-        {isLoading ? (
+        {isLoading && allReadings.length === 0 ? (
           <div className="flex h-64 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
             Loading...
           </div>
@@ -164,9 +162,7 @@ export function DataLog() {
                   <tr className="text-left text-xs border-b border-gray-100 dark:border-gray-800">
                     <th
                       className="font-semibold py-3 px-2 cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition select-none whitespace-nowrap text-gray-900 dark:text-white"
-                      onClick={() =>
-                        setSortOrder(sortOrder === "desc" ? "asc" : "desc")
-                      }
+                      onClick={toggleSort}
                     >
                       <span className="inline-flex items-center gap-1.5">
                         Timestamp <ArrowUpDown size={12} />
@@ -199,7 +195,7 @@ export function DataLog() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedReadings.map((r, i) => (
+                  {allReadings.map((r, i) => (
                     <tr
                       key={r.timestamp + i}
                       className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors"
@@ -247,8 +243,9 @@ export function DataLog() {
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
               <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 font-medium">
                 <span>
-                  {startIndex + 1}–{Math.min(startIndex + pageSize, totalRows)}{" "}
-                  of {totalRows}
+                  {totalRows > 0
+                    ? `${startIndex}–${Math.min(startIndex + pageSize - 1, totalRows)} of ${totalRows}`
+                    : "0 rows"}
                 </span>
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger asChild>

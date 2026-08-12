@@ -512,14 +512,22 @@ export async function getReadingsInRange(
   return points;
 }
 
-export async function getRecentLogs(limit: number = 20): Promise<any[]> {
-  if (!pool) return [];
+export async function getRecentLogs(
+  limit: number = 20,
+  offset: number = 0,
+  order: "desc" | "asc" = "desc",
+): Promise<{ rows: any[]; total: number }> {
+  if (!pool) return { rows: [], total: 0 };
 
-  const result = await pool.query(
-    `SELECT * FROM sensor_readings ORDER BY time DESC LIMIT $1`,
-    [limit],
-  );
-  return result.rows.map((row: any) => ({
+  const dir = order === "asc" ? "ASC" : "DESC";
+  const [result, countRes] = await Promise.all([
+    pool.query(
+      `SELECT * FROM sensor_readings ORDER BY time ${dir} LIMIT $1 OFFSET $2`,
+      [limit, offset],
+    ),
+    pool.query("SELECT COUNT(*)::int AS total FROM sensor_readings"),
+  ]);
+  const rows = result.rows.map((row: any) => ({
     timestamp: new Date(row.time).toISOString(),
     acVoltage: row.ac_voltage,
     acCurrent: row.ac_current,
@@ -536,6 +544,7 @@ export async function getRecentLogs(limit: number = 20): Promise<any[]> {
     powerQualityScore: row.power_quality_score,
     voltageStability: row.voltage_stability,
   }));
+  return { rows, total: Number(countRes.rows[0]?.total ?? 0) };
 }
 
 /** Systematic sample — preserves time order. */

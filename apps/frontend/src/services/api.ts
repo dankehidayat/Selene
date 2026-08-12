@@ -172,12 +172,6 @@ async function fetchHistory(query: TimeRangeQuery, maxPoints?: number) {
   return res.json();
 }
 
-async function fetchRecentReadings(limit: number) {
-  const res = await fetch(`${API_BASE}/readings/logs?pageSize=${limit}`);
-  if (!res.ok) throw new Error("Failed to fetch logs");
-  return res.json();
-}
-
 async function fetchAnalyticsSummary(query: TimeRangeQuery): Promise<AnalyticsSummary> {
   const params = buildTimeRangeParams(query);
   const res = await fetch(`${API_BASE}/analytics/summary?${params}`);
@@ -273,11 +267,37 @@ export function useEnergyHistory(
   });
 }
 
-export function useRecentReadings(limit = 20) {
-  return useQuery<EnergyReading[]>({
-    queryKey: ["recent-readings", limit],
-    queryFn: () => fetchRecentReadings(limit),
-    refetchInterval: 10_000,
+export interface ReadingsPage {
+  rows: EnergyReading[];
+  total: number;
+  pageSize: number;
+  offset: number;
+}
+
+async function fetchReadingsPage(
+  pageSize: number,
+  offset: number,
+  order: "desc" | "asc",
+): Promise<ReadingsPage> {
+  const qs = new URLSearchParams({
+    pageSize: String(pageSize),
+    offset: String(offset),
+    order,
+  });
+  const res = await fetch(`${API_BASE}/readings/logs?${qs}`);
+  if (!res.ok) throw new Error("Failed to fetch logs");
+  return res.json();
+}
+
+export function useReadingsPage(
+  pageSize: number,
+  offset: number,
+  order: "desc" | "asc",
+) {
+  return useQuery<ReadingsPage>({
+    queryKey: ["readings-page", pageSize, offset, order],
+    queryFn: () => fetchReadingsPage(pageSize, offset, order),
+    placeholderData: keepPreviousData,
   });
 }
 
