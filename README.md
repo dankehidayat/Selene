@@ -68,6 +68,8 @@ docs/                           Documentation (see section below)
 
 ## Data flow and storage
 
+Two **frontend clients**: a **React SPA** (web, in this repo) and a **native Android app** (Jetpack Compose, in [`dankehidayat/Selene-mobile`](https://github.com/dankehidayat/Selene-mobile)).
+
 ### Ingestion
 
 - Devices publish MQTT to `selene/{nodeId}/telemetry`.
@@ -110,6 +112,7 @@ Query entry points: `apps/backend/src/timescale.ts` (monolith) and `packages/sha
 
 Additional references:
 - [OpenAPI specification](docs/openapi.yml) — versioned REST API contract
+- [Android client →](https://github.com/dankehidayat/Selene-mobile) — native Android app (Jetpack Compose, separate repo)
 - [Changelog](CHANGELOG.md) — release history and planned changes
 
 ---

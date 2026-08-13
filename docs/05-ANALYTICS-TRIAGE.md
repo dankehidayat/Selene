@@ -1,7 +1,7 @@
 # Analytics Triage
 
 **Owner:** Danke Hidayat (sole maintainer)
-**Last Updated:** 2026-08-12
+**Last Updated:** 2026-08-14
 **Status:** Published
 **Type:** Runbook
 **Target Environment:** Production
@@ -132,11 +132,48 @@ Unlike the energy endpoint (which caps gaps at 5 minutes), the climate endpoint 
 
 ### Resolution
 
-This requires a code fix: add a maximum gap (e.g. 6 hours or the 5-minute cap used by energy) to `dt` in the climate degree-hours loop. This fix is planned but not yet shipped.
+**Shipped.** The climate degree-hours loop now caps each `dt` with `Math.min(dt, 5/60)` — the same 5-minute gap cap the energy path uses — so data gaps (e.g. April 30 → July 9, 2026) no longer inflate cooling degree-hours. Deploy `apps/backend` from master to apply:
 
-### Workaround (until fix is deployed)
+```bash
+cd ~/Developer/Selene
+git pull origin master
+sudo docker compose -f docker-compose.modular.yml build backend
+sudo docker compose -f docker-compose.modular.yml up -d backend
+```
 
-Avoid using 3m / 6m / 1y ranges for climate. Use 30d or shorter instead.
+### Verification
+
+```bash
+curl -s "http://127.0.0.1:8787/api/analytics/climate?range=3m" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(f'degreeHours: {d[\"temperature\"][\"degreeHours\"]}')
+# Expect a plausible total (tens–hundreds), NOT ~16k+ inflated by the 1680h gap
+"
+```
+
+---
+
+## Custom time range (From / To)
+
+The analytics and readings endpoints accept a **preset `range`** (`1h`, `24h`, `7d`, `30d`, `3m`, `6m`, `1y`) OR a **custom window** via `from` and `to`:
+
+| Param | Type | Meaning |
+|---|---|---|
+| `from` | RFC 3339 / ISO 8601 | Inclusive start. Overrides the preset `range` when both are provided. Defaults to 24 h before `to`. |
+| `to` | RFC 3339 / ISO 8601 | Inclusive end. Defaults to now when omitted. Must be after `from`. |
+
+Validation (in `apps/backend/src/index.ts` → `resolveTimeRange`): `from < to`, span capped at **2 years**; invalid windows return `400`. When neither `from`/`to` nor `range` is given, the window defaults to the last 24 hours.
+
+Example:
+
+```bash
+curl -s "http://127.0.0.1:8787/api/analytics/summary?from=2026-08-05T00:00:00Z&to=2026-08-07T23:59:59Z" | python3 -m json.tool
+```
+
+Endpoints that accept `from`/`to`: `analytics/summary`, `analytics/climate`, `analytics/fuzzy-distribution`, `analytics/box-plot`, `analytics/bland-altman`, `analytics/climate-fuzzy-distribution`, `readings/history`, `readings/export` (export-by-range).
+
+The **climate endpoint** now returns a well-formed empty shape for empty windows (all-zero stats, empty `comfortDistribution`/`hourlyData`) instead of `{ error: "No data in range" }` — matching the energy summary fix.
 
 ---
 
@@ -195,7 +232,10 @@ After any analytics fix:
 
 - [ ] `curl /api/analytics/summary?range=1h` returns a valid shape (not error)
 - [ ] `curl /api/analytics/summary?range=24h` returns a valid shape
+- [ ] `curl /api/analytics/summary?from=...&to=...` returns data (custom window)
 - [ ] `curl /api/analytics/climate?range=30d` returns climate stats (not error)
+- [ ] `curl /api/analytics/climate?range=3m` returns plausible degreeHours (gap-cap fixed)
+- [ ] `curl /api/analytics/climate?from=2019-01-01T00:00:00Z&to=2019-01-02T00:00:00Z` returns empty shape (not error)
 - [ ] Frontend loads 1h / 24h without crashing
 - [ ] Energy total ≈ counter delta for the range
 - [ ] CAGGs are up to date (last bucket within 5 min of now)

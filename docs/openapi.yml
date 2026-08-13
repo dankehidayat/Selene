@@ -2,17 +2,30 @@ openapi: 3.0.3
 info:
   title: Selene API — v1
   description: >
-    Public REST contract for the Selene smart energy & climate platform.
-    Served by the Caddy gateway under the `/api/v1` prefix; each path below is
-    routed to a dedicated microservice (services/auth, services/energy,
-    services/climate, services/analytics, services/firmware).
+    ⚠️ STALE — describes the ASPIRATIONAL microservices v1 contract, NOT the
+    currently deployed API. The production monolith (`apps/backend`, port 8787)
+    serves `/api/*` (no `/v1` prefix) with a single session JWT (no EdDSA /
+    refresh rotation / JWKS), and the paths below (`/energy/`, `/climate/`,
+    `/me`, …) do NOT exist on the live server. Authoritative references for the
+    deployed contract: the backend source (`apps/backend/src/index.ts` and
+    `apps/backend/src/routes/*`), `docs/01-ARCHITECTURE.md`, and the Android
+    client's endpoint map (`Selene-mobile/docs/MOBILE_API.md`). Endpoint groups
+    missing here but live in the monolith: `readings/*` (latest, history, logs,
+    export, stream), `firmware/*` (OTA), `mqtt/*`, `sensors/*`, `admin/*`,
+    `auth/change-*`, `auth/clear-sessions`, `auth/delete-account`,
+    `auth/login-history`. A full rewrite of this spec to the monolith contract
+    is a follow-up task.
 
-    Versioning lives at the gateway: `handle_path /api/v1/*` strips the prefix
-    before proxying, so services define version-agnostic paths (`/energy/latest`)
-    and a future `/api/v2` needs no service changes.
-
-    Auth: short-lived EdDSA (Ed25519) access tokens with rotating refresh
-    tokens (one-time use, reuse detection). JWKS at `/.well-known/jwks.json`.
+    Legacy description (kept for reference): the spec below documents the
+    intended v1 microservices contract. Served by the Caddy gateway under the
+    `/api/v1` prefix; each path is routed to a dedicated microservice
+    (services/auth, services/energy, services/climate, services/analytics,
+    services/firmware). Versioning lives at the gateway: `handle_path
+    /api/v1/*` strips the prefix before proxying, so services define
+    version-agnostic paths (`/energy/latest`) and a future `/api/v2` needs no
+    service changes. Auth: short-lived EdDSA (Ed25519) access tokens with
+    rotating refresh tokens (one-time use, reuse detection). JWKS at
+    `/.well-known/jwks.json`.
   version: 1.0.0
   contact:
     name: Selene

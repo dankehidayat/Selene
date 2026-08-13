@@ -1,7 +1,7 @@
 # Architecture
 
 **Owner:** Danke Hidayat (sole maintainer)
-**Last Updated:** 2026-08-12
+**Last Updated:** 2026-08-14
 **Status:** Published
 **Type:** Reference
 **Target Environment:** Production
@@ -10,7 +10,7 @@
 
 ## Overview
 
-Selene is a real-time smart energy and climate monitoring platform. ESP32-based sensors (PZEM-004T + DHT11) stream telemetry over MQTT to an EMQX broker. A Fastify monolith ingests, stores, and serves analytics through a React SPA dashboard. The codebase is structured for gradual migration toward domain-split microservices behind a Caddy gateway.
+Selene is a real-time smart energy and climate monitoring platform. ESP32-based sensors (PZEM-004T + DHT11) stream telemetry over MQTT to an EMQX broker. A Fastify monolith ingests, stores, and serves analytics through **two clients**: a React SPA dashboard (web) and a native Android app (Jetpack Compose, in a separate repository at `dankehidayat/Selene-mobile`). The codebase is structured for gradual migration toward domain-split microservices behind a Caddy gateway.
 
 **Field hardware today:** ESP32 + PZEM-004T + DHT11
 **Edge firmware:** [Eco-Office feat/selene-mqtt-ota](https://github.com/dankehidayat/Eco-Office/blob/feat/selene-mqtt-ota/Eco%20Office.ino)
@@ -30,12 +30,15 @@ ESP32 (PZEM-004T + DHT11)
         │                        │
         └─────── Fastify API ─────┘
                     │
-              React SPA
+        ┌───────────┴───────────┐
+        ▼                       ▼
+  React SPA (web)        Android app (Selene-mobile)
 ```
 
-- The **monolith** (`apps/backend`, port 8787) is the primary production API and MQTT ingestor. The frontend talks to `/api/*` on it.
+- The **monolith** (`apps/backend`, port 8787) is the primary production API and MQTT ingestor. Both the web frontend and the Android client talk to `/api/*` on it.
 - A **microservices variant** (`services/`, via `docker-compose.modular.yml`) splits domains behind a Caddy gateway. Caddy exposes the `/api/v1/*` contract, and until each service is cut over, the monolith serves it as a bridge. `services/auth` (3009) is fully implemented and is the first microservice ready to take over routes.
 - PostgreSQL stores users, auth sessions, and app settings. All sensor readings live in TimescaleDB.
+- **Mobile client:** the native Android app (`Jetpack Compose`, Material 3, dark-exclusive) lives in a separate repo — `dankehidayat/Selene-mobile` (local path `/Users/ltna01/Developer/Selene-mobile`). It consumes the same `/api/*` contract via Retrofit; its API map is `docs/MOBILE_API.md` in that repo.
 
 ---
 

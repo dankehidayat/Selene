@@ -1,7 +1,7 @@
 # EMQX / MQTT Recovery
 
 **Owner:** Danke Hidayat (sole maintainer)
-**Last Updated:** 2026-08-12
+**Last Updated:** 2026-08-14
 **Status:** Published
 **Type:** Runbook
 **Target Environment:** Production
@@ -11,6 +11,8 @@
 ## Overview
 
 EMQX is the MQTT broker that connects ESP32 field devices to the Selene backend and ingestor. This runbook covers recovery from the two most common failure modes: **crash-loop** (the broker restarts every ~43 s) and **`not_authorized`** (MQTT clients cannot connect despite correct credentials). Both were encountered on 2026-08-12.
+
+> **Current status:** The EMQX bootstrap mechanism that caused the crash-loop (`EMQX_API_KEY__BOOTSTRAP_FILE`) has been **fully removed** from `docker-compose.modular.yml`, all env examples, and `deploy/emqx-api-key.conf`. A fresh deployment from current master will not crash. The crash-loop recovery steps below are retained for older `.env` files that still carry the stale variables.
 
 ---
 
@@ -35,9 +37,11 @@ Container restarts every ~43 s. Backend logs show `[MQTT] Connection error: conn
 
 ### Root cause
 
-The root `.env` file contains `EMQX_API_KEY__BOOTSTRAP_FILE=/opt/emqx/etc/default_api_key.conf`, which tells EMQX 5.x to read an API-key bootstrap file on startup. When the compose file does **not** mount that file into the container, EMQX's management app crashes.
+**This issue is now fixed in master.** The root `.env` file contained `EMQX_API_KEY__BOOTSTRAP_FILE=/opt/emqx/etc/default_api_key.conf`, which tells EMQX 5.x to read an API-key bootstrap file on startup. When the compose file did **not** mount that file into the container, EMQX's management app crashed.
 
-The modular compose (canonical, `docker-compose.modular.yml`) does not set this variable and does not mount the bootstrap file — the crash only occurs if an older `.env` still contains the bootstrap variables.
+The fix removed the bootstrap variables from the canonical compose (`docker-compose.modular.yml`) and all env examples. The `deploy/emqx-api-key.conf` file and `emqx-init` provisioning service were also removed. The crash can no longer occur on a deployment built from current master.
+
+If you are recovering a crash that already happened, the resolution below clears the stale `.env` variables.
 
 ### Resolution
 
