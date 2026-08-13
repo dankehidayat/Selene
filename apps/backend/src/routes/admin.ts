@@ -6,6 +6,7 @@ import {
   requireAdmin,
   type AuthenticatedRequest,
 } from "../middleware/auth";
+import { sendCodeEmail } from "../mail";
 
 /**
  * Role Change Rate Limiting Configuration
@@ -344,9 +345,18 @@ export async function registerAdminRoutes(app: FastifyInstance) {
               },
           });
 
-          // In production: Send email via Resend/API
+          // Send the confirmation code email (fire-and-forget; never blocks the
+          // elevation check below).
           console.log(`[security] Email confirmation code generated for user ${req.userId}`);
-          // await sendEmailNotification(req.email, "Role Elevation Required", `Your confirmation code is: ${newConfirmationCode}`);
+          sendCodeEmail(req.userEmail, newConfirmationCode, {
+            heading: "Confirm role elevation",
+            intro:
+              "You're elevating your role on Selene. Use the confirmation code below to continue.",
+            expiryNote:
+              "This code expires in 10 minutes. If you didn't request this, review your account security.",
+          }).catch((e: any) =>
+            console.warn("[mail] Role-elevation code email failed:", e?.message ?? e),
+          );
 
           // Validate provided confirmation code matches what was sent
           const validConfirmation = await prisma.confirmationCode.findFirst({

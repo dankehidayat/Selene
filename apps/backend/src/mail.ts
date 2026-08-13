@@ -1,5 +1,10 @@
 // apps/backend/src/mail.ts
 import { Resend } from "resend";
+import {
+  passwordResetEmail,
+  welcomeEmail,
+  codeEmail,
+} from "./emailTemplates";
 
 function getFrom(): string {
   // Strip wrapping quotes that .env files sometimes keep
@@ -34,11 +39,21 @@ export function getMailConfigStatus(): {
   };
 }
 
-export async function sendPasswordResetEmail(
-  to: string,
-  rawToken: string,
-): Promise<{ ok: boolean; id?: string; devLogged?: boolean }> {
-  const resetUrl = passwordResetLink(rawToken);
+/**
+ * Shared Resend send with graceful no-key handling.
+ * - No API key + local/dev → resolves `{ ok: true, devLogged: true }` (the link
+ *   or code is logged instead of emailed).
+ * - No API key + non-local → throws so misconfiguration surfaces.
+ * - API key present → sends and returns the Resend message id.
+ */
+async function sendViaResend(opts: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  /** Extra context logged when the key is missing (dev only). */
+  devHint?: string;
+}): Promise<{ ok: boolean; id?: string; devLogged?: boolean }> {
   const key = process.env.RESEND_API_KEY?.trim();
   const from = getFrom();
   const status = getMailConfigStatus();
@@ -48,11 +63,8 @@ export async function sendPasswordResetEmail(
       "[mail] RESEND_API_KEY is not set in this process.",
       "Check apps/backend/.env inside the container:",
       "`docker exec selene-backend printenv RESEND_API_KEY`.",
-      "Compose must not override env_file with an empty RESEND_API_KEY.",
-      "Reset URL (dev only):",
-      resetUrl,
+      opts.devHint ?? "",
     );
-    // Fail in non-local deployments so the UI/API surfaces misconfiguration
     const isLocal =
       status.appPublicUrl.includes("localhost") ||
       status.appPublicUrl.includes("127.0.0.1");
@@ -65,37 +77,66 @@ export async function sendPasswordResetEmail(
   }
 
   console.info(
-    `[mail] Sending password reset via Resend → ${to} from=${from} app=${status.appPublicUrl}`,
+    `[mail] Sending "${opts.subject}" via Resend → ${opts.to} from=${from} app=${status.appPublicUrl}`,
   );
 
   const resend = new Resend(key);
   const { data, error } = await resend.emails.send({
     from,
-    to: [to],
-    subject: "Reset your Selene password",
-    html: `
-      <div style="font-family: system-ui, sans-serif; max-width: 480px; line-height: 1.5; color: #111;">
-        <h2 style="margin: 0 0 12px;">Reset your password</h2>
-        <p>We received a request to reset the password for your Selene account.</p>
-        <p>
-          <a href="${resetUrl}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;">
-            Choose a new password
-          </a>
-        </p>
-        <p style="font-size: 13px; color: #555;">This link expires in 1 hour. If you did not request a reset, you can ignore this email.</p>
-        <p style="font-size: 12px; color: #888; word-break: break-all;">${resetUrl}</p>
-      </div>
-    `,
-    text: `Reset your Selene password:\n\n${resetUrl}\n\nThis link expires in 1 hour. If you did not request this, ignore this email.`,
+    to: [opts.to],
+    subject: opts.subject,
+    html: opts.html,
+    text: opts.text,
   });
 
   if (error) {
     console.error("[mail] Resend error:", JSON.stringify(error));
-    // Common Resend free-tier restriction
-    const msg = error.message || "Failed to send email";
-    throw new Error(msg);
+    throw new Error(error.message || "Failed to send email");
   }
 
   console.info("[mail] Resend accepted message", data?.id ?? "(no id)");
   return { ok: true, id: data?.id };
+}
+
+export async function sendPasswordResetEmail(
+  to: string,
+  rawToken: string,
+): Promise<{ ok: boolean; id?: string; devLogged?: boolean }> {
+  const resetUrl = passwordResetLink(rawToken);
+  const { html, text } = passwordResetEmail({ resetUrl });
+  return sendViaResend({
+    to,
+    subject: "Reset your Selene password",
+    html,
+    text,
+    devHint: `Reset URL (dev only): ${resetUrl}`,
+  });
+}
+
+export async function sendWelcomeEmail(
+  to: string,
+  name?: string | null,
+): Promise<{ ok: boolean; id?: string; devLogged?: boolean }> {
+  const { html, text } = welcomeEmail({ name, appUrl: getPublicAppUrl() });
+  return sendViaResend({
+    to,
+    subject: "Welcome to Selene",
+    html,
+    text,
+  });
+}
+
+export async function sendCodeEmail(
+  to: string,
+  code: string,
+  opts: { heading: string; intro: string; expiryNote: string },
+): Promise<{ ok: boolean; id?: string; devLogged?: boolean }> {
+  const { html, text } = codeEmail({ code, ...opts });
+  return sendViaResend({
+    to,
+    subject: "Your Selene confirmation code",
+    html,
+    text,
+    devHint: `Confirmation code (dev only): ${code}`,
+  });
 }

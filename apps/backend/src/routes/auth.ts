@@ -10,7 +10,7 @@ import {
   extractTokenFromHeader,
   verifyToken,
 } from "../auth";
-import { getMailConfigStatus, sendPasswordResetEmail } from "../mail";
+import { getMailConfigStatus, sendPasswordResetEmail, sendWelcomeEmail } from "../mail";
 import {
   encryptTotpSecret,
   decryptTotpSecret,
@@ -141,6 +141,11 @@ export async function registerAuthRoutes(app: FastifyInstance) {
           "Your account has been created. Start monitoring your energy usage.",
       },
     });
+
+    // Welcome email — fire-and-forget; never block or fail signup on mail errors.
+    sendWelcomeEmail(user.email, user.name).catch((e: any) =>
+      console.warn("[mail] Welcome email failed:", e?.message ?? e),
+    );
 
     return {
       token,
