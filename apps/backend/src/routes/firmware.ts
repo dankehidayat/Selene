@@ -195,7 +195,7 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
         otaCommandSent: sent,
         message: sent
           ? `OTA command sent to ${nodeId}. Device will download over HTTPS (retries for ~5 min if offline briefly).`
-          : `Firmware stored. MQTT not connected — device can still pull via /api/firmware/check/${nodeId}, or OTA will retry when the broker is back.`,
+          : `Firmware stored. MQTT not connected — the device can still pick it up on its next check, or OTA will retry when the broker is back.`,
       };
     },
   );

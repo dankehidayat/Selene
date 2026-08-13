@@ -349,7 +349,7 @@ export function AdminPage() {
         );
         appendLog(
           "info",
-          "Server will re-publish the OTA command every ~12s until the device starts downloading (or ~5 min).",
+          "Server will re-publish the OTA command every ~30s until the device starts downloading (or ~5 min).",
         );
         appendLog(
           "info",
@@ -362,7 +362,7 @@ export function AdminPage() {
       } else {
         appendLog(
           "warn",
-          "Firmware stored but MQTT command was NOT sent (broker disconnected). Device can still pull via /api/firmware/check after the next deploy.",
+          "Firmware stored, but the OTA command was NOT sent (broker disconnected). The device can still pick it up on its next check-in.",
         );
       }
 
@@ -685,40 +685,67 @@ export function AdminPage() {
 
               {/* Terminal-style activity log */}
               <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Terminal size={13} className="text-gray-400" />
-                  <span className="text-xs font-semibold text-gray-900 dark:text-white">
-                    OTA activity log
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <Terminal size={13} className="text-gray-400" />
+                    <span className="text-xs font-semibold text-gray-900 dark:text-white">
+                      OTA activity log
+                    </span>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        otaLog.length
+                          ? "bg-emerald-500"
+                          : "bg-gray-400 dark:bg-gray-600"
+                      }`}
+                    />
+                    {otaLog.length ? "Live" : "Idle"}
                   </span>
                 </div>
-                <div
-                  ref={otaLogRef}
-                  className="h-40 overflow-y-auto rounded-xl bg-gray-950 text-[11px] font-mono leading-relaxed px-3 py-2.5 border border-gray-800"
-                >
-                  {otaLog.length === 0 ? (
-                    <p className="text-gray-500">
-                      Idle. Upload a .bin to see server steps here.
-                    </p>
-                  ) : (
-                    otaLog.map((line, i) => (
-                      <div key={i} className="flex gap-2">
-                        <span className="text-gray-500 shrink-0">{line.t}</span>
-                        <span
-                          className={
-                            line.level === "ok"
-                              ? "text-emerald-400"
-                              : line.level === "err"
-                                ? "text-red-400"
-                                : line.level === "warn"
-                                  ? "text-amber-400"
-                                  : "text-gray-300"
-                          }
-                        >
-                          {line.text}
-                        </span>
-                      </div>
-                    ))
-                  )}
+                <div className="overflow-hidden rounded-xl border border-gray-800 bg-gray-950">
+                  {/* Terminal title bar */}
+                  <div className="flex items-center gap-1.5 border-b border-gray-800/80 bg-gray-900/70 px-3 py-2">
+                    <span className="h-2.5 w-2.5 rounded-full bg-gray-700" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-gray-700" />
+                    <span className="h-2.5 w-2.5 rounded-full bg-gray-700" />
+                    <span className="ml-2 text-[10px] font-mono text-gray-500">
+                      selene · ota
+                    </span>
+                  </div>
+                  <div
+                    ref={otaLogRef}
+                    className="h-40 overflow-y-auto text-[11px] font-mono leading-relaxed px-3 py-2.5"
+                  >
+                    {otaLog.length === 0 ? (
+                      <p className="text-gray-500">
+                        <span className="text-gray-600 select-none">› </span>
+                        Idle. Upload a .bin to see the update steps here.
+                      </p>
+                    ) : (
+                      otaLog.map((line, i) => (
+                        <div key={i} className="flex gap-2">
+                          <span className="text-gray-600 shrink-0 select-none">›</span>
+                          <span className="text-gray-500 shrink-0 tabular-nums">
+                            {line.t}
+                          </span>
+                          <span
+                            className={
+                              line.level === "ok"
+                                ? "text-emerald-400"
+                                : line.level === "err"
+                                  ? "text-red-400"
+                                  : line.level === "warn"
+                                    ? "text-amber-400"
+                                    : "text-gray-300"
+                            }
+                          >
+                            {line.text}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -729,59 +756,51 @@ export function AdminPage() {
             <ChartCard title="How OTA Works">
               <div className="space-y-4 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
                 <div className="flex gap-3">
-                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 dark:bg-gray-800 text-xs font-bold text-gray-600 dark:text-gray-400 shrink-0">
+                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-blue-50 dark:bg-blue-900/30 text-xs font-bold text-blue-600 dark:text-blue-400 shrink-0">
                     1
                   </span>
                   <p>
-                    Export compiled{" "}
+                    <strong className="text-gray-900 dark:text-white">Build the update.</strong>{" "}
+                    Compile your sketch and export the binary{" "}
                     <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
                       .bin
                     </code>{" "}
-                    from Arduino IDE (Sketch → Export compiled Binary).
+                    from Arduino IDE. This file is the exact firmware the device
+                    will install.
                   </p>
                 </div>
                 <div className="flex gap-3">
-                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 dark:bg-gray-800 text-xs font-bold text-gray-600 dark:text-gray-400 shrink-0">
+                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-blue-50 dark:bg-blue-900/30 text-xs font-bold text-blue-600 dark:text-blue-400 shrink-0">
                     2
                   </span>
                   <p>
-                    Upload here. Backend stores the binary in memory (~5 min)
-                    and publishes MQTT{" "}
-                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-                      selene/&lt;nodeId&gt;/command
-                    </code>{" "}
-                    with{" "}
-                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-                      {`{ command: "ota", url, size }`}
-                    </code>
-                    .
+                    <strong className="text-gray-900 dark:text-white">Upload &amp; notify.</strong>{" "}
+                    Pick the target device and upload the file. Selene keeps it
+                    for a short while and lets the device know an update is
+                    ready.
                   </p>
                 </div>
                 <div className="flex gap-3">
-                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 dark:bg-gray-800 text-xs font-bold text-gray-600 dark:text-gray-400 shrink-0">
+                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-blue-50 dark:bg-blue-900/30 text-xs font-bold text-blue-600 dark:text-blue-400 shrink-0">
                     3
                   </span>
                   <p>
-                    ESP32 must <strong>subscribe</strong> to that command topic
-                    and run an HTTP(S) update (e.g.{" "}
-                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-                      HTTPUpdate
-                    </code>
-                    ) from the URL. Without that code in your sketch, the device
-                    will ignore the command. UI cannot force a flash.
+                    <strong className="text-gray-900 dark:text-white">The device opts in.</strong>{" "}
+                    An update only proceeds if the device is already running
+                    OTA-capable firmware — it fetches and installs the update on
+                    its own. A device that has never been prepared for OTA will
+                    ignore the notification; a flash can&apos;t be forced from here.
                   </p>
                 </div>
                 <div className="flex gap-3">
-                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 dark:bg-gray-800 text-xs font-bold text-gray-600 dark:text-gray-400 shrink-0">
+                  <span className="flex items-center justify-center h-6 w-6 rounded-full bg-blue-50 dark:bg-blue-900/30 text-xs font-bold text-blue-600 dark:text-blue-400 shrink-0">
                     4
                   </span>
                   <p>
-                    On download, status becomes <em>downloading</em>. Optional{" "}
-                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-                      POST /api/firmware/result
-                    </code>{" "}
-                    reports success/fail. Binary is cleared after download or
-                    expiry.
+                    <strong className="text-gray-900 dark:text-white">Track the progress.</strong>{" "}
+                    The status moves from pending, to downloading, to success (or
+                    failed). Once the device has taken the file, Selene clears
+                    it.
                   </p>
                 </div>
               </div>

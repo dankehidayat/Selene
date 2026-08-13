@@ -6,6 +6,7 @@ import { ResponsiveLine } from "@nivo/line";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
+import { useChartWidth } from "@/hooks/useChartWidth";
 import { ChartTooltipCard, TooltipRow, formatTooltipValue } from "./ChartTooltip";
 
 export interface SeriesPoint {
@@ -55,6 +56,9 @@ interface TimeSeriesChartProps {
 }
 
 const MARGIN = { top: 12, right: 56, bottom: 30, left: 56 };
+// Tighter margins + fewer ticks keep dual-axis charts legible on narrow phones.
+const NARROW_MARGIN = { top: 10, right: 38, bottom: 26, left: 38 };
+const NARROW_BREAKPOINT = 480;
 const TO_MS = (x: number | string | Date) => (typeof x === "number" ? x : +new Date(x));
 
 export function TimeSeriesChart({
@@ -70,13 +74,21 @@ export function TimeSeriesChart({
   rightDomain = "auto",
   nowMarker = null,
   legend = [],
-  margin = MARGIN,
+  margin,
   className,
 }: TimeSeriesChartProps) {
   const isDark = useIsDarkMode();
   const theme = useMemo(() => createNivoTheme(isDark), [isDark]);
   const animate = useChartAnimation();
   const uid = useId();
+
+  // Responsive: measure the container so narrow phones get tighter margins and
+  // fewer ticks (labels stop colliding); explicit margin prop always wins.
+  const [containerRef, width] = useChartWidth<HTMLDivElement>();
+  const isNarrow = width > 0 && width < NARROW_BREAKPOINT;
+  const resolvedMargin = margin ?? (isNarrow ? NARROW_MARGIN : MARGIN);
+  const xTicks = isNarrow ? 3 : 5;
+  const yTicks = isNarrow ? 4 : 5;
 
   const leftSeries = series.filter((s) => s.axis === "left").map((s) => ({ ...s, data: s.data.map((d) => ({ x: TO_MS(d.x), y: d.y })) }));
   const rightSeries = series.filter((s) => s.axis === "right").map((s) => ({ ...s, data: s.data.map((d) => ({ x: TO_MS(d.x), y: d.y })) }));
@@ -221,10 +233,10 @@ export function TimeSeriesChart({
   const layers: any[] = ["grid", "markers", "axes", LeftBandLayer, AreaLayer, LineLayer, "crosshair", "slices", "points", "mesh", "legends"];
   const overlayLayers: any[] = ["grid", "markers", "axes", RightBandLayer, AreaLayer, LineLayer, "crosshair", "legends"];
 
-  const cp: any = { theme, margin, animate, enablePoints: false, enableGridX: false, enableArea: false, enableSlices: false, defs, fill };
+  const cp: any = { theme, margin: resolvedMargin, animate, enablePoints: false, enableGridX: false, enableArea: false, enableSlices: false, defs, fill };
 
   return (
-    <div className={className}>
+    <div className={className} ref={containerRef}>
       <div className="relative" style={{ height }}>
         {/* Left-axis chart — interactive */}
         <div className="absolute inset-0">
@@ -234,9 +246,9 @@ export function TimeSeriesChart({
             xScale={{ type: "linear", min: xDomain[0], max: xDomain[1] }}
             colors={leftSeries.map((s) => s.color)}
             yScale={{ type: "linear", min: leftScale[0], max: leftScale[1] }}
-            enableGridY axisLeft={{ tickSize: 0, tickPadding: 8, format: fmtL, tickValues: 5 }}
+            enableGridY axisLeft={{ tickSize: 0, tickPadding: 8, format: fmtL, tickValues: yTicks }}
             axisRight={null}
-            axisBottom={{ tickSize: 0, tickPadding: 10, format: fmtX, tickValues: 5 }}
+            axisBottom={{ tickSize: 0, tickPadding: 10, format: fmtX, tickValues: xTicks }}
             markers={markers}
             enableSlices="x" isInteractive useMesh enableCrosshair
             layers={layers}
@@ -253,7 +265,7 @@ export function TimeSeriesChart({
               colors={rightSeries.map((s) => s.color)}
               yScale={{ type: "linear", min: rightScale[0], max: rightScale[1] }}
               enableGridY={false} axisLeft={null}
-              axisRight={{ tickSize: 0, tickPadding: 8, format: fmtR, tickValues: 5 }}
+              axisRight={{ tickSize: 0, tickPadding: 8, format: fmtR, tickValues: yTicks }}
               axisBottom={null}
               isInteractive={false}
               layers={overlayLayers}

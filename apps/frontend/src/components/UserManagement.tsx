@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { ChartCard } from "@/components/ChartCard";
+import { StatCard } from "@/components/StatCard";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -191,30 +192,24 @@ export function UserManagement() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <ChartCard title="Total Users">
-          <div className="flex items-center gap-3">
-            <Users size={20} className="text-blue-500" />
-            <span className="text-2xl font-semibold text-gray-900 dark:text-white">
-              {stats.totalUsers}
-            </span>
-          </div>
-        </ChartCard>
-        <ChartCard title="Active Users">
-          <div className="flex items-center gap-3">
-            <UserCheck size={20} className="text-emerald-500" />
-            <span className="text-2xl font-semibold text-gray-900 dark:text-white">
-              {stats.activeUsers}
-            </span>
-          </div>
-        </ChartCard>
-        <ChartCard title="Admins">
-          <div className="flex items-center gap-3">
-            <Shield size={20} className="text-amber-500" />
-            <span className="text-2xl font-semibold text-gray-900 dark:text-white">
-              {stats.adminUsers}
-            </span>
-          </div>
-        </ChartCard>
+        <StatCard
+          label="Total Users"
+          value={stats.totalUsers}
+          icon={Users}
+          iconColor="text-blue-500 dark:text-blue-400"
+        />
+        <StatCard
+          label="Active Users"
+          value={stats.activeUsers}
+          icon={UserCheck}
+          iconColor="text-emerald-500 dark:text-emerald-400"
+        />
+        <StatCard
+          label="Admins"
+          value={stats.adminUsers}
+          icon={Shield}
+          iconColor="text-amber-500 dark:text-amber-400"
+        />
       </div>
 
       <ChartCard title="All Users">

@@ -523,32 +523,43 @@ export async function getRecentLogs(
 
   const dir = order === "asc" ? "ASC" : "DESC";
 
-  // Build WHERE dynamically — no unused placeholders, no ::cast ambiguity.
-  const conds: string[] = [];
+  // Build the time filters for BOTH queries with independent parameter numbering.
+  // Row query: LIMIT is $1 and OFFSET is $2, so time filters start at $3.
+  // Count query: it only receives the time filters, so they start at $1.
+  // (Reusing one WHERE across both previously made COUNT reference $3/$4 that did
+  // not exist in its own parameter list → Postgres error → HTTP 500.)
+  const rowConds: string[] = [];
+  const countConds: string[] = [];
   const rowParams: (number | string | null)[] = [limit, offset];
   const countParams: (string | null)[] = [];
-  let pi = 2; // $1 and $2 are LIMIT/OFFSET already
+  let rowPi = 2; // $1 and $2 are LIMIT/OFFSET already
+  let countPi = 0;
   if (from) {
-    pi++;
-    conds.push(`time >= $${pi}::timestamptz`);
+    rowPi++;
+    countPi++;
+    rowConds.push(`time >= $${rowPi}::timestamptz`);
+    countConds.push(`time >= $${countPi}::timestamptz`);
     rowParams.push(from);
     countParams.push(from);
   }
   if (to) {
-    pi++;
-    conds.push(`time <= $${pi}::timestamptz`);
+    rowPi++;
+    countPi++;
+    rowConds.push(`time <= $${rowPi}::timestamptz`);
+    countConds.push(`time <= $${countPi}::timestamptz`);
     rowParams.push(to);
     countParams.push(to);
   }
-  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  const rowWhere = rowConds.length ? `WHERE ${rowConds.join(" AND ")}` : "";
+  const countWhere = countConds.length ? `WHERE ${countConds.join(" AND ")}` : "";
 
   const [result, countRes] = await Promise.all([
     pool.query(
-      `SELECT * FROM sensor_readings ${where} ORDER BY time ${dir} LIMIT $1 OFFSET $2`,
+      `SELECT * FROM sensor_readings ${rowWhere} ORDER BY time ${dir} LIMIT $1 OFFSET $2`,
       rowParams,
     ),
     pool.query(
-      `SELECT COUNT(*)::int AS total FROM sensor_readings ${where}`,
+      `SELECT COUNT(*)::int AS total FROM sensor_readings ${countWhere}`,
       countParams,
     ),
   ]);

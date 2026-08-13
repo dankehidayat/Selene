@@ -5,6 +5,7 @@ import { CartesianMarkerProps } from "@nivo/core";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
+import { useChartWidth } from "@/hooks/useChartWidth";
 import { ChartTooltipCard, formatTooltipValue } from "./ChartTooltip";
 
 export type ScatterSymbol = "circle" | "square" | "diamond" | "triangle";
@@ -142,6 +143,13 @@ export function NivoScatterChart({
     [markers],
   );
 
+  // Responsive: tighten axis margins on narrow phones so the plot isn't squeezed.
+  const [containerRef, width] = useChartWidth<HTMLDivElement>();
+  const isNarrow = width > 0 && width < 480;
+  const scatterMargin = isNarrow
+    ? { top: 8, right: 12, bottom: 34, left: 42 }
+    : { top: 8, right: 16, bottom: 38, left: 52 };
+
   const defaultTooltip = useCallback(({ node }: any) => {
     const xv = Number(node.xValue ?? node.data?.x);
     const yv = Number(node.yValue ?? node.data?.y);
@@ -171,11 +179,11 @@ export function NivoScatterChart({
   }
 
   return (
-    <div style={{ height }}>
+    <div style={{ height }} ref={containerRef}>
       <ResponsiveScatterPlot
         data={nivoData}
         theme={theme}
-        margin={{ top: 8, right: 16, bottom: 38, left: 52 }}
+        margin={scatterMargin}
         xScale={xScaleSpec}
         yScale={yScaleSpec}
         colors={colorOf}
