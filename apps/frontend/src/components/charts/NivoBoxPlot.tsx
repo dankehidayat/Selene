@@ -6,7 +6,9 @@ import { useMemo, useState } from "react";
 import { scaleBand, scaleLinear } from "d3-scale";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
-import { ChartTooltipCard, formatTooltipValue } from "./ChartTooltip";
+import { useChartWidth } from "@/hooks/useChartWidth";
+import { ChartTooltipCard, formatTooltipValue, TooltipHeader, TooltipRow } from "./ChartTooltip";
+import { ChartReadout } from "./ChartReadout";
 
 export interface NivoBoxPlotDatum {
   value: number;
@@ -56,6 +58,7 @@ function computeStats(category: string, values: number[]): BoxStats {
 }
 
 const MARGIN = { top: 10, right: 16, bottom: 40, left: 56 };
+const NARROW_BREAKPOINT = 480;
 
 export function NivoBoxPlot({
   data,
@@ -68,6 +71,9 @@ export function NivoBoxPlot({
   const isDark = useIsDarkMode();
   const theme = useMemo(() => createNivoTheme(isDark), [isDark]);
   const [hovered, setHovered] = useState<string | null>(null);
+
+  const [containerRef, width] = useChartWidth<HTMLDivElement>();
+  const isNarrow = width > 0 && width < NARROW_BREAKPOINT;
 
   const boxes = useMemo(
     () =>
@@ -94,8 +100,8 @@ export function NivoBoxPlot({
     return [Math.max(0, min - pad), max + pad];
   }, [allValues]);
 
-  const width = 560;
-  const innerWidth = width - MARGIN.left - MARGIN.right;
+  const widthViewBox = 560;
+  const innerWidth = widthViewBox - MARGIN.left - MARGIN.right;
   const innerHeight = height - MARGIN.top - MARGIN.bottom;
 
   const xScale = useMemo(
@@ -128,6 +134,17 @@ export function NivoBoxPlot({
 
   const yTicks = yScale.ticks(5).map((v) => ({ v, y: yScale(v) }));
 
+  const hoveredBox = hovered ? boxes.find((b) => b.category === hovered) ?? null : null;
+  const readoutRows = hoveredBox
+    ? [
+        { label: "Min", value: formatTooltipValue(hoveredBox.min, 2) },
+        { label: "Q1", value: formatTooltipValue(hoveredBox.q1, 2) },
+        { label: "Median", value: formatTooltipValue(hoveredBox.median, 2) },
+        { label: "Q3", value: formatTooltipValue(hoveredBox.q3, 2) },
+        { label: "Max", value: formatTooltipValue(hoveredBox.max, 2) },
+      ]
+    : [];
+
   if (!boxes.length) {
     return (
       <div
@@ -140,187 +157,173 @@ export function NivoBoxPlot({
   }
 
   return (
-    <div style={{ height }} className="relative">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="w-full"
-        style={{ height }}
-        role="img"
-        aria-label="Box plot of power by category"
-      >
-        {/* horizontal grid lines */}
-        {yTicks.map(({ v, y }) => (
-          <line
-            key={`grid-${v}`}
-            x1={MARGIN.left}
-            x2={MARGIN.left + innerWidth}
-            y1={MARGIN.top + y}
-            y2={MARGIN.top + y}
-            stroke={gridStroke}
-            strokeOpacity={gridOpacity}
-            strokeWidth={1}
-          />
-        ))}
+    <div ref={containerRef}>
+      <div style={{ height }} className="relative">
+        <svg
+          viewBox={`0 0 ${widthViewBox} ${height}`}
+          className="w-full"
+          style={{ height }}
+          role="img"
+          aria-label="Box plot of power by category"
+        >
+          {/* horizontal grid lines */}
+          {yTicks.map(({ v, y }) => (
+            <line
+              key={`grid-${v}`}
+              x1={MARGIN.left}
+              x2={MARGIN.left + innerWidth}
+              y1={MARGIN.top + y}
+              y2={MARGIN.top + y}
+              stroke={gridStroke}
+              strokeOpacity={gridOpacity}
+              strokeWidth={1}
+            />
+          ))}
 
-        {/* y axis */}
-        {yTicks.map(({ v, y }) => (
-          <g key={`ytick-${v}`}>
-            <text
-              x={MARGIN.left - 8}
-              y={MARGIN.top + y + 4}
-              textAnchor="end"
-              fill={axisTextFill}
-              fontSize={axisFont}
-              fontFamily="Inter, sans-serif"
-            >
-              {v}
-            </text>
-          </g>
-        ))}
-
-        {/* x axis (categories) */}
-        {xTicks.map(({ cat, x }) => (
-          <g key={`xtick-${cat}`}>
-            <text
-              x={MARGIN.left + x}
-              y={MARGIN.top + innerHeight + 20}
-              textAnchor="middle"
-              fill={axisTextFill}
-              fontSize={axisFont}
-              fontFamily="Inter, sans-serif"
-            >
-              {cat}
-            </text>
-          </g>
-        ))}
-
-        {/* axis titles */}
-        {yLabel ? (
-          <text
-            x={14}
-            y={MARGIN.top + innerHeight / 2}
-            fill={axisTextFill}
-            fontSize={axisFont}
-            fontFamily="Inter, sans-serif"
-            transform={`rotate(-90 14 ${MARGIN.top + innerHeight / 2})`}
-            textAnchor="middle"
-          >
-            {yLabel}
-          </text>
-        ) : null}
-        {xLabel ? (
-          <text
-            x={MARGIN.left + innerWidth / 2}
-            y={MARGIN.top + innerHeight + 38}
-            fill={axisTextFill}
-            fontSize={axisFont}
-            fontFamily="Inter, sans-serif"
-            textAnchor="middle"
-          >
-            {xLabel}
-          </text>
-        ) : null}
-
-        {/* box + whiskers per category */}
-        {boxes.map((box) => {
-          const bandX = xScale(box.category) ?? 0;
-          const boxX = MARGIN.left + bandX;
-          const boxW = xScale.bandwidth();
-          const color = colors[box.category] ?? "#6366F1";
-          const isHover = hovered === box.category;
-          const y = (v: number) => MARGIN.top + yScale(v);
-
-          return (
-            <g
-              key={box.category}
-              className="cursor-pointer"
-              onMouseEnter={() => setHovered(box.category)}
-              onMouseLeave={() => setHovered(null)}
-            >
-              {/* whiskers */}
-              <line
-                x1={boxX + boxW / 2}
-                x2={boxX + boxW / 2}
-                y1={y(box.min)}
-                y2={y(box.max)}
-                stroke={color}
-                strokeWidth={1.5}
-                opacity={0.8}
-              />
-              <line
-                x1={boxX + boxW / 4}
-                x2={boxX + (boxW * 3) / 4}
-                y1={y(box.min)}
-                y2={y(box.min)}
-                stroke={color}
-                strokeWidth={1.5}
-                opacity={0.8}
-              />
-              <line
-                x1={boxX + boxW / 4}
-                x2={boxX + (boxW * 3) / 4}
-                y1={y(box.max)}
-                y2={y(box.max)}
-                stroke={color}
-                strokeWidth={1.5}
-                opacity={0.8}
-              />
-              {/* box */}
-              <rect
-                x={boxX}
-                y={y(box.q3)}
-                width={boxW}
-                height={Math.max(1, y(box.q1) - y(box.q3))}
-                fill={color}
-                fillOpacity={isHover ? 0.55 : 0.4}
-                stroke={isDark ? "#E5E7EB" : "#1E293B"}
-                strokeWidth={1.5}
-                rx={2}
-              />
-              {/* median line */}
-              <line
-                x1={boxX}
-                x2={boxX + boxW}
-                y1={y(box.median)}
-                y2={y(box.median)}
-                stroke={isDark ? "#F3F4F6" : "#111827"}
-                strokeWidth={2}
-              />
-            </g>
-          );
-        })}
-      </svg>
-
-      {/* hover tooltip */}
-      {hovered ? (() => {
-        const box = boxes.find((b) => b.category === hovered);
-        if (!box) return null;
-        const rows: Array<[string, number]> = [
-          ["Min", box.min],
-          ["Q1", box.q1],
-          ["Median", box.median],
-          ["Q3", box.q3],
-          ["Max", box.max],
-        ];
-        return (
-          <ChartTooltipCard className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap">
-            <p className="text-gray-900 dark:text-white font-semibold mb-1">
-              {box.category}
-            </p>
-            {rows.map(([label, value]) => (
-              <p
-                key={label}
-                className="text-gray-400 dark:text-gray-400 flex justify-between gap-4"
+          {/* y axis */}
+          {yTicks.map(({ v, y }) => (
+            <g key={`ytick-${v}`}>
+              <text
+                x={MARGIN.left - 8}
+                y={MARGIN.top + y + 4}
+                textAnchor="end"
+                fill={axisTextFill}
+                fontSize={axisFont}
+                fontFamily="Inter, sans-serif"
               >
-                <span>{label}</span>
-                <span className="text-gray-900 dark:text-white font-semibold tabular-nums">
-                  {formatTooltipValue(value, 2)}
-                </span>
-              </p>
+                {v}
+              </text>
+            </g>
+          ))}
+
+          {/* x axis (categories) */}
+          {xTicks.map(({ cat, x }) => (
+            <g key={`xtick-${cat}`}>
+              <text
+                x={MARGIN.left + x}
+                y={MARGIN.top + innerHeight + 20}
+                textAnchor="middle"
+                fill={axisTextFill}
+                fontSize={axisFont}
+                fontFamily="Inter, sans-serif"
+              >
+                {cat}
+              </text>
+            </g>
+          ))}
+
+          {/* axis titles */}
+          {yLabel ? (
+            <text
+              x={14}
+              y={MARGIN.top + innerHeight / 2}
+              fill={axisTextFill}
+              fontSize={axisFont}
+              fontFamily="Inter, sans-serif"
+              transform={`rotate(-90 14 ${MARGIN.top + innerHeight / 2})`}
+              textAnchor="middle"
+            >
+              {yLabel}
+            </text>
+          ) : null}
+          {xLabel ? (
+            <text
+              x={MARGIN.left + innerWidth / 2}
+              y={MARGIN.top + innerHeight + 38}
+              fill={axisTextFill}
+              fontSize={axisFont}
+              fontFamily="Inter, sans-serif"
+              textAnchor="middle"
+            >
+              {xLabel}
+            </text>
+          ) : null}
+
+          {/* box + whiskers per category */}
+          {boxes.map((box) => {
+            const bandX = xScale(box.category) ?? 0;
+            const boxX = MARGIN.left + bandX;
+            const boxW = xScale.bandwidth();
+            const color = colors[box.category] ?? "#6366F1";
+            const isHover = hovered === box.category;
+            const y = (v: number) => MARGIN.top + yScale(v);
+
+            return (
+              <g
+                key={box.category}
+                className="cursor-pointer"
+                onMouseEnter={() => setHovered(box.category)}
+                onMouseLeave={() => setHovered(null)}
+                onClick={() => setHovered(box.category)}
+              >
+                {/* whiskers */}
+                <line
+                  x1={boxX + boxW / 2}
+                  x2={boxX + boxW / 2}
+                  y1={y(box.min)}
+                  y2={y(box.max)}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  opacity={0.8}
+                />
+                <line
+                  x1={boxX + boxW / 4}
+                  x2={boxX + (boxW * 3) / 4}
+                  y1={y(box.min)}
+                  y2={y(box.min)}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  opacity={0.8}
+                />
+                <line
+                  x1={boxX + boxW / 4}
+                  x2={boxX + (boxW * 3) / 4}
+                  y1={y(box.max)}
+                  y2={y(box.max)}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  opacity={0.8}
+                />
+                {/* box */}
+                <rect
+                  x={boxX}
+                  y={y(box.q3)}
+                  width={boxW}
+                  height={Math.max(1, y(box.q1) - y(box.q3))}
+                  fill={color}
+                  fillOpacity={isHover ? 0.55 : 0.4}
+                  stroke={isDark ? "#E5E7EB" : "#1E293B"}
+                  strokeWidth={1.5}
+                  rx={2}
+                />
+                {/* median line */}
+                <line
+                  x1={boxX}
+                  x2={boxX + boxW}
+                  y1={y(box.median)}
+                  y2={y(box.median)}
+                  stroke={isDark ? "#F3F4F6" : "#111827"}
+                  strokeWidth={2}
+                />
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* hover tooltip (desktop only; mobile uses the readout below) */}
+        {hoveredBox && !isNarrow ? (
+          <ChartTooltipCard className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2">
+            <TooltipHeader>{hoveredBox.category}</TooltipHeader>
+            {readoutRows.map((r) => (
+              <TooltipRow key={r.label} label={r.label} value={r.value} />
             ))}
           </ChartTooltipCard>
-        );
-      })() : null}
+        ) : null}
+      </div>
+
+      {isNarrow ? (
+        <ChartReadout header={hovered ?? undefined} rows={readoutRows} />
+      ) : null}
     </div>
   );
 }

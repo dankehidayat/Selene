@@ -1,12 +1,13 @@
 // apps/frontend/src/components/charts/NivoScatterChart.tsx
-import { memo, useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback, useState } from "react";
 import { ResponsiveScatterPlot } from "@nivo/scatterplot";
 import { CartesianMarkerProps } from "@nivo/core";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
 import { useChartWidth } from "@/hooks/useChartWidth";
-import { ChartTooltipCard, formatTooltipValue } from "./ChartTooltip";
+import { ChartTooltipCard, formatTooltipValue, TooltipRow } from "./ChartTooltip";
+import { ChartReadout } from "./ChartReadout";
 
 export type ScatterSymbol = "circle" | "square" | "diamond" | "triangle";
 
@@ -150,20 +151,29 @@ export function NivoScatterChart({
     ? { top: 8, right: 12, bottom: 34, left: 42 }
     : { top: 8, right: 16, bottom: 38, left: 52 };
 
+  // Mobile pinned readout: tap (click) sets the active point; floating tooltip
+  // is suppressed on narrow screens to avoid clipping.
+  const [active, setActive] = useState<{
+    serieId: string;
+    x: number;
+    y: number;
+    color: string;
+  } | null>(null);
+
   const defaultTooltip = useCallback(({ node }: any) => {
     const xv = Number(node.xValue ?? node.data?.x);
     const yv = Number(node.yValue ?? node.data?.y);
+    const color = colorOf(node.serieId);
     return (
       <ChartTooltipCard>
-        <p className="text-gray-400 dark:text-gray-400">
-          {node.serieId}:{" "}
-          <span className="text-gray-900 dark:text-white font-semibold tabular-nums">
-            x={formatTooltipValue(xv)}, y={formatTooltipValue(yv)}
-          </span>
-        </p>
+        <TooltipRow
+          label={node.serieId}
+          value={`x ${formatTooltipValue(xv)} · y ${formatTooltipValue(yv)}`}
+          color={color}
+        />
       </ChartTooltipCard>
     );
-  }, []);
+  }, [colorOf]);
 
   const nodeComp = useCallback(
     (props: any) => <SymbolNode {...props} getSymbol={symbolOf} getOpacity={opacityOf} />,
@@ -207,11 +217,42 @@ export function NivoScatterChart({
         }}
         useMesh
         isInteractive
-        tooltip={tooltip ? ({ node }) => tooltip(node) : defaultTooltip}
+        tooltip={
+          isNarrow
+            ? () => null
+            : tooltip
+              ? ({ node }) => tooltip(node)
+              : defaultTooltip
+        }
         markers={nivoMarkers}
         animate={animate}
         role="application"
+        onClick={(node: any) => {
+          if (isNarrow) {
+            setActive({
+              serieId: String(node.serieId),
+              x: Number(node.xValue ?? node.data?.x),
+              y: Number(node.yValue ?? node.data?.y),
+              color: colorOf(node.serieId),
+            });
+          }
+        }}
       />
+      {isNarrow ? (
+        <ChartReadout
+          rows={
+            active
+              ? [
+                  {
+                    label: active.serieId,
+                    value: `x ${formatTooltipValue(active.x)} · y ${formatTooltipValue(active.y)}`,
+                    color: active.color,
+                  },
+                ]
+              : []
+          }
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,13 +1,14 @@
 // apps/frontend/src/components/charts/TimeSeriesChart.tsx
 // Nivo-based time series with dual Y-axes, gradient areas, dashed forecasts,
 // confidence bands, "Now" marker and a merged crosshair tooltip.
-import { useMemo, useId } from "react";
+import { useMemo, useId, useState, useCallback, useRef } from "react";
 import { ResponsiveLine } from "@nivo/line";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
 import { useChartWidth } from "@/hooks/useChartWidth";
 import { ChartTooltipCard, TooltipRow, formatTooltipValue } from "./ChartTooltip";
+import { ChartReadout } from "./ChartReadout";
 
 export interface SeriesPoint {
   x: number | string | Date;
@@ -89,6 +90,41 @@ export function TimeSeriesChart({
   const resolvedMargin = margin ?? (isNarrow ? NARROW_MARGIN : MARGIN);
   const xTicks = isNarrow ? 3 : 5;
   const yTicks = isNarrow ? 4 : 5;
+
+  // Mobile pinned readout: track the active x (tap/drag sets it); floating
+  // tooltip is suppressed on narrow screens to avoid clipping.
+  const [activeX, setActiveX] = useState<number | null>(null);
+
+  /** Slice values for an x (ms) across every series — shared by the floating
+   *  tooltip (desktop) and the pinned readout (mobile). */
+  const getSliceAt = useCallback(
+    (xVal: number) => {
+      const rows = series
+        .map((s) => {
+          const pt = s.data.find((d) => Math.abs(TO_MS(d.x) - xVal) < 1);
+          return pt?.y != null
+            ? { label: s.label, value: formatTooltipValue(pt.y), color: s.color, unit: s.unit }
+            : null;
+        })
+        .filter((r): r is NonNullable<typeof r> => r != null);
+      const dateStr = tooltipDateFormat
+        ? tooltipDateFormat(xVal)
+        : xTickFormat
+          ? xTickFormat(xVal)
+          : new Date(xVal).toLocaleString();
+      return { dateStr, rows };
+    },
+    [series, tooltipDateFormat, xTickFormat],
+  );
+
+  const activeSlice = useMemo(
+    () => (activeX != null ? getSliceAt(activeX) : null),
+    [activeX, getSliceAt],
+  );
+
+  // Throttle onMouseMove so continuous touch-drag doesn't re-render the SVG
+  // at 60 fps on mobile. ~50 ms between updates is smooth enough for the readout.
+  const lastMoveRef = useRef(0);
 
   const leftSeries = series.filter((s) => s.axis === "left").map((s) => ({ ...s, data: s.data.map((d) => ({ x: TO_MS(d.x), y: d.y })) }));
   const rightSeries = series.filter((s) => s.axis === "right").map((s) => ({ ...s, data: s.data.map((d) => ({ x: TO_MS(d.x), y: d.y })) }));
@@ -187,37 +223,26 @@ export function TimeSeriesChart({
     textStyle: { fill: isDark ? "#9CA3AF" : "#9CA3AF", fontSize: 10 },
   }] : [];
 
-  /* Merged tooltip (inline component, hoisted via useMemo for identity stability) */
+  /* Merged tooltip (inline component, hoisted for identity stability).
+     Desktop: renders a floating card. Mobile: suppressed (readout below). */
   const MergedTooltip = useMemo(() => {
+    if (isNarrow) return () => null;
     const TooltipFn = ({ slice }: { slice: any }) => {
       const xVal = slice?.points?.[0]?.data?.x;
       if (xVal == null) return null;
-      const rows: Array<{ label: string; value: number | null; color: string; unit?: string }> = series
-        .map((s) => {
-          const pt = s.data.find((d) => Math.abs(TO_MS(d.x) - xVal) < 1);
-          return { label: s.label, value: pt?.y ?? null, color: s.color, unit: s.unit };
-        }).filter((r) => r.value != null);
+      const { dateStr, rows } = getSliceAt(+xVal);
       if (!rows.length) return null;
-      const dateStr = tooltipDateFormat ? tooltipDateFormat(xVal) : xTickFormat ? xTickFormat(xVal) : new Date(xVal).toLocaleString();
       return (
         <ChartTooltipCard>
           <p className="text-gray-400 dark:text-gray-400 mb-1.5 font-medium">{dateStr}</p>
-          {rows.map((r) =>
-            typeof r.value === "number" ? (
-              <TooltipRow
-                key={r.label}
-                label={r.label}
-                value={formatTooltipValue(r.value)}
-                color={r.color}
-                unit={r.unit}
-              />
-            ) : null,
-          )}
+          {rows.map((r) => (
+            <TooltipRow key={r.label} label={r.label} value={r.value} color={r.color} unit={r.unit} />
+          ))}
         </ChartTooltipCard>
       );
     };
     return TooltipFn;
-  }, [series, tooltipDateFormat, xTickFormat]);
+  }, [getSliceAt, isNarrow]);
 
   const legendNode = legend.length ? (
     <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
@@ -253,6 +278,18 @@ export function TimeSeriesChart({
             enableSlices="x" isInteractive useMesh enableCrosshair
             layers={layers}
             sliceTooltip={MergedTooltip}
+            onMouseMove={(point: any) => {
+              if (!isNarrow || point?.data?.x == null) return;
+              const now = Date.now();
+              if (now - lastMoveRef.current < 50) return;
+              lastMoveRef.current = now;
+              setActiveX(+point.data.x);
+            }}
+            onClick={(point: any) => {
+              if (!isNarrow) return;
+              if (point?.data?.x != null) setActiveX(+point.data.x);
+              else setActiveX(null);
+            }}
           />
         </div>
         {/* Right-axis chart — non-interactive overlay */}
@@ -274,6 +311,12 @@ export function TimeSeriesChart({
         )}
       </div>
       {legendNode}
+      {isNarrow ? (
+        <ChartReadout
+          header={activeSlice?.dateStr}
+          rows={activeSlice?.rows ?? []}
+        />
+      ) : null}
     </div>
   );
 }

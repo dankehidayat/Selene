@@ -1,11 +1,12 @@
 // apps/frontend/src/components/charts/NivoBarChart.tsx
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ResponsiveBar } from "@nivo/bar";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
 import { useChartWidth } from "@/hooks/useChartWidth";
-import { ChartTooltipCard, formatTooltipValue } from "./ChartTooltip";
+import { ChartTooltipCard, formatTooltipValue, TooltipRow } from "./ChartTooltip";
+import { ChartReadout } from "./ChartReadout";
 
 interface NivoBarChartProps {
   data: Record<string, any>[];
@@ -55,6 +56,10 @@ export function NivoBarChart({
     return categories.filter((_, i) => i % step === 0);
   }, [data, indexBy, isNarrow]);
 
+  // Mobile pinned readout: tap (click) sets the active point; floating tooltip
+  // is suppressed on narrow screens to avoid clipping.
+  const [active, setActive] = useState<{ id: string; value: number; color: string } | null>(null);
+
   return (
     <div style={{ height }} ref={containerRef}>
       <ResponsiveBar
@@ -86,21 +91,35 @@ export function NivoBarChart({
         isInteractive
         animate={animate}
         tooltip={
-          tooltip
-            ? (tooltip as any)
-            : ({ id, value }: any) => (
-                <ChartTooltipCard>
-                  <p className="text-gray-400 dark:text-gray-400">
-                    {id}:{" "}
-                    <span className="text-gray-900 dark:text-white font-semibold tabular-nums">
-                      {formatTooltipValue(Number(value))}
-                    </span>
-                  </p>
-                </ChartTooltipCard>
-              )
+          isNarrow
+            ? () => null
+            : tooltip
+              ? (tooltip as any)
+              : ({ id, value, color }: any) => (
+                  <ChartTooltipCard>
+                    <TooltipRow
+                      label={String(id)}
+                      value={formatTooltipValue(Number(value))}
+                      color={color}
+                    />
+                  </ChartTooltipCard>
+                )
         }
+        onClick={(datum: any) => {
+          if (!isNarrow) return;
+          setActive({ id: String(datum.id), value: datum.value, color: datum.color });
+        }}
         role="application"
       />
+      {isNarrow ? (
+        <ChartReadout
+          rows={
+            active
+              ? [{ label: active.id, value: formatTooltipValue(active.value), color: active.color }]
+              : []
+          }
+        />
+      ) : null}
     </div>
   );
 }

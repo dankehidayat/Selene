@@ -1,11 +1,12 @@
 // apps/frontend/src/components/charts/NivoPieChart.tsx
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ResponsivePie } from "@nivo/pie";
 import { createNivoTheme } from "@/lib/nivoTheme";
 import { useIsDarkMode } from "@/hooks/useIsDarkMode";
 import { useChartAnimation } from "@/hooks/useChartAnimation";
 import { useChartWidth } from "@/hooks/useChartWidth";
-import { ChartTooltipCard } from "./ChartTooltip";
+import { ChartTooltipCard, formatTooltipValue, TooltipRow } from "./ChartTooltip";
+import { ChartReadout } from "./ChartReadout";
 
 interface NivoPieDatum {
   id: string;
@@ -38,6 +39,7 @@ export function NivoPieChart({
   const isNarrow = width > 0 && width < NARROW_BREAKPOINT;
 
   const total = data.reduce((s, d) => s + d.value, 0);
+  const [active, setActive] = useState<{ id: string; value: number; color: string } | null>(null);
 
   const sideLegend = isNarrow
     ? []
@@ -88,22 +90,27 @@ export function NivoPieChart({
           isInteractive
           animate={animate}
           tooltip={
-            tooltip ??
-            (({ datum }) => {
-              const pct = total > 0 ? ((datum.value / total) * 100).toFixed(1) : "0";
-              return (
-                <ChartTooltipCard>
-                  <p className="text-gray-400 dark:text-gray-400">
-                    {datum.id}:{" "}
-                    <span className="text-gray-900 dark:text-white font-semibold tabular-nums">
-                      {datum.value} ({pct}%)
-                    </span>
-                  </p>
-                </ChartTooltipCard>
-              );
-            })
+            isNarrow
+              ? () => null
+              : tooltip ??
+                (({ datum }: any) => {
+                  const pct = total > 0 ? ((datum.value / total) * 100).toFixed(1) : "0";
+                  return (
+                    <ChartTooltipCard>
+                      <TooltipRow
+                        label={datum.id}
+                        value={`${formatTooltipValue(datum.value)} (${pct}%)`}
+                        color={datum.color}
+                      />
+                    </ChartTooltipCard>
+                  );
+                })
           }
           legends={sideLegend}
+          onClick={(datum: any) => {
+            if (!isNarrow) return;
+            setActive({ id: String(datum.id), value: datum.value, color: datum.color });
+          }}
         />
       </div>
       {isNarrow && data.length > 0 && (
@@ -120,6 +127,21 @@ export function NivoPieChart({
           ))}
         </div>
       )}
+      {isNarrow ? (
+        <ChartReadout
+          rows={
+            active
+              ? [
+                  {
+                    label: active.id,
+                    value: `${formatTooltipValue(active.value)} (${total > 0 ? ((active.value / total) * 100).toFixed(1) : "0"}%)`,
+                    color: active.color,
+                  },
+                ]
+              : []
+          }
+        />
+      ) : null}
     </div>
   );
 }
